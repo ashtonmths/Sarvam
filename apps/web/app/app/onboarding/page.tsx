@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { PageHead, VerdictBadge } from "../../../components/app/ui";
 import { GlyphDb, GlyphFlow, GlyphGrid } from "../../../components/marks";
-import { type SimulatedDecision, simulate } from "../../../lib/mock/verdict";
+import { api, type GraphNode, type Page, type VerdictResult } from "../../../lib/api";
 
 /**
  * Connect → crawl → first verdict, under ten minutes. The wait during crawl
@@ -52,7 +52,7 @@ export default function OnboardingPage() {
   const [picked, setPicked] = useState<string | null>(null);
   const [demoMode, setDemoMode] = useState(false);
   const [crawlLines, setCrawlLines] = useState<string[]>([]);
-  const [decision, setDecision] = useState<SimulatedDecision | null>(null);
+  const [decision, setDecision] = useState<VerdictResult | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(
@@ -78,10 +78,27 @@ export default function OnboardingPage() {
 
   const crawlDone = crawlLines.length >= CRAWL_LINES.length;
 
-  function runFirstVerdict() {
+  async function runFirstVerdict() {
     setStep(3);
-    // The wizard proposes the org's highest-criticality node with dependents.
-    setDecision(simulate(3, "delete"));
+    // The wizard proposes the org's highest-criticality node with dependents,
+    // then runs the real engine against it — the aha has to be their data.
+    const nodes = await api
+      .get<Page<GraphNode>>("/api/graph/nodes?limit=100")
+      .catch(() => null);
+    const target = nodes?.items
+      .filter((n) => n.kind === "field")
+      .sort((a: GraphNode, b: GraphNode) => b.criticality - a.criticality)[0];
+    if (!target) return;
+
+    const verdict = await api
+      .post<VerdictResult>("/api/verdicts", {
+        target: "field",
+        operation: "delete",
+        connector: target.connector,
+        externalId: target.externalId,
+      })
+      .catch(() => null);
+    if (verdict) setDecision(verdict);
   }
 
   const steps = [
@@ -213,7 +230,7 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 className="btn btn--ink"
-                onClick={runFirstVerdict}
+                onClick={() => void runFirstVerdict()}
                 data-testid="onboarding-first-verdict"
               >
                 Run your first verdict
@@ -229,38 +246,48 @@ export default function OnboardingPage() {
       {step === 3 && decision && (
         <>
           <div className="banner banner--info" role="status">
-            We picked your highest-criticality node with dependents:{" "}
-            <code className="mono">invoices.vat_rate</code> — and simulated deleting it.
+            We picked your highest-criticality node with dependents: your
+            highest-criticality field — and simulated deleting it.
           </div>
 
           <div className="verdict-card" style={{ marginBottom: 18 }}>
             <div className="verdict-card__head">
-              <VerdictBadge verdict={decision.result.verdict} big />
+              <VerdictBadge verdict={decision.verdict} big />
               <div>
-                <strong style={{ fontSize: 16 }}>delete invoices.vat_rate</strong>
+                <strong style={{ fontSize: 16 }}>
+                  delete{" "}
+                  {String(decision.change.externalId ?? "")
+                    .split("/")
+                    .pop()}
+                </strong>
                 <div className="dim" style={{ fontSize: 13 }}>
-                  {decision.result.impacted.length} downstream nodes scored in{" "}
-                  {decision.result.computedInMs}ms
+                  {decision.impacted.length} downstream nodes scored in{" "}
+                  {decision.computedInMs}ms
                 </div>
               </div>
             </div>
             <div className="verdict-card__body">
               <div className="evidence">
-                {decision.result.evidence.map((ev, i) => (
-                  <div key={i} className="evidence__row">
-                    <Link
-                      href="/app/graph"
-                      style={{ fontWeight: 600, color: "var(--thread)" }}
-                    >
-                      {ev.name}
-                    </Link>
-                    <span className="evidence__rule">{ev.rule}</span>
-                    <span className="evidence__impact">{ev.impact.toFixed(2)}</span>
-                  </div>
-                ))}
+                {decision.evidence.map(
+                  (ev: { name: string; rule: string; impact: number }, i: number) => (
+                    <div key={i} className="evidence__row">
+                      <Link
+                        href="/app/graph"
+                        style={{ fontWeight: 600, color: "var(--thread)" }}
+                      >
+                        {ev.name}
+                      </Link>
+                      <span className="evidence__rule">{ev.rule}</span>
+                      <span className="evidence__impact">{ev.impact.toFixed(2)}</span>
+                    </div>
+                  ),
+                )}
               </div>
             </div>
-            <div className="explain">{decision.explanation}</div>
+            <div className="explain">
+              {decision.explanation ??
+                "The verdict above is complete on its own — an explanation is additive prose that never changes it."}
+            </div>
           </div>
 
           <div className="panel">

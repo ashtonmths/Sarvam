@@ -10,8 +10,16 @@ import { startWorker, stopWorker } from "./jobs/worker.js";
 import { requireAuth, requireOrg } from "./middleware/auth.js";
 import { authRoutes } from "./routes/auth.js";
 import { connectorRoutes } from "./routes/connectors.js";
+import { gateRoutes } from "./routes/gate.js";
+import { githubRoutes } from "./routes/github.js";
 import { graphRoutes } from "./routes/graph.js";
+import { historianRoutes } from "./routes/historian.js";
+import { mcpRoutes } from "./routes/mcp.js";
 import { orgRoutes } from "./routes/org.js";
+import { rationaleRoutes } from "./routes/rationale.js";
+import { reflexRoutes } from "./routes/reflex.js";
+import { verdictRoutes } from "./routes/verdict.js";
+import { webhookRoutes } from "./routes/webhooks.js";
 
 const app = new Hono();
 
@@ -41,6 +49,13 @@ app.get("/health", async (c) => {
 // Unauthenticated by necessity: this is where sessions are created.
 app.route("/api/auth", authRoutes);
 
+// MCP carries its own API-key auth inside the JSON-RPC envelope, so it mounts
+// outside the session group. The key's org scopes every query.
+app.route("/", mcpRoutes);
+
+// Vendor ingress: signature-verified, never cookie-authenticated.
+app.route("/", webhookRoutes);
+
 /**
  * Everything else mounts inside the authenticated, org-scoped group, so a
  * route cannot be born unscoped. Later plans add only their capability check.
@@ -51,6 +66,12 @@ api.use("*", requireOrg);
 api.route("/", orgRoutes);
 api.route("/", connectorRoutes);
 api.route("/", graphRoutes);
+api.route("/", verdictRoutes);
+api.route("/", gateRoutes);
+api.route("/", githubRoutes);
+api.route("/", reflexRoutes);
+api.route("/", rationaleRoutes);
+api.route("/", historianRoutes);
 api.get("/jobs/stats", async (c) => c.json(await queueStats()));
 
 // Both shapes hit the same handlers; `:orgId` is asserted against the

@@ -1,132 +1,127 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Select } from "../../../components/app/select";
 import { EmptyState, PageHead } from "../../../components/app/ui";
-import { AGENT_RUNS, timeAgo } from "../../../lib/mock/data";
-import { useHasGraph } from "../../../lib/queries";
-import { useSession } from "../../../lib/session";
+import type { HistorianRun } from "../../../lib/api";
+import { useQuery } from "../../../lib/queries";
 
-const OUTCOME_TAG: Record<string, { cls: string; label: string }> = {
-  propose_rationale: { cls: "tag--green", label: "proposed rationale" },
-  draft_correction: { cls: "tag--green", label: "drafted correction" },
-  // give_up / dismiss are amber, never red — declining to confabulate is
-  // correct behavior and the UI says so.
-  give_up: { cls: "tag--amber", label: "gave up" },
-  dismiss: { cls: "tag--amber", label: "dismissed" },
-  running: { cls: "tag--thread", label: "running" },
-};
-
+/**
+ * Every investigation, with its outcome stated honestly.
+ *
+ * `gave up` renders amber, never red: declining to confabulate is correct
+ * behaviour, and an honest "unexplained" is worth more than a plausible lie.
+ */
 export default function AgentsPage() {
-  const { org } = useSession();
-  const { hasGraph } = useHasGraph(org?.id ?? null);
-  const [agent, setAgent] = useState("all");
-  const [outcome, setOutcome] = useState("all");
+  const runs = useQuery<{ items: HistorianRun[] }>("/api/historian/runs");
+  const quota = useQuery<{ remaining: number }>("/api/historian/quota");
+  const unexplained = useQuery<{ items: Array<{ edgeId: number }> }>(
+    "/api/rationale/unexplained",
+  );
 
-  if (!hasGraph) {
-    return (
-      <>
-        <PageHead
-          title="Agents"
-          sub="Every investigation, live or replayed from its trace."
-        />
-        <EmptyState
-          title="No investigations yet"
-          body="Historian starts explaining edges once a graph exists, and Reviewer wakes when a subgraph's hash changes. Both leave a full trace here."
-          action={{ href: "/app/onboarding", label: "Connect a system →" }}
-        />
-      </>
-    );
-  }
-
-  const rows = AGENT_RUNS.filter((r) => {
-    if (agent !== "all" && r.agent !== agent) return false;
-    if (outcome !== "all" && r.outcome !== outcome) return false;
-    return true;
-  });
+  const items = runs.data?.items ?? [];
+  const pending = unexplained.data?.items.length ?? 0;
 
   return (
     <>
       <PageHead
         title="Agents"
-        sub="Every investigation, live or replayed from its trace. Giving up is rendered amber, not red — an honest non-answer beats a confabulated one."
+        sub="Historian investigates why a dependency exists, using only written evidence it can cite. Giving up is a correct answer, not a failure."
       >
-        <Link
-          href="/app/agents/departure"
-          className="btn btn--ink btn--small"
-          data-testid="agents-departure-cta"
-        >
-          Exit-interview fan-out
-        </Link>
+        <span className="tag tag--thread">
+          {quota.data?.remaining ?? "—"} model requests left today
+        </span>
       </PageHead>
 
-      <div className="filters">
-        <Select
-          value={agent}
-          onChange={setAgent}
-          label="Filter by agent"
-          options={[
-            { value: "all", label: "Historian + Reviewer" },
-            { value: "historian", label: "Historian" },
-            { value: "reviewer", label: "Reviewer" },
-          ]}
-        />
-        <Select
-          value={outcome}
-          onChange={setOutcome}
-          label="Filter by outcome"
-          options={[
-            { value: "all", label: "All outcomes" },
-            { value: "propose_rationale", label: "proposed rationale" },
-            { value: "draft_correction", label: "drafted correction" },
-            { value: "give_up", label: "gave up" },
-            { value: "dismiss", label: "dismissed" },
-          ]}
-        />
+      <div className="panel-grid panel-grid--2" style={{ marginBottom: 16 }}>
+        <section className="panel">
+          <h2 className="panel__title">Exit interview</h2>
+          <p className="panel__caption">
+            When someone leaves, the edges only they ever explained become unexplained.
+            Investigate them while the written trail still exists.
+          </p>
+          <Link href="/app/agents/departure" className="btn btn--ghost btn--small">
+            Start an exit interview →
+          </Link>
+        </section>
+
+        <section className="panel">
+          <h2 className="panel__title">Unexplained edges</h2>
+          <p className="panel__caption">Historian&rsquo;s worklist.</p>
+          <div className="stat">
+            <span className="stat__value">{pending}</span>
+            <span className="stat__hint">dependencies with no rationale linked yet</span>
+          </div>
+        </section>
       </div>
 
-      <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
-        <table className="dtable">
-          <thead>
-            <tr>
-              <th>Goal</th>
-              <th>Agent</th>
-              <th>Outcome</th>
-              <th>Steps</th>
-              <th>Duration</th>
-              <th>Started</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const t = OUTCOME_TAG[r.outcome] ?? { cls: "tag--ghost", label: r.outcome };
-              return (
-                <tr key={r.id} data-testid={`agent-run-${r.id}`}>
+      {runs.loading ? (
+        <div className="panel" style={{ height: 160, opacity: 0.4 }} />
+      ) : items.length === 0 ? (
+        <EmptyState
+          title="No investigations yet"
+          body="Historian runs after a crawl, or when you start an exit interview above. Every tool call it makes is recorded, so you can see exactly how it reached a conclusion."
+        />
+      ) : (
+        <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+          <table className="dtable">
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>State</th>
+                <th>Outcome</th>
+                <th>Requests</th>
+                <th>Started</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((run) => (
+                <tr key={run.id} data-testid={`agent-run-${run.id}`}>
                   <td>
                     <Link
-                      href={`/app/agents/${r.id}`}
+                      href={`/app/agents/${run.id}`}
                       style={{ fontWeight: 600, color: "var(--thread)" }}
                     >
-                      {r.goal}
+                      {run.kind === "exit_interview"
+                        ? "Exit interview"
+                        : "Edge investigation"}
                     </Link>
                     <div className="dim" style={{ fontSize: 12.5 }}>
-                      {r.outcomeDetail}
+                      {run.edgesTotal} edge{run.edgesTotal === 1 ? "" : "s"} · started by{" "}
+                      {run.startedBy ?? "system"}
                     </div>
                   </td>
-                  <td className="mono dim">{r.agent}</td>
                   <td>
-                    <span className={`tag ${t.cls}`}>{t.label}</span>
+                    <span
+                      className={`tag ${run.state === "done" ? "tag--green" : run.state === "cancelled" ? "tag--amber" : "tag--thread"}`}
+                    >
+                      {run.state}
+                    </span>
                   </td>
-                  <td className="mono">{r.steps.length}</td>
-                  <td className="mono dim">{Math.round(r.durationMs / 1000)}s</td>
-                  <td className="dim">{timeAgo(r.startedAt)}</td>
+                  <td style={{ fontSize: 13 }}>
+                    {run.edgesProposed > 0 && (
+                      <span className="tag tag--green" style={{ marginRight: 4 }}>
+                        {run.edgesProposed} drafted
+                      </span>
+                    )}
+                    {run.edgesGaveUp > 0 && (
+                      <span className="tag tag--amber" style={{ marginRight: 4 }}>
+                        {run.edgesGaveUp} gave up
+                      </span>
+                    )}
+                    {run.edgesSkippedQuota > 0 && (
+                      <span className="tag tag--ghost">
+                        {run.edgesSkippedQuota} skipped: quota
+                      </span>
+                    )}
+                  </td>
+                  <td className="mono dim">{run.requestsUsed}</td>
+                  <td className="dim">{new Date(run.createdAt).toLocaleString()}</td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }

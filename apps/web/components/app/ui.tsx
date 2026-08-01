@@ -1,5 +1,4 @@
 import Link from "next/link";
-import type { Provenance } from "../../lib/mock/data";
 
 export function VerdictBadge({
   verdict,
@@ -17,6 +16,9 @@ export function VerdictBadge({
     </span>
   );
 }
+
+/** How an edge was discovered. Load bearing, not decoration. */
+type Provenance = "static_parse" | "runtime_observed" | "llm_inferred";
 
 export function ProvenanceTag({
   provenance,

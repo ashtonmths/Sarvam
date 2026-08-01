@@ -9,6 +9,7 @@ import { getConnector, makeReadContext } from "../connectors/registry.js";
 import type { EdgeSpec, ExternalRef, NodeKey, NodeSpec } from "../connectors/types.js";
 import { db } from "../db.js";
 import { NotFoundError, UserError } from "../errors.js";
+import { enqueueUnexplainedEdges } from "../historian/enqueue.js";
 import { getReadCredential } from "../vault/vault.js";
 import { emptyCatalog, type FusionCatalog, placeholderFor, resolveRef } from "./fuse.js";
 import {
@@ -141,6 +142,9 @@ export async function runCrawl(
         updatedAt: new Date(),
       })
       .where(eq(connectorInstances.id, instanceId));
+
+    // A successful crawl is what gives Historian its worklist.
+    void enqueueUnexplainedEdges(orgId).catch(() => undefined);
 
     return { crawlId, state: "succeeded", stats };
   } catch (error) {

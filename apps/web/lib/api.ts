@@ -127,3 +127,200 @@ export interface Page<T> {
   items: T[];
   nextCursor: string | null;
 }
+
+/* ------------------------------------------------------- verdict engine */
+
+export interface EvidenceHop {
+  edgeId: number;
+  srcId: number;
+  dstId: number;
+  kind: string;
+  confidence: number;
+  provenance: string;
+}
+
+export interface BlastRow {
+  nodeId: number;
+  name: string;
+  kind: string;
+  hops: number;
+  criticality: number;
+  pathConfidence: number;
+  minEdgeConfidence: number;
+  impact: number;
+  busFactor: number;
+  path: EvidenceHop[];
+}
+
+export interface Evidence {
+  rule: string;
+  nodeId: number;
+  name: string;
+  impact: number;
+}
+
+export type VerdictName = "APPROVE" | "WARN" | "BLOCK";
+
+export type ExplanationState =
+  | "pending"
+  | "streamed"
+  | "failed"
+  | "disabled"
+  | "quota_exhausted";
+
+export interface VerdictResult {
+  id: string;
+  verdict: VerdictName;
+  change: Record<string, string>;
+  impacted: BlastRow[];
+  evidence: Evidence[];
+  computedInMs: number;
+  graphVersion: number;
+  explanation: string | null;
+  explanationState: ExplanationState;
+}
+
+export interface GateResponse {
+  decision_id: number;
+  verdict_id: string;
+  verdict: VerdictName;
+  evidence: Evidence[];
+  impacted: BlastRow[];
+  computed_in_ms: number;
+  dry_run: boolean;
+  replayed: boolean;
+}
+
+export interface DecisionRow {
+  id: number;
+  verdictId: string;
+  mode: string;
+  dryRun: boolean;
+  actor: string | null;
+  createdAt: string;
+  verdict: VerdictName;
+  computedInMs: number;
+  change: Record<string, string>;
+}
+
+export interface DecisionDetail extends DecisionRow {
+  impacted: BlastRow[];
+  evidence: Evidence[];
+  graphVersion: number;
+  explanation: string | null;
+  explanationState: ExplanationState;
+  executedAt: string | null;
+}
+
+/* ------------------------------------------------------------ rationale */
+
+export interface RationaleRow {
+  id: number;
+  body: string;
+  sourceKind: string;
+  sourceUrl: string;
+  author: string | null;
+  state: string;
+  /** The agent's own confidence. Null for human-captured rationale. */
+  confidence: number | null;
+  createdAt: string;
+  edgeId: number | null;
+  srcId: number | null;
+  dstId: number | null;
+  edgeKind: string | null;
+  srcName: string | null;
+  dstName: string | null;
+}
+
+export interface Coverage {
+  coverageConfirmed: number;
+  coveragePending: number;
+  totalEdges: number;
+  note: string;
+}
+
+/* ------------------------------------------------------------- reflex */
+
+export interface Incident {
+  id: number;
+  connector: string;
+  target: string;
+  operation: string;
+  externalId: string;
+  verdict: VerdictName | null;
+  state: string;
+  detectPath: string;
+  blast: BlastRow[] | null;
+  evidence: Evidence[] | null;
+  actor: { name?: string; email?: string } | null;
+  changeAt: string | null;
+  detectedAt: string;
+  acknowledgedBy: string | null;
+  revertError: string | null;
+  createdAt: string;
+}
+
+/* ---------------------------------------------------------- historian */
+
+export interface HistorianRun {
+  id: string;
+  kind: string;
+  state: string;
+  edgesTotal: number;
+  edgesProposed: number;
+  edgesGaveUp: number;
+  edgesSkippedQuota: number;
+  requestsUsed: number;
+  startedBy: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+export interface RunEdge {
+  edgeId: number;
+  loopRunId: string | null;
+  outcome: string | null;
+}
+
+/** Server-Sent Events, typed. Terminal events are handed to the consumer and
+ *  never swallowed — reconnecting into an exhausted quota is how a one-line
+ *  state becomes an infinite spinner. */
+export function subscribe(
+  path: string,
+  handlers: {
+    onEvent: (event: string, data: Record<string, unknown>) => void;
+    onError?: () => void;
+  },
+): () => void {
+  const source = new EventSource(`${API_URL}${path}`, { withCredentials: true });
+
+  const forward = (name: string) => {
+    source.addEventListener(name, (event) => {
+      try {
+        handlers.onEvent(name, JSON.parse((event as MessageEvent).data as string));
+      } catch {
+        handlers.onEvent(name, {});
+      }
+    });
+  };
+
+  for (const name of [
+    "delta",
+    "done",
+    "failed",
+    "disabled",
+    "quota_exhausted",
+    "trace",
+    "run",
+    "ping",
+  ]) {
+    forward(name);
+  }
+
+  source.onerror = () => {
+    handlers.onError?.();
+    source.close();
+  };
+
+  return () => source.close();
+}

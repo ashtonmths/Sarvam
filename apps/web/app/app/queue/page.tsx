@@ -2,91 +2,96 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EmptyState, Kbd, Overlay, PageHead } from "../../../components/app/ui";
-import {
-  CORRECTIONS,
-  EDGES,
-  METRICS,
-  nodeById,
-  RATIONALE,
-  timeAgo,
-} from "../../../lib/mock/data";
-import { useHasGraph } from "../../../lib/queries";
-import { useSession } from "../../../lib/session";
+import { EmptyState, Kbd, PageHead } from "../../../components/app/ui";
+import { ApiError, api, type Coverage, type RationaleRow } from "../../../lib/api";
+import { useQuery } from "../../../lib/queries";
 
-type Tab = "drafts" | "corrections";
-type Pending = {
-  kind: "confirm" | "reject" | "apply";
-  tab: Tab;
+/**
+ * Where coverage becomes real. Built for operators: keyboard-first,
+ * source-first, with a 15-second undo window before anything is written.
+ *
+ * The undo buffer is not a nicety — it protects the one number that must never
+ * lie from the review tool that moves it. A fast reviewer mis-keying `a` does
+ * not get to pollute `confirmed`.
+ *
+ * There is deliberately no drift-corrections tab: Reviewer (plan 11) does not
+ * exist yet, and a tab backed by nothing reads as a broken feature.
+ */
+
+const UNDO_MS = 15_000;
+
+interface Pending {
+  kind: "confirm" | "reject";
   id: number;
   label: string;
-};
+}
 
-const UNDO_MS = 15000;
-
-/** Whitespace-normalized containment — the §10.2 rule the recite re-check runs. */
-const normalize = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-
-const initials = (name: string) =>
-  name
+const initials = (name: string | null) =>
+  (name ?? "?")
     .split(/\s+/)
     .map((p) => p[0])
     .slice(0, 2)
     .join("")
     .toUpperCase();
 
+function timeAgo(iso: string): string {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 export default function QueuePage() {
-  const { org } = useSession();
-  const { hasGraph } = useHasGraph(org?.id ?? null);
-  const [tab, setTab] = useState<Tab>("drafts");
+  const drafts = useQuery<{ items: RationaleRow[] }>("/api/rationale?state=drafted");
+  const coverage = useQuery<Coverage>("/api/metrics/coverage");
+
   const [cursor, setCursor] = useState(0);
-  const [done, setDone] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<Pending | null>(null);
-  const [confirmedDelta, setConfirmedDelta] = useState(0);
   const [help, setHelp] = useState(false);
-  const [recite, setRecite] = useState<number | null>(null);
-  const [reciteText, setReciteText] = useState("");
-  const [reciteError, setReciteError] = useState(false);
   const [rejecting, setRejecting] = useState<number | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
-  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const rejectInputRef = useRef<HTMLInputElement>(null);
 
-  const drafts = RATIONALE.filter(
-    (r) => r.state === "drafted" && !done.has(`drafts-${r.id}`),
+  const items = drafts.data?.items ?? [];
+  const active = Math.min(cursor, Math.max(0, items.length - 1));
+
+  /** The mutation fires only when the window closes — until then, nothing. */
+  const commit = useCallback(
+    async (p: Pending) => {
+      try {
+        await api.post(
+          `/api/rationale/${p.id}/${p.kind}`,
+          p.kind === "reject" ? { reason } : {},
+        );
+        drafts.reload();
+        coverage.reload();
+      } catch (err) {
+        setError(err instanceof ApiError ? err.userMessage : "Could not save");
+      }
+      setPending(null);
+    },
+    [drafts, coverage, reason],
   );
-  const corrections = CORRECTIONS.filter((c) => !done.has(`corrections-${c.id}`));
-  const items = tab === "drafts" ? drafts.length : corrections.length;
-  const active = Math.min(cursor, Math.max(0, items - 1));
-
-  /**
-   * Undo buffer: the "mutation" only lands when the 15s window closes. A
-   * mis-keyed `a` never pollutes confirmed — the coverage metric is protected
-   * from its own review tool.
-   */
-  const commit = useCallback((p: Pending) => {
-    setDone((prev) => new Set(prev).add(`${p.tab}-${p.id}`));
-    if (p.kind === "confirm") setConfirmedDelta((d) => d + 1);
-    setPending(null);
-  }, []);
 
   const act = useCallback(
     (kind: Pending["kind"], id: number, label: string) => {
-      // A queued action flushes immediately if a new one starts.
-      if (pending && undoTimer.current) {
-        clearTimeout(undoTimer.current);
-        commit(pending);
+      if (pending && timer.current) {
+        clearTimeout(timer.current);
+        void commit(pending);
       }
-      const p: Pending = { kind, tab, id, label };
-      setPending(p);
-      undoTimer.current = setTimeout(() => commit(p), UNDO_MS);
+      const next: Pending = { kind, id, label };
+      setPending(next);
+      timer.current = setTimeout(() => void commit(next), UNDO_MS);
     },
-    [pending, tab, commit],
+    [pending, commit],
   );
 
   const undo = useCallback(() => {
-    if (undoTimer.current) clearTimeout(undoTimer.current);
+    if (timer.current) clearTimeout(timer.current);
     setPending(null);
   }, []);
 
@@ -96,47 +101,30 @@ export default function QueuePage() {
       const el = e.target as HTMLElement;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
 
-      // A layered dialog owns the keyboard; only Escape passes through.
-      if (recite != null || rejecting != null) {
-        if (e.key === "Escape") {
-          setRecite(null);
-          setRejecting(null);
-          setReciteError(false);
-        }
+      if (rejecting !== null) {
+        if (e.key === "Escape") setRejecting(null);
         return;
       }
 
-      const draft = drafts[active];
-      const corr = corrections[active];
-
+      const draft = items[active];
       switch (e.key) {
         case "j":
-          setCursor((c) => Math.min(c + 1, items - 1));
+          setCursor((c) => Math.min(c + 1, items.length - 1));
           break;
         case "k":
           setCursor((c) => Math.max(c - 1, 0));
           break;
         case "o":
-          if (tab === "drafts" && draft)
-            window.open(draft.sourceUrl, "_blank", "noreferrer");
+          if (draft) window.open(draft.sourceUrl, "_blank", "noreferrer");
           break;
         case "a":
-          if (tab === "drafts" && draft)
-            act("confirm", draft.id, `Confirmed draft #${draft.id}`);
-          if (tab === "corrections" && corr)
-            act("apply", corr.id, `Applied correction: ${corr.summary}`);
-          break;
-        case "e":
-          if (tab === "drafts" && draft) {
-            setRecite(draft.id);
-            setReciteText(draft.body);
-            setReciteError(false);
-          }
+          if (draft) act("confirm", draft.id, `Confirmed draft #${draft.id}`);
           break;
         case "x":
-          if (tab === "drafts" && draft) setRejecting(draft.id);
-          if (tab === "corrections" && corr) setRejecting(corr.id);
-          setRejectReason("");
+          if (draft) {
+            setRejecting(draft.id);
+            setReason("");
+          }
           break;
         case "u":
           undo();
@@ -151,7 +139,7 @@ export default function QueuePage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, items, tab, drafts, corrections, act, undo, recite, rejecting]);
+  }, [items, active, act, undo, rejecting]);
 
   useEffect(() => {
     listRef.current
@@ -159,32 +147,11 @@ export default function QueuePage() {
       ?.scrollIntoView({ block: "nearest" });
   }, [active]);
 
-  // The reject dialog opens from a keystroke, so the caret belongs in the
-  // reason field. Focused on open rather than with autoFocus, which would also
-  // steal focus on a full page load.
-  useEffect(() => {
-    if (rejecting != null) rejectInputRef.current?.focus();
-  }, [rejecting]);
-
-  if (!hasGraph) {
-    return (
-      <>
-        <PageHead
-          title="Queue"
-          sub="Rationale drafts and drift corrections wait here for human review."
-        />
-        <EmptyState
-          title="Nothing to review yet"
-          body="Connect a system first — Historian and Reviewer queue their work here once a graph exists."
-          action={{ href: "/app/onboarding", label: "Start onboarding →" }}
-        />
-      </>
-    );
-  }
-
-  const confirmedNow = METRICS.confirmedCount + confirmedDelta;
-  const coveragePct = Math.round((confirmedNow / METRICS.edgeCount) * 100);
-  const reciteDraft = recite != null ? drafts.find((d) => d.id === recite) : null;
+  const cov = coverage.data;
+  const pct =
+    cov && cov.totalEdges > 0
+      ? Math.round((cov.coverageConfirmed / cov.totalEdges) * 100)
+      : 0;
 
   return (
     <>
@@ -192,8 +159,8 @@ export default function QueuePage() {
         title="Queue"
         sub={
           <>
-            <strong>{coveragePct}% of edges have confirmed rationale</strong> ·{" "}
-            {drafts.length} drafts pending review — drafts do not count toward coverage.
+            <strong>{pct}% of edges have confirmed rationale</strong> · {items.length}{" "}
+            drafts pending review — drafts do not count toward coverage.
           </>
         }
       >
@@ -206,214 +173,102 @@ export default function QueuePage() {
         </button>
       </PageHead>
 
-      <div className="tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "drafts"}
-          onClick={() => {
-            setTab("drafts");
-            setCursor(0);
-          }}
-          data-testid="queue-tab-drafts"
-        >
-          Rationale drafts ({drafts.length})
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "corrections"}
-          onClick={() => {
-            setTab("corrections");
-            setCursor(0);
-          }}
-          data-testid="queue-tab-corrections"
-        >
-          Drift corrections ({corrections.length})
-        </button>
-      </div>
+      {error && (
+        <div className="banner banner--warn" role="alert">
+          {error}
+        </div>
+      )}
 
       <div ref={listRef}>
-        {tab === "drafts" &&
-          (drafts.length === 0 ? (
-            <EmptyState
-              title="No drafts waiting"
-              body={
-                <>
-                  Historian queues drafts here as it explains edges —{" "}
-                  {METRICS.unexplainedCount} edges remain unexplained.
-                </>
-              }
-              action={{
-                href: "/app/graph?filter=unexplained",
-                label: "Browse unexplained edges →",
-              }}
-            />
-          ) : (
-            drafts.map((r, i) => {
-              const edge = EDGES.find((e) => e.id === r.edgeId)!;
-              return (
-                // The row is not a control: clicking it only moves the cursor
-                // the shortcuts act on, which j/k already does from the
-                // keyboard, and onFocusCapture keeps the two in step.
-                // biome-ignore lint/a11y/useKeyWithClickEvents: the row selects, it does not act
-                <article
-                  key={r.id}
-                  className="queue__row"
-                  data-active={i === active}
-                  data-idx={i}
-                  onClick={() => setCursor(i)}
-                  onFocusCapture={() => setCursor(i)}
-                  data-testid={`queue-draft-${r.id}`}
-                >
-                  <div className="queue__head">
-                    <span className="queue__avatar" aria-hidden="true">
-                      {initials(r.author)}
-                    </span>
-                    <span className="queue__who">
-                      <strong>{r.author}</strong>
-                      <span>
-                        mined from {r.sourceKind} · {timeAgo(r.createdAt)}
-                      </span>
-                    </span>
-                    <span className="queue__conf" title="Historian's confidence">
-                      <i>
-                        <b style={{ width: `${(r.confidence ?? 0) * 100}%` }} />
-                      </i>
-                      {r.confidence?.toFixed(2)}
-                    </span>
-                  </div>
-                  <blockquote className="queue__quote">&ldquo;{r.body}&rdquo;</blockquote>
-                  <div className="queue__meta">
-                    <span className="tag tag--thread">
-                      {nodeById(edge.source).name} → {nodeById(edge.target).name}
-                    </span>
-                    <Link
-                      href="/app/graph"
-                      className="dim"
-                      style={{ textDecoration: "underline" }}
-                    >
-                      view edge
-                    </Link>
-                  </div>
-                  <div className="queue__actions">
-                    <a
-                      className="queue__source"
-                      href={r.sourceUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      data-testid="queue-draft-source"
-                    >
-                      Verify source ↗
-                    </a>
-                    <button
-                      type="button"
-                      className="btn btn--approve btn--tiny"
-                      onClick={() => act("confirm", r.id, `Confirmed draft #${r.id}`)}
-                      data-testid="queue-draft-confirm"
-                    >
-                      Confirm <Kbd>a</Kbd>
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--tiny"
-                      onClick={() => {
-                        setRecite(r.id);
-                        setReciteText(r.body);
-                        setReciteError(false);
-                      }}
-                      data-testid="queue-draft-recite"
-                    >
-                      Edit &amp; recite <Kbd>e</Kbd>
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn--danger-ghost btn--tiny"
-                      onClick={() => {
-                        setRejecting(r.id);
-                        setRejectReason("");
-                      }}
-                      data-testid="queue-draft-reject"
-                    >
-                      Reject <Kbd>x</Kbd>
-                    </button>
-                  </div>
-                </article>
-              );
-            })
-          ))}
-
-        {tab === "corrections" &&
-          (corrections.length === 0 ? (
-            <EmptyState
-              title="No drift waiting"
-              body="Reviewer wakes only when a subgraph's hash changes. When it finds documented state disagreeing with live state, the correction lands here."
-            />
-          ) : (
-            corrections.map((c, i) => (
-              // biome-ignore lint/a11y/useKeyWithClickEvents: as above — the row selects, it does not act
-              <article
-                key={c.id}
-                className="queue__row"
-                data-active={i === active}
-                data-idx={i}
-                onClick={() => setCursor(i)}
-                onFocusCapture={() => setCursor(i)}
-                data-testid={`queue-correction-${c.id}`}
-              >
+        {drafts.loading ? (
+          <div className="panel" style={{ height: 160, opacity: 0.4 }} />
+        ) : items.length === 0 ? (
+          <EmptyState
+            title="No drafts waiting"
+            body="Historian queues drafts here as it explains edges. Every edge it cannot explain from written evidence stays honestly unexplained rather than guessed at."
+            action={{ href: "/app/agents", label: "See what the agents found →" }}
+          />
+        ) : (
+          items.map((r, i) => (
+            <article
+              key={r.id}
+              className="queue__row"
+              data-active={i === active}
+              data-idx={i}
+              onClick={() => setCursor(i)}
+              data-testid={`queue-draft-${r.id}`}
+            >
+              <div>
                 <div className="queue__head">
                   <span className="queue__avatar" aria-hidden="true">
-                    RV
+                    {initials(r.author)}
                   </span>
                   <span className="queue__who">
-                    <strong>{c.summary}</strong>
-                    <span>Reviewer caught drift · {timeAgo(c.createdAt)}</span>
+                    <strong>{r.author ?? "unknown"}</strong>
+                    <span>
+                      mined from {r.sourceKind} · {timeAgo(r.createdAt)}
+                    </span>
                   </span>
+                  {r.confidence !== null && (
+                    <span className="queue__conf" title="Historian's confidence">
+                      <i>
+                        <b style={{ width: `${r.confidence * 100}%` }} />
+                      </i>
+                      {r.confidence.toFixed(2)}
+                    </span>
+                  )}
                 </div>
-                <div className="queue__diff">
-                  <div>
-                    <span>documented</span>
-                    <em>{c.documented}</em>
-                  </div>
-                  <div>
-                    <span>live</span>
-                    <em>{c.live}</em>
-                  </div>
-                </div>
+                <blockquote className="queue__quote">&ldquo;{r.body}&rdquo;</blockquote>
                 <div className="queue__meta">
-                  <span className="tag tag--thread">{nodeById(c.nodeId).name}</span>
+                  {r.srcName && r.dstName && (
+                    <span className="tag tag--thread">
+                      {r.srcName} → {r.dstName}
+                    </span>
+                  )}
                   <Link
-                    href={`/app/agents/${c.agentRunId}`}
+                    href="/app/graph"
                     className="dim"
                     style={{ textDecoration: "underline" }}
                   >
-                    Reviewer&rsquo;s trace
+                    view edge
                   </Link>
                 </div>
-                <div className="queue__actions">
-                  <button
-                    type="button"
-                    className="btn btn--approve btn--tiny"
-                    onClick={() => act("apply", c.id, `Applied: ${c.summary}`)}
-                    data-testid="queue-correction-apply"
-                  >
-                    Apply <Kbd>a</Kbd>
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--danger-ghost btn--tiny"
-                    onClick={() => {
-                      setRejecting(c.id);
-                      setRejectReason("");
-                    }}
-                    data-testid="queue-correction-reject"
-                  >
-                    Reject <Kbd>x</Kbd>
-                  </button>
-                </div>
-              </article>
-            ))
-          ))}
+              </div>
+              <div className="queue__actions">
+                {/* Verification is one click, always — the source is the
+                    primary action, not a footnote. */}
+                <a
+                  className="queue__source"
+                  href={r.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  data-testid="queue-draft-source"
+                >
+                  Verify source ↗
+                </a>
+                <button
+                  type="button"
+                  className="btn btn--approve btn--tiny"
+                  onClick={() => act("confirm", r.id, `Confirmed draft #${r.id}`)}
+                  data-testid="queue-draft-confirm"
+                >
+                  Confirm <Kbd>a</Kbd>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--danger-ghost btn--tiny"
+                  onClick={() => {
+                    setRejecting(r.id);
+                    setReason("");
+                  }}
+                  data-testid="queue-draft-reject"
+                >
+                  Reject <Kbd>x</Kbd>
+                </button>
+              </div>
+            </article>
+          ))
+        )}
       </div>
 
       {pending && (
@@ -425,167 +280,93 @@ export default function QueuePage() {
         </div>
       )}
 
-      {reciteDraft && (
-        <Overlay label="Edit and recite" onClose={() => setRecite(null)} width={540}>
-          <h2>Edit &amp; recite</h2>
-          <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>
-            The one place a span may change — and never on your word alone. The corrected
-            text is re-checked against the live cited source before anything is written.
-            The pointer itself is immutable: a wrong{" "}
-            <code className="mono">source_url</code> means Reject, then re-cite.
-          </p>
-          <textarea
-            value={reciteText}
-            onChange={(e) => {
-              setReciteText(e.target.value);
-              setReciteError(false);
-            }}
-            rows={4}
-            aria-label="Corrected span"
-            style={{
-              width: "100%",
-              border: "1px solid var(--line)",
-              borderRadius: 10,
-              padding: "10px 12px",
-              font: "inherit",
-              fontSize: 14,
-              resize: "vertical",
-            }}
-            data-testid="recite-textarea"
-          />
-          {reciteError && (
-            <p role="alert" style={{ fontSize: 13, color: "var(--block)", marginTop: 8 }}>
-              422 — this text does not appear in the cited source. Your remaining moves
-              are Reject, or re-cite with a pointer to where it does. There is no path
-              from a failed recite to a confirmed row.
+      {rejecting !== null && (
+        <div
+          className="help-overlay"
+          role="dialog"
+          aria-label="Reject with reason"
+          onClick={() => setRejecting(null)}
+        >
+          <div className="help-overlay__card" onClick={(e) => e.stopPropagation()}>
+            <h2>Reject</h2>
+            <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>
+              Rejected drafts are kept, not deleted — the acceptance rate is how we tell
+              whether the agent is worth trusting.
             </p>
-          )}
-          <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="btn btn--approve btn--tiny"
-              onClick={() => {
-                // Mock of the server's §10.2 re-validation: the cited source
-                // "contains" exactly the mined span, so any added words 422.
-                if (
-                  normalize(reciteDraft.body).includes(normalize(reciteText)) &&
-                  reciteText.trim()
-                ) {
-                  setRecite(null);
-                  act(
-                    "confirm",
-                    reciteDraft.id,
-                    `Recited & confirmed draft #${reciteDraft.id}`,
-                  );
-                } else {
-                  setReciteError(true);
-                }
+            <input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why is this wrong?"
+              aria-label="Rejection reason"
+              style={{
+                width: "100%",
+                border: "1px solid var(--line)",
+                borderRadius: 10,
+                padding: "9px 12px",
+                font: "inherit",
+                fontSize: 14,
               }}
-              data-testid="recite-submit"
-            >
-              Re-validate &amp; confirm
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--tiny"
-              onClick={() => setRecite(null)}
-            >
-              Cancel
-            </button>
+              data-testid="reject-reason"
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button
+                type="button"
+                className="btn btn--danger-ghost btn--tiny"
+                onClick={() => {
+                  const id = rejecting;
+                  setRejecting(null);
+                  act("reject", id, `Rejected draft #${id}`);
+                }}
+                data-testid="reject-submit"
+              >
+                Reject
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost btn--tiny"
+                onClick={() => setRejecting(null)}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        </Overlay>
-      )}
-
-      {rejecting != null && (
-        <Overlay label="Reject with reason" onClose={() => setRejecting(null)}>
-          <h2>Reject</h2>
-          <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>
-            The reason travels with the rejection — Historian and Reviewer learn from it.
-          </p>
-          <input
-            type="text"
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            placeholder="Why is this wrong?"
-            aria-label="Rejection reason"
-            ref={rejectInputRef}
-            style={{
-              width: "100%",
-              border: "1px solid var(--line)",
-              borderRadius: 10,
-              padding: "9px 12px",
-              font: "inherit",
-              fontSize: 14,
-            }}
-            data-testid="reject-reason"
-          />
-          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-            <button
-              type="button"
-              className="btn btn--danger-ghost btn--tiny"
-              disabled={!rejectReason.trim()}
-              onClick={() => {
-                const id = rejecting;
-                setRejecting(null);
-                act(
-                  "reject",
-                  id,
-                  tab === "drafts"
-                    ? `Rejected draft #${id}`
-                    : `Rejected correction #${id}`,
-                );
-              }}
-              data-testid="reject-submit"
-            >
-              Reject
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--tiny"
-              onClick={() => setRejecting(null)}
-            >
-              Cancel
-            </button>
-          </div>
-        </Overlay>
+        </div>
       )}
 
       {help && (
-        <Overlay label="Keyboard shortcuts" onClose={() => setHelp(false)}>
-          <h2>Keyboard</h2>
-          <dl>
-            <dt>
-              <Kbd>j</Kbd> / <Kbd>k</Kbd>
-            </dt>
-            <dd>next / previous item</dd>
-            <dt>
-              <Kbd>o</Kbd>
-            </dt>
-            <dd>open source in new tab</dd>
-            <dt>
-              <Kbd>a</Kbd>
-            </dt>
-            <dd>approve / confirm / apply</dd>
-            <dt>
-              <Kbd>e</Kbd>
-            </dt>
-            <dd>
-              edit &amp; recite (server re-validates containment; 422 → reject or re-cite)
-            </dd>
-            <dt>
-              <Kbd>x</Kbd>
-            </dt>
-            <dd>reject (reason prompt)</dd>
-            <dt>
-              <Kbd>u</Kbd>
-            </dt>
-            <dd>undo (15s window — mutation fires after it closes)</dd>
-            <dt>
-              <Kbd>?</Kbd>
-            </dt>
-            <dd>toggle this overlay</dd>
-          </dl>
-        </Overlay>
+        <div
+          className="help-overlay"
+          role="dialog"
+          aria-label="Keyboard shortcuts"
+          onClick={() => setHelp(false)}
+        >
+          <div className="help-overlay__card" onClick={(e) => e.stopPropagation()}>
+            <h2>Keyboard</h2>
+            <dl>
+              <dt>
+                <Kbd>j</Kbd> / <Kbd>k</Kbd>
+              </dt>
+              <dd>next / previous draft</dd>
+              <dt>
+                <Kbd>o</Kbd>
+              </dt>
+              <dd>open the cited source in a new tab</dd>
+              <dt>
+                <Kbd>a</Kbd>
+              </dt>
+              <dd>confirm — this is what moves coverage</dd>
+              <dt>
+                <Kbd>x</Kbd>
+              </dt>
+              <dd>reject, with a reason</dd>
+              <dt>
+                <Kbd>u</Kbd>
+              </dt>
+              <dd>undo (15s window — nothing is written until it closes)</dd>
+            </dl>
+          </div>
+        </div>
       )}
     </>
   );

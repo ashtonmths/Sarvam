@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { z } from "zod";
 
 /**
@@ -6,6 +7,36 @@ import { z } from "zod";
  * feature-gated groups stay optional so the API boots — and the deterministic
  * verdict path keeps working — with nothing but Postgres configured.
  */
+
+/**
+ * Load `.env` for local development. In a container the environment is
+ * already populated and there is no file, so this is a no-op — which is why
+ * it is a silent try rather than a hard requirement.
+ *
+ * Real values already in the environment win: `DATABASE_URL=… pnpm seed`
+ * must override the file, not the other way round.
+ */
+function loadDotEnv(): void {
+  for (const candidate of [".env", "../../.env"]) {
+    if (!existsSync(candidate)) continue;
+    try {
+      const before = new Set(Object.keys(process.env));
+      process.loadEnvFile(candidate);
+      // process.loadEnvFile overwrites, so restore anything that was already
+      // set explicitly by the caller.
+      for (const key of before) {
+        const original = originalEnv.get(key);
+        if (original !== undefined) process.env[key] = original;
+      }
+      return;
+    } catch {
+      /* malformed or unreadable .env falls through to schema validation */
+    }
+  }
+}
+
+const originalEnv = new Map(Object.entries(process.env) as Array<[string, string]>);
+loadDotEnv();
 
 const Env = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -42,6 +73,39 @@ const Env = z.object({
   OPENROUTER_MODEL_STRONG: z.string().min(1).optional(),
   OPENROUTER_MODEL_BULK: z.string().min(1).optional(),
 
+  // models (plans 7 and 10). The kill switch is the drill lever and the
+  // incident lever; the quotas are hard product constraints, not footnotes.
+  LLM_DISABLED: z
+    .enum(["0", "1", "true", "false"])
+    .default("0")
+    .transform((v) => v === "1" || v === "true"),
+  /** Account-wide, not per model or per process. */
+  LLM_RPM_LIMIT: z.coerce.number().int().min(1).max(1000).default(20),
+  /** 50 on a bare free account; 1000 after the one-time $10 credit. */
+  LLM_DAILY_REQUEST_CAP: z.coerce.number().int().min(1).default(1000),
+
+  // historian (plan 10)
+  HISTORIAN_STEP_BUDGET: z.coerce.number().int().min(1).max(50).default(10),
+  HISTORIAN_MAX_PARSE_FAILURES: z.coerce.number().int().min(1).max(10).default(2),
+  HISTORIAN_FANOUT_MAX_EDGES: z.coerce.number().int().min(1).max(200).default(25),
+  HISTORIAN_FANOUT_CONCURRENCY_MAX: z.coerce.number().int().min(1).max(32).default(5),
+  HISTORIAN_EXPECTED_CALLS_PER_LOOP: z.coerce.number().int().min(1).max(50).default(5),
+  HISTORIAN_MAX_QUEUED_PER_ORG: z.coerce.number().int().min(1).default(50),
+  HISTORIAN_ORG_BUDGET_USD: z.coerce.number().min(0).default(20),
+  /** Stops one org draining the shared account for every other org. */
+  HISTORIAN_ORG_DAILY_REQUESTS: z.coerce.number().int().min(1).default(600),
+  SLACK_SCAN_MESSAGES: z.coerce.number().int().min(1).max(20_000).default(2000),
+
+  // github app (plan 8) — platform secrets, not tenant secrets
+  GITHUB_APP_ID: z.string().min(1).optional(),
+  GITHUB_APP_PRIVATE_KEY: z.string().min(1).optional(),
+  GITHUB_APP_WEBHOOK_SECRET: z.string().min(1).optional(),
+
+  // slack app (plan 9)
+  SLACK_CLIENT_ID: z.string().min(1).optional(),
+  SLACK_CLIENT_SECRET: z.string().min(1).optional(),
+  SLACK_SIGNING_SECRET: z.string().min(1).optional(),
+
   // dev-seed connector credentials only — real orgs use the vault
   N8N_BASE_URL: z.string().url().optional(),
   N8N_API_KEY: z.string().min(1).optional(),
@@ -50,7 +114,18 @@ const Env = z.object({
   SLACK_BOT_TOKEN: z.string().min(1).optional(),
 });
 
-const parsed = Env.safeParse(process.env);
+/**
+ * A blank line in `.env` means "not set", not "set to the empty string".
+ * `.env.example` ships every optional variable with an empty value so the file
+ * documents itself, so this is the difference between a working copy-paste
+ * setup and a boot failure listing six variables the user deliberately left
+ * blank.
+ */
+const withoutBlanks = Object.fromEntries(
+  Object.entries(process.env).filter(([, value]) => value !== ""),
+);
+
+const parsed = Env.safeParse(withoutBlanks);
 if (!parsed.success) {
   console.error("Invalid environment:", parsed.error.flatten().fieldErrors);
   process.exit(1);

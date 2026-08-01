@@ -12,6 +12,9 @@ import { db } from "../db.js";
 import { NotFoundError } from "../errors.js";
 import { paginated, parsePagination } from "../http/pagination.js";
 import { requireCapability } from "../middleware/auth.js";
+import { toBlastRows } from "../sentinel/assemble.js";
+import { verdict as scoreVerdict } from "../sentinel/score.js";
+import { busFactorByEdge, hydrateHops, traverse } from "../sentinel/traverse.js";
 
 export const graphRoutes = new Hono();
 
@@ -69,6 +72,65 @@ graphRoutes.get("/graph/edges", requireCapability("graph:read"), async (c) => {
   return c.json(
     paginated(rows, limit, (row) => ({ k: row.lastSeen.toISOString(), i: row.id })),
   );
+});
+
+/**
+ * The most dangerous things to touch right now, ranked by the gate's own
+ * arithmetic — a real traversal per candidate, not an approximation. Read-only,
+ * so nothing here writes a decision row.
+ *
+ * Bounded to a handful of candidates: this runs on a dashboard, and the point
+ * is the top of the list, not completeness.
+ */
+graphRoutes.get("/graph/watchlist", requireCapability("graph:read"), async (c) => {
+  const orgId = c.get("orgId");
+  const limit = Math.min(Number(c.req.query("limit") ?? 3), 10);
+
+  // Only nodes something actually depends on — a leaf has no blast radius, so
+  // scoring it would just pad the list with zeros.
+  const candidates = await db
+    .select({
+      id: nodesTable.id,
+      name: nodesTable.name,
+      kind: nodesTable.kind,
+      connector: nodesTable.connector,
+      externalId: nodesTable.externalId,
+      criticality: nodesTable.criticality,
+    })
+    .from(nodesTable)
+    .where(
+      and(
+        eq(nodesTable.orgId, orgId),
+        eq(nodesTable.state, "active"),
+        sql`EXISTS (SELECT 1 FROM edges e WHERE e.dst_id = ${nodesTable.id} AND e.org_id = ${orgId})`,
+      ),
+    )
+    .orderBy(desc(nodesTable.criticality))
+    .limit(limit * 4);
+
+  const scored = [];
+  for (const node of candidates) {
+    const rows = await traverse(orgId, node.id);
+    if (rows.length === 0) continue;
+
+    const edgeIds = [...new Set(rows.flatMap((r) => r.edgeIds))];
+    const [hops, authors] = await Promise.all([
+      hydrateHops(orgId, edgeIds),
+      busFactorByEdge(orgId, edgeIds),
+    ]);
+    const impacted = toBlastRows(rows, hops, authors);
+    const { verdict } = scoreVerdict(impacted);
+
+    scored.push({
+      node,
+      downstream: impacted.length,
+      maxImpact: impacted.reduce((max, r) => Math.max(max, r.impact), 0),
+      verdict,
+    });
+  }
+
+  scored.sort((a, b) => b.maxImpact - a.maxImpact);
+  return c.json({ items: scored.slice(0, limit) });
 });
 
 /** Counts by kind, connector and state — what `sadhak graph stats` renders. */

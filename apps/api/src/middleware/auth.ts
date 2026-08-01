@@ -17,6 +17,8 @@ import { getOrgByPublicId, type OrgDb, orgDb } from "../tenant.js";
  * impossible rather than a review item.
  */
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export type Actor =
   | { type: "user"; id: number; sessionId: number; email: string; role: Role | null }
   | { type: "api_key"; id: number; scopes: Capability[] };
@@ -78,9 +80,17 @@ export const requireOrg = createMiddleware(async (c, next) => {
 
   const pathOrg = c.req.param("orgId");
   if (pathOrg !== undefined) {
-    const resolved = /^\d+$/.test(pathOrg)
-      ? Number(pathOrg)
-      : ((await getOrgByPublicId(pathOrg))?.id ?? null);
+    let resolved: number | null;
+    if (/^\d+$/.test(pathOrg)) {
+      resolved = Number(pathOrg);
+    } else if (UUID.test(pathOrg)) {
+      resolved = (await getOrgByPublicId(pathOrg))?.id ?? null;
+    } else {
+      // The column is uuid-typed, so handing it a malformed segment raises a
+      // Postgres cast error rather than returning no rows. Shape-check first:
+      // an unparseable id is simply one that does not exist.
+      resolved = null;
+    }
     if (resolved !== orgId) throw new NotFoundError();
   }
 

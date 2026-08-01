@@ -17,7 +17,8 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { CORRECTIONS, EDGES, RATIONALE } from "../../lib/mock/data";
+import type { Coverage } from "../../lib/api";
+import { useQuery } from "../../lib/queries";
 import { switchOrg, useSession } from "../../lib/session";
 import { LogoMark } from "../marks";
 import { Topbar } from "./topbar";
@@ -86,15 +87,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  // Queue counts still come from the mock: Historian (plan 10) and Reviewer
-  // (plan 11) are what populate them for real.
-  const queueCount =
-    RATIONALE.filter((r) => r.state === "drafted").length + CORRECTIONS.length;
+  // Live count of what is actually waiting on a human.
+  const drafts = useQuery<{ items: unknown[] }>(
+    org ? "/api/rationale?state=drafted" : null,
+    [org?.id],
+  );
+  const queueCount = drafts.data?.items.length ?? 0;
 
   // Coverage is the product's honest number: only human-confirmed rationale
   // counts, which is exactly what the marketing site promises ("0 guesses").
-  const confirmed = RATIONALE.filter((r) => r.state === "confirmed").length;
-  const coveragePct = Math.round((confirmed / EDGES.length) * 100);
+  const coverage = useQuery<Coverage>(org ? "/api/metrics/coverage" : null, [org?.id]);
+  const confirmed = coverage.data?.coverageConfirmed ?? 0;
+  const totalEdges = coverage.data?.totalEdges ?? 0;
+  const coveragePct = totalEdges > 0 ? Math.round((confirmed / totalEdges) * 100) : 0;
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(RAIL_PREF) === "min");
@@ -190,7 +195,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="rail__card-eyebrow">
             <span>Coverage</span>
             <span>
-              {confirmed}/{EDGES.length}
+              {confirmed}/{totalEdges}
             </span>
           </span>
           <span className="rail__card-meter" aria-hidden="true">

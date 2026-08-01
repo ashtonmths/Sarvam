@@ -7,6 +7,13 @@ import { config } from "./config.js";
  * Boot migration runner. An advisory lock serializes two replicas booting at
  * the same second instead of letting them race DDL; `lock_timeout` makes a
  * stuck migration fail loudly rather than queue behind traffic.
+ *
+ * pgvector is a prerequisite of migration 0000, which declares
+ * `rationale.embedding vector(384)`. `db/init/` only runs under Docker
+ * Compose's entrypoint, so CI services and managed Postgres never see it and
+ * the first migration dies on `type "vector" does not exist`. Creating it here
+ * keeps the chain applicable from zero on any Postgres that has the extension
+ * available.
  */
 
 /** "sadhak" in hex-ish. Any stable constant works; it just has to be ours. */
@@ -20,6 +27,7 @@ async function main(): Promise<void> {
 
   try {
     await sql`SELECT pg_advisory_lock(${LOCK_KEY})`;
+    await sql`CREATE EXTENSION IF NOT EXISTS vector`;
     await migrate(drizzle(sql), { migrationsFolder: "../../db/migrations" });
     console.log("migrations applied");
   } finally {
