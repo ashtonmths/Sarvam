@@ -1,0 +1,74 @@
+---
+title: FAQ
+description: The questions prospects actually ask, including the ones with answers we would rather soften.
+order: 8
+---
+
+## Can you stop someone deleting an Airtable field in the GUI?
+
+**No.** No product can. Airtable's admin UI has no pre-commit hook to veto a
+deletion, so anything claiming to prevent it is either wrong or describing a
+different product.
+
+What Sadhak does instead: the webhook arrives, the blast radius is computed
+against your graph, and if the field mattered you get an alert with a one-click
+revert — typically within seconds of the deletion. Reverting restores the field
+schema. It does **not** restore cell data; Airtable's own base trash is the
+higher-fidelity path for that, and our confirmation dialog says so at the moment
+you need to know it.
+
+## Do you read our data?
+
+**Structure, never payloads.** Sadhak records that a field called
+`invoices.vat_rate` exists, that a report reads it, and that someone explained
+why in a Slack thread. It never reads an invoice.
+
+This is enforced where the connectors stop, not by policy: each crawler emits
+schema and wiring only, and there is no code path that selects row data into the
+graph. A test plants distinctive strings inside cell values, runs a full crawl,
+then searches every text-bearing column of our own database for them. If one
+appears, the build fails.
+
+## Can an AI guess block my merge?
+
+**No.** Edges discovered by a language model carry `llm_inferred` provenance and
+a confidence of 0.5, and the scoring kernel will not issue a BLOCK on evidence
+below 0.7. The rule is in the code and pinned by tests that fail if anybody
+loosens it.
+
+## What does coverage count?
+
+Human-confirmed, source-linked rationale only. A draft an agent proposed and
+nobody has reviewed counts for nothing, and pending work is shown separately
+rather than folded into the same number — because a coverage figure that mixes
+"we know this" with "a model guessed this" is worse than having no figure.
+
+## What happens if Sadhak is down?
+
+**The gate fails open, with an alert.** A pipeline error produces a `neutral`
+GitHub Check, not a failing one.
+
+That is a deliberate trade: a gate that hangs your pull requests when our server
+has a bad day gets removed within a week, and a removed gate protects nothing.
+So we would rather miss one verdict loudly than block your team silently.
+
+## Aren't Atlan, Workato and friends already doing impact analysis?
+
+Yes, and we never claim the category is empty. Data catalogues do lineage across
+warehouses well. Our differences are narrow and specific: we cover the
+**non-git mutation path** (someone changing something in a SaaS admin panel),
+we work **across vendors** rather than inside one, and we **actually enforce**
+rather than only inform.
+
+If a catalogue already covers your stack and your changes all go through pull
+requests, you may not need us.
+
+## How do I buy it?
+
+You talk to us and we invoice you. There is no self-serve checkout, and **no
+feature is locked behind a plan today** — every account gets the hard gate, the
+proxy gate, MCP gating, Reflex revert and the full Historian budget.
+
+The prices on the pricing page are indicative of what we intend to charge later.
+Saying that plainly costs us nothing and beats a prospect discovering a dead
+"Subscribe" button.

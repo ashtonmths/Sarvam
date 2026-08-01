@@ -1,0 +1,32 @@
+---
+title: Hard gate
+description: A GitHub Check that fails the pull request. A real block.
+group: Enforcement
+order: 21
+---
+
+**This is a true block.** Sadhak runs as a GitHub Check on your pull requests.
+A change with a high blast radius fails the check, and with branch protection on,
+the merge button goes grey.
+
+## What it looks at
+
+Migrations, workflow definitions, infrastructure code — anything in the
+repository that mutates a system Sadhak has mapped. The check reads the diff,
+resolves the affected nodes, and asks the same engine the rest of the product
+asks.
+
+## What happens when we are down
+
+**The check goes `neutral`, not failing.** A pipeline error must never hang your
+pull request: a gate that blocks your team when our server has a bad day is a
+gate that gets removed within a week, and a removed gate protects nothing.
+
+You get an alert that a verdict was missed. We would rather fail loudly on our
+side than silently on yours.
+
+## Setup
+
+Install the GitHub App and grant it the repository. It requests the minimum
+permissions needed to read a diff and write a check run — it never needs write
+access to your code.

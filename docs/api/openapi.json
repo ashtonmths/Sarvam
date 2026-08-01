@@ -1,0 +1,1041 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Sadhak API",
+    "version": "dev",
+    "description": "Sadhak keeps a dependency graph of your systems and gates the changes\nthat would break them.\n\n**Verdicts are deterministic.** The same change against the same graph\nreturns the same answer, every time, with no model in the path. An edge\na model inferred can raise a warning and can never produce a BLOCK.\n\n**Tenancy is resolved from the credential, never from input.** Every\norg-scoped route also answers at `/api/orgs/{orgId}/…`, where `{orgId}`\nis *asserted* against the org your credential resolved to — a mismatch\nis a **404, not a 403**, so a wrong org id is indistinguishable from one\nthat does not exist."
+  },
+  "servers": [
+    {
+      "url": "https://api.sadhak.online",
+      "description": "Production"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Sessions and org membership."
+    },
+    {
+      "name": "Gate",
+      "description": "Ask for a verdict, or forward a change through one."
+    },
+    {
+      "name": "Graph",
+      "description": "The map: nodes, edges, and what is unresolved."
+    },
+    {
+      "name": "Rationale",
+      "description": "Why a dependency exists, and who confirmed it."
+    },
+    {
+      "name": "Reflex",
+      "description": "Detected changes and their reverts."
+    },
+    {
+      "name": "Org",
+      "description": "Members, keys, audit, export and erasure."
+    }
+  ],
+  "components": {
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "description": "RFC 9457 problem details. Served as application/problem+json.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "title", "status", "instance", "requestId"]
+      },
+      "ChangeDescriptor": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "enum": ["field"]
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["delete", "rename", "retype"]
+              },
+              "connector": {
+                "type": "string",
+                "enum": ["airtable", "postgres"]
+              },
+              "externalId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "newName": {
+                "type": "string"
+              },
+              "newType": {
+                "type": "string"
+              },
+              "actor": {
+                "type": "string"
+              },
+              "agent": {
+                "type": "string"
+              }
+            },
+            "required": ["target", "operation", "connector", "externalId"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "enum": ["workflow"]
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["modify", "disable", "delete"]
+              },
+              "connector": {
+                "type": "string",
+                "enum": ["n8n"]
+              },
+              "externalId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "actor": {
+                "type": "string"
+              },
+              "agent": {
+                "type": "string"
+              }
+            },
+            "required": ["target", "operation", "connector", "externalId"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "enum": ["credential"]
+              },
+              "operation": {
+                "type": "string",
+                "enum": ["revoke"]
+              },
+              "connector": {
+                "type": "string",
+                "enum": ["n8n", "airtable", "postgres", "github", "slack"]
+              },
+              "externalId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "actor": {
+                "type": "string"
+              },
+              "agent": {
+                "type": "string"
+              }
+            },
+            "required": ["target", "operation", "connector", "externalId"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "SignUp": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "required": ["name", "email", "password"],
+        "additionalProperties": false
+      },
+      "SignIn": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": ["email", "password"],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "An org-scoped key, `sadhak_…`. Also accepted as `Authorization: Bearer`. A key can never hold more capability than the person who created it."
+      },
+      "session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "sadhak_session",
+        "description": "What the web app uses. Set by POST /api/auth/signin."
+      }
+    }
+  },
+  "security": [
+    {
+      "apiKey": []
+    },
+    {
+      "session": []
+    }
+  ],
+  "paths": {
+    "/api/auth/signup": {
+      "post": {
+        "summary": "Create an account and its first organisation",
+        "tags": ["Auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignUp"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created. Sets the session cookie."
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "That email already has an account.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Carries Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/signin": {
+      "post": {
+        "summary": "Start a session",
+        "tags": ["Auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in. Sets the session cookie."
+          },
+          "401": {
+            "description": "Wrong email or password — the two are not distinguished.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Ten a minute, because that is where guessing a password becomes worth someone's time.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "The current user, their orgs, and their capabilities",
+        "tags": ["Auth"],
+        "responses": {
+          "200": {
+            "description": "The session's identity and what it may do."
+          },
+          "401": {
+            "description": "No session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/verdicts": {
+      "post": {
+        "summary": "Ask the gate about a change",
+        "tags": ["Gate"],
+        "description": "Requires `gate:invoke`. Evaluates the change and returns the verdict\nwith the evidence behind it. **Nothing is forwarded** — this is the\nquestion, not the action. Use the forward route for that, and note\nit needs a different capability: an agent that may ask is not\nnecessarily an agent that may act.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeDescriptor"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The verdict, its evidence, and the blast radius that produced it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "verdict": {
+                      "type": "string",
+                      "enum": ["APPROVE", "WARN", "BLOCK"]
+                    },
+                    "evidence": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "required": ["id", "verdict"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The change descriptor did not validate.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No credential.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Credential lacks gate:invoke.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The target node does not exist in your org's graph.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/verdicts/{id}": {
+      "get": {
+        "summary": "Re-read a verdict",
+        "tags": ["Gate"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The verdict as it was issued, not recomputed."
+          },
+          "404": {
+            "description": "No such verdict in your org.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/verdicts/{id}/explanation": {
+      "get": {
+        "summary": "Prose explaining a verdict",
+        "tags": ["Gate"],
+        "description": "Generated by a model, and therefore optional. When the model is unavailable or the daily quota is spent this returns no prose — the verdict and its evidence are unaffected, because they never touched a model.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The explanation, or an empty one."
+          },
+          "404": {
+            "description": "No such verdict in your org.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/nodes": {
+      "get": {
+        "summary": "List nodes",
+        "tags": ["Graph"],
+        "description": "Requires the `graph:read` capability.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "Outside 1–200 is a 400, never a silent clamp."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "From a previous response's nextCursor."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Opaque. Absent or null on the last page. A tampered cursor is a 400, never a 500."
+                    }
+                  },
+                  "required": ["items"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No credential, or one that no longer resolves.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but without the capability.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/edges": {
+      "get": {
+        "summary": "List edges",
+        "tags": ["Graph"],
+        "description": "Requires the `graph:read` capability.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "Outside 1–200 is a 400, never a silent clamp."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "From a previous response's nextCursor."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Opaque. Absent or null on the last page. A tampered cursor is a 400, never a 500."
+                    }
+                  },
+                  "required": ["items"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No credential, or one that no longer resolves.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but without the capability.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/stats": {
+      "get": {
+        "summary": "Counts by kind, connector and state",
+        "tags": ["Graph"],
+        "responses": {
+          "200": {
+            "description": "What the map is made of."
+          }
+        }
+      }
+    },
+    "/api/graph/unresolved": {
+      "get": {
+        "summary": "References we refused to guess at",
+        "tags": ["Graph"],
+        "description": "Things a crawl saw referenced but could not resolve. Shown rather than guessed, because a wrong edge is worse than a missing one.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "Outside 1–200 is a 400, never a silent clamp."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "From a previous response's nextCursor."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Opaque. Absent or null on the last page. A tampered cursor is a 400, never a 500."
+                    }
+                  },
+                  "required": ["items"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No credential, or one that no longer resolves.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but without the capability.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rationale": {
+      "get": {
+        "summary": "List rationale",
+        "tags": ["Rationale"],
+        "description": "Requires the `graph:read` capability.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "Outside 1–200 is a 400, never a silent clamp."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "From a previous response's nextCursor."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Opaque. Absent or null on the last page. A tampered cursor is a 400, never a 500."
+                    }
+                  },
+                  "required": ["items"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No credential, or one that no longer resolves.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but without the capability.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/incidents": {
+      "get": {
+        "summary": "List detected changes",
+        "tags": ["Reflex"],
+        "description": "Requires the `graph:read` capability.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "Outside 1–200 is a 400, never a silent clamp."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "From a previous response's nextCursor."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Opaque. Absent or null on the last page. A tampered cursor is a 400, never a 500."
+                    }
+                  },
+                  "required": ["items"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No credential, or one that no longer resolves.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but without the capability.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audit": {
+      "get": {
+        "summary": "The audit log",
+        "tags": ["Org"],
+        "description": "Requires the `audit:read` capability.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "Outside 1–200 is a 400, never a silent clamp."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "From a previous response's nextCursor."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Opaque. Absent or null on the last page. A tampered cursor is a 400, never a 500."
+                    }
+                  },
+                  "required": ["items"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No credential, or one that no longer resolves.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but without the capability.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/org/export": {
+      "get": {
+        "summary": "Export everything this organisation has",
+        "tags": ["Org"],
+        "description": "Requires `org:delete`, which only an owner holds. One JSON document:\ngraph, rationale, verdicts, decisions, incidents and the audit log.\n\nCredentials are excluded — they are sealed to this org and connector\nand would not work anywhere else. Embeddings are excluded because\nthey are derived from text already in the file.",
+        "responses": {
+          "200": {
+            "description": "The export, as a file attachment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an owner.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/org": {
+      "delete": {
+        "summary": "Delete this organisation and everything in it",
+        "tags": ["Org"],
+        "description": "Irreversible. Cascades at the database — graph, rationale, verdicts, credentials and audit log. There is no grace period and no soft delete, because a window during which we still hold everything is a retention policy wearing a deletion policy's name.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "confirmName": {
+                    "type": "string",
+                    "description": "The organisation's name, typed exactly."
+                  }
+                },
+                "required": ["confirmName"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deleted."
+          },
+          "400": {
+            "description": "The confirmation name did not match. Nothing was deleted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an owner.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

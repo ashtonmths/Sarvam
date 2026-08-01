@@ -490,10 +490,15 @@ export function LiveGraph({ initialQuery = "" }: { initialQuery?: string }) {
               })}
             </svg>
 
-            <div className="graph-controls" aria-hidden="true">
+            {/* Not aria-hidden. These are real controls and they take focus,
+                so hiding them gave a keyboard user three tab stops that
+                announce nothing. Labelled instead, and the glyphs inside are
+                hidden so a screen reader reads the label rather than "plus". */}
+            <div className="graph-controls">
               <button
                 type="button"
                 title="Zoom in"
+                aria-label="Zoom in"
                 onClick={() =>
                   setVb((p) => {
                     const w = Math.max(360, p.w / 1.25);
@@ -502,11 +507,12 @@ export function LiveGraph({ initialQuery = "" }: { initialQuery?: string }) {
                   })
                 }
               >
-                +
+                <span aria-hidden="true">+</span>
               </button>
               <button
                 type="button"
                 title="Zoom out"
+                aria-label="Zoom out"
                 onClick={() =>
                   setVb((p) => {
                     const w = Math.min(2400, p.w * 1.25);
@@ -515,10 +521,15 @@ export function LiveGraph({ initialQuery = "" }: { initialQuery?: string }) {
                   })
                 }
               >
-                −
+                <span aria-hidden="true">−</span>
               </button>
-              <button type="button" title="Reset view" onClick={() => setVb(VB_HOME)}>
-                ⌂
+              <button
+                type="button"
+                title="Reset view"
+                aria-label="Reset the view"
+                onClick={() => setVb(VB_HOME)}
+              >
+                <span aria-hidden="true">⌂</span>
               </button>
             </div>
 

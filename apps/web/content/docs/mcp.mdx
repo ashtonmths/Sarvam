@@ -1,0 +1,65 @@
+---
+title: MCP guide
+description: Put Sadhak in front of an agent's mutations, so it has to ask before it breaks something.
+order: 5
+---
+
+Sadhak exposes an MCP server so an agent can ask the gate before acting. This is
+the [proxy gate](/docs/enforcement/proxy-gate), and it is a true block: a BLOCK
+verdict means the mutation is never forwarded.
+
+## Connect a client
+
+Mint an org-scoped API key in **Settings → API keys**, then:
+
+```json
+{
+  "mcpServers": {
+    "sadhak": {
+      "type": "http",
+      "url": "https://api.sadhak.online/mcp",
+      "headers": { "X-API-Key": "sadhak_…" }
+    }
+  }
+}
+```
+
+## What the tools return
+
+A verdict, and the evidence behind it:
+
+```jsonc
+{
+  "verdict": "BLOCK",
+  "evidence": [
+    {
+      "node": "public.eu_vat_report",
+      "kind": "report",
+      "hops": 1,
+      "impact": 1.0,
+      "provenance": "static_parse",
+      "why": "The VAT report reads this column directly and is filed quarterly."
+    }
+  ]
+}
+```
+
+The `why` is a human's confirmed explanation with a permalink, when one exists.
+It is never a model's guess presented as fact.
+
+## The recommended agent policy
+
+Put this in your agent's system prompt:
+
+> Mutations to connected systems go through the Sadhak tool. Treat **BLOCK** as a
+> hard constraint — do not look for another route to the same change. Treat
+> **WARN** as a reason to ask a human rather than to proceed carefully.
+
+The failure mode worth naming: an agent that treats BLOCK as an obstacle to route
+around is more dangerous than one with no gate at all, because it now has a list
+of exactly which changes matter.
+
+## Testing without side effects
+
+Every tool accepts `dry_run`. Use it in development; the verdict is identical,
+and nothing is forwarded.

@@ -1,0 +1,59 @@
+---
+title: Security
+description: Scopes, credential handling, what leaves the machine, and how to report something.
+order: 7
+---
+
+## The principle everything follows from
+
+**Structure, never payloads.** Sadhak indexes that a field exists and who reads
+it, and never a row of your data. It is enforced at the connector boundary and
+verified by a test that plants canary strings inside cell values and fails the
+build if any reaches our database.
+
+## Credentials
+
+Sealed with authenticated encryption before they reach the database. The
+additional authenticated data binds each credential to its organisation,
+connector instance, scope and kind — so a sealed credential lifted into another
+organisation's row does not decrypt. It fails as tampering rather than opening.
+
+**Read and write are separate credentials.** Crawling asks for a read-only one
+and cannot be handed a writing one by accident, because they are different rows
+with different scopes. A write credential exists only if you set one up for
+Reflex reverts, and it is the only path by which Sadhak can change anything in
+your systems.
+
+## Tenancy
+
+Enforced from the credential, never from request input. An organisation id in a
+URL is *asserted* against the one your credential resolved to, and a mismatch
+answers **404, not 403** — so a wrong organisation id is indistinguishable from
+one that does not exist, and the API cannot be used to enumerate customers.
+
+## What leaves our server
+
+Only one thing, and only if you enable it: when you select Slack channels for
+mining, the Historian puts matching message snippets in front of a language
+model so it can propose why a dependency exists. Those snippets are your
+colleagues' words.
+
+Your rows never leave. Your credentials never leave. Semantic search over
+rationale uses a model running on our own server, so that text is not shipped to
+an embedding API at all.
+
+The full list, with what each party sees, is on the
+[subprocessors page](/legal/subprocessors).
+
+## Reporting something
+
+Email us, or open an issue if it is not sensitive. We will acknowledge within
+two working days and tell you what we found, including when the answer is that
+we got it wrong.
+
+- [Terms](/legal/terms) · [Privacy](/legal/privacy) ·
+  [DPA](/legal/dpa) · [Subprocessors](/legal/subprocessors)
+
+**Customer-held keys** are available on request rather than as a plan feature —
+no feature is behind a plan today. Ask and we will talk about what your
+compliance team needs.

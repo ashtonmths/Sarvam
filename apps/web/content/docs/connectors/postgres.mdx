@@ -1,0 +1,42 @@
+---
+title: Postgres
+description: Schema, columns and foreign keys. The fastest connector to see a real graph from.
+group: Connectors
+order: 11
+---
+
+## What gets crawled
+
+**Structure, never payloads.** Tables, views, columns, types, foreign keys, and
+the dependencies inside view definitions.
+
+The crawler reads `information_schema` and `pg_catalog`. It issues no `SELECT`
+against your own tables, and a crawl of a hundred-million-row table produces the
+same amount of stored data as a crawl of an empty one.
+
+## The role to create
+
+```sql
+CREATE ROLE sadhak_reader LOGIN PASSWORD 'a-strong-password';
+GRANT CONNECT ON DATABASE your_db TO sadhak_reader;
+GRANT USAGE ON SCHEMA public TO sadhak_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO sadhak_reader;
+```
+
+`SELECT` looks broader than it is: `information_schema` is itself a set of
+tables, and reading it is what the grant is for. If your policy forbids a blanket
+grant, `GRANT SELECT ON ALL TABLES IN SCHEMA information_schema` is enough for
+the structural crawl.
+
+## Read and revert are separate
+
+The role above is read-only and that is the only credential Sadhak needs. Reverts
+in Postgres are **proposed as SQL for a human to run** rather than executed, so
+there is no write credential for this connector at all.
+
+## Known limits
+
+- Dynamic SQL built at runtime is invisible to a structural crawl. Those edges
+  come from the [Historian](/docs/mcp) reading discussion, and arrive as
+  `llm_inferred` — which warns and never blocks.
+- Cross-database references are not followed. Connect each database separately.

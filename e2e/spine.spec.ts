@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 /**
@@ -129,4 +130,46 @@ test.describe("metrics", () => {
     await expect(page.getByText(/counts toward coverage/i)).toBeVisible();
     await expect(page.getByText(/never counted/i)).toBeVisible();
   });
+});
+
+test.describe("accessibility", () => {
+  /**
+   * A scan, not a spot check.
+   *
+   * Every violation this caught on its first run was real and none was
+   * visible by looking: `--ink-faint` measured 2.67:1 and was the muted text
+   * token used for every rail label, chip and caption; the graph's zoom
+   * controls were `aria-hidden` while still taking focus, so a keyboard user
+   * got three tab stops that announce nothing; and the verdict badges — the
+   * product's actual output — sat between 3.4 and 4.5:1 on their own chips.
+   *
+   * Pinned at zero rather than at a budget. A threshold above zero is a
+   * threshold nobody ever brings back down.
+   */
+  const PAGES = [
+    "/",
+    "/pricing",
+    "/legal/privacy",
+    "/legal/terms",
+    "/app",
+    "/app/graph",
+    "/app/queue",
+    "/app/decisions",
+    "/app/metrics",
+  ];
+
+  for (const path of PAGES) {
+    test(`${path} has no WCAG AA violations`, async ({ page }) => {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+
+      const results = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .analyze();
+
+      expect(
+        results.violations.map((v) => `${v.id}: ${v.nodes[0]?.html?.slice(0, 80)}`),
+      ).toEqual([]);
+    });
+  }
 });

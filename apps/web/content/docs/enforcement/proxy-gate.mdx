@@ -1,0 +1,28 @@
+---
+title: Proxy gate
+description: Changes routed through the API or MCP are evaluated before they are forwarded. A real block.
+group: Enforcement
+order: 22
+---
+
+**This is a true block.** A mutation sent through Sadhak's REST API or MCP
+server is evaluated first, and a BLOCK verdict means it is **never forwarded**
+to the target system. Nothing partial happens.
+
+## Why this is the strategically interesting mode
+
+An AI agent with credentials to your operations stack is a new kind of actor:
+fast, tireless, and with no intuition for which field the quarterly filing
+depends on. The proxy gate is where that agent has to ask.
+
+The agent gets the verdict *and the evidence chain* back as tool output, which is
+exactly what it needs to propose an alternative rather than retry blindly.
+
+## The two capabilities
+
+`gate:invoke` asks for a verdict. `gate:execute` forwards a change through the
+gate. They are separate on purpose: **an agent that may ask is not necessarily
+an agent that may act**, and most agents should hold only the first.
+
+See the [MCP guide](/docs/mcp) for client configuration and the recommended
+agent policy.

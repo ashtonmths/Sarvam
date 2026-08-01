@@ -1,4 +1,5 @@
 import { serve } from "@hono/node-server";
+import { Scalar } from "@scalar/hono-api-reference";
 import { Hono } from "hono";
 import { config } from "./config.js";
 import { constantTimeEqual } from "./crypto/compare.js";
@@ -21,6 +22,7 @@ import {
   render,
 } from "./metrics.js";
 import { requireAuth, requireOrg } from "./middleware/auth.js";
+import { openapiDocument } from "./openapi.js";
 import { authRoutes } from "./routes/auth.js";
 import { connectorRoutes } from "./routes/connectors.js";
 import { gateRoutes } from "./routes/gate.js";
@@ -125,6 +127,27 @@ app.get("/metrics", async (c) => {
 
   return c.text(await render(), 200, { "Content-Type": "text/plain; version=0.0.4" });
 });
+
+/**
+ * The spec, and a reference to read it in.
+ *
+ * Public, deliberately. It documents what the API accepts, not what any
+ * organisation has, and an agent builder who has to sign up before learning
+ * whether the shape fits is one who goes elsewhere.
+ */
+app.get("/openapi.json", (c) => c.json(openapiDocument()));
+
+app.get(
+  "/reference",
+  Scalar({
+    url: "/openapi.json",
+    pageTitle: "Sadhak API",
+    // Self-hosted rather than pointed at a hosted renderer: the subprocessor
+    // list is a published document and adding a vendor to it to render a page
+    // would be a poor trade.
+    theme: "default",
+  }),
+);
 
 // Unauthenticated by necessity: this is where sessions are created.
 app.route("/api/auth", authRoutes);

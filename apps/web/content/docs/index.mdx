@@ -1,0 +1,41 @@
+---
+title: What Sadhak is
+description: A living map of how your systems depend on each other, and a gate in front of the changes that would break them.
+order: 1
+---
+
+Every company's operations are a labyrinth: a field in Airtable feeds a workflow
+that writes a table that a quarterly report reads, and the one person who knew
+why left in March. Sadhak keeps the map, keeps the reasoning, and stands in front
+of the changes that would break something.
+
+## Three ways it enforces, labelled honestly
+
+This table is the most important thing on this page, and the third row is the one
+most tempting to soften.
+
+| Mode | What it does | Is it a block? |
+|---|---|---|
+| **Hard gate** | Runs as a GitHub Check on pull requests. A high blast radius fails the check and the merge button goes grey. | **Yes.** The merge cannot happen. |
+| **Proxy gate** | Changes routed through our REST API or MCP server are evaluated before they are forwarded. | **Yes.** The mutation is never forwarded. |
+| **Reflex** | Hears the webhook after someone deletes a field in a browser tab, computes the radius, and offers a one-click revert. | **No.** It cannot prevent a GUI change — nothing can. It detects in seconds and makes the change one click from undone. |
+
+We describe Reflex as detection and revert everywhere, including in the
+marketing, because a customer who believes it prevents things will find out at
+the worst possible moment.
+
+## What the verdict is
+
+A deterministic function of the graph. The same change against the same graph
+returns the same answer, every time, with no model anywhere in the path. That
+property is what makes a gate trustworthy enough to leave switched on.
+
+An edge that a language model *inferred* is capped: it can raise a warning and it
+can never block. Blocking someone's Friday afternoon on a model's hunch is how a
+gate loses trust permanently, and once lost it is not recoverable.
+
+## Where to go next
+
+- **[Quickstart](/docs/quickstart)** — signup to your first verdict.
+- **[The FAQ](/docs/faq)** — including the questions that are awkward for us.
+- **[MCP guide](/docs/mcp)** — if you are here to gate an agent.

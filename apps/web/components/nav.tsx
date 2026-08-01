@@ -73,6 +73,13 @@ export function Nav() {
           >
             Pricing
           </Link>
+          <Link
+            href="/docs"
+            className="nav__link"
+            aria-current={pathname.startsWith("/docs") ? "page" : undefined}
+          >
+            Docs
+          </Link>
           <div className="nav__cta-mobile">
             {signedIn ? (
               <Link href="/app" className="btn btn--ink btn--small">

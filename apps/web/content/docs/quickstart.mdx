@@ -1,0 +1,77 @@
+---
+title: Quickstart
+description: From signup to your first verdict, in under thirty minutes.
+order: 2
+---
+
+The goal of this page is one verdict on your own systems. Everything else can
+wait.
+
+## 1. Create an account and an org
+
+Sign up at [sadhak.online/signup](/signup). The first account you create also
+creates an organisation; everything below is scoped to it.
+
+## 2. Connect one read-only source
+
+Start with **one**. Postgres is the fastest to see something real from, because
+schema and foreign keys give a graph immediately with no configuration.
+
+Create a read-only role and hand Sadhak that, never your application user:
+
+```sql
+CREATE ROLE sadhak_reader LOGIN PASSWORD 'a-strong-password';
+GRANT CONNECT ON DATABASE your_db TO sadhak_reader;
+GRANT USAGE ON SCHEMA public TO sadhak_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO sadhak_reader;
+```
+
+`SELECT` is granted because the crawler reads `information_schema`, which is
+itself a set of tables. It never selects from your own tables — see
+[what gets crawled](/docs/connectors/postgres).
+
+Paste the connection string in **Settings → Connectors**. It is encrypted before
+it reaches our database, bound to your org and that connector, so the ciphertext
+is useless anywhere else.
+
+## 3. Wait for the first crawl
+
+A minute or two for a normal schema. **Graph** fills in as it goes: tables,
+columns, and the foreign keys between them.
+
+## 4. Ask the gate something
+
+Go to **Simulate**, pick a field that looks important, choose `delete`, and run
+the dry-run. You get the verdict, the blast radius, and the evidence behind it.
+
+The same question over the API, which is what an agent or a CI job would do:
+
+```sh
+curl -s -X POST https://api.sadhak.online/api/verdicts \
+  -H "X-API-Key: sadhak_…" \
+  -H 'content-type: application/json' \
+  -d '{
+    "target": "field",
+    "operation": "delete",
+    "connector": "postgres",
+    "externalId": "1/db/your_db/column/public.invoices.vat_rate"
+  }'
+```
+
+Mint the key in **Settings → API keys**. A key can never hold more capability
+than the person who created it.
+
+## What you should have
+
+A map of one system, and a verdict you can disagree with — which is the point.
+If the verdict looks wrong, the evidence chain shows exactly which edges drove
+it, and you can correct the graph rather than argue with a black box.
+
+## Then what
+
+- Connect a second system. The graph gets useful at the seams between them, which
+  is where nobody has a map today.
+- Turn on the [hard gate](/docs/enforcement/hard-gate) for the repository that
+  changes those systems.
+- Point the [Historian](/docs/mcp) at the Slack channels where decisions get
+  explained, so the map carries the *why* and not only the *what*.

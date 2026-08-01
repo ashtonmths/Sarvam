@@ -59,7 +59,12 @@ function DecayScene() {
 
         <div
           className="graph__col graph__col--card"
-          style={{ "--col-basis": "220px", opacity: 0.78 } as CSSProperties}
+          // No opacity here. Fading the whole card to signal "further away"
+          // also faded its text below AA contrast, and the distance is already
+          // said three other ways: a shorter bar, a duller fill, and the
+          // caption underneath. Dimming was carrying no information the reader
+          // did not already have.
+          style={{ "--col-basis": "220px" } as CSSProperties}
         >
           <div className="hop">
             <div className="hop__name">eu-vat-report</div>
@@ -81,7 +86,7 @@ function DecayScene() {
 
         <div
           className="graph__col graph__col--card"
-          style={{ "--col-basis": "220px", opacity: 0.55 } as CSSProperties}
+          style={{ "--col-basis": "220px" } as CSSProperties}
         >
           <div className="hop">
             <div className="hop__name">finance-dashboard</div>

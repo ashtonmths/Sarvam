@@ -45,6 +45,21 @@ jobs:
       - name: API reference matches the routes
         run: pnpm check:api
 
+      # Reflex detects and reverts; it cannot prevent a change made in a
+      # browser tab. That is the sentence most tempting to soften and the one
+      # whose softening would cost the most trust, so it is enforced here
+      # rather than left to a reviewer noticing.
+      - name: Docs never claim Reflex prevents anything
+        run: pnpm check:claims
+
+      # The spec is generated from the zod objects the handlers validate with,
+      # so a changed request shape changes the document a caller builds
+      # against. Committed and diffed for the same reason as the migration
+      # journal: a spec that only exists at runtime is one nobody notices
+      # breaking.
+      - name: OpenAPI spec matches the schemas
+        run: pnpm check:openapi
+
   # The monitoring stack is source too, and its failures are silent at deploy
   # time: a dashboard pointing at a datasource that does not exist renders
   # empty, and an alert with no next action is discovered at 2am.

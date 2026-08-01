@@ -22,14 +22,20 @@ import { slugify } from "../tenant.js";
 
 export const authRoutes = new Hono();
 
-const signupSchema = z.object({
+/**
+ * Exported so the OpenAPI spec is generated from the same object the handler
+ * validates with. A spec written separately is fiction by the second release;
+ * one derived from the validator cannot disagree with the code, because it is
+ * the code.
+ */
+export const signupSchema = z.object({
   name: z.string().min(1).max(120),
   email: z.string().email().max(254),
   password: z.string(),
   company: z.string().max(120).optional(),
 });
 
-const signinSchema = z.object({
+export const signinSchema = z.object({
   email: z.string().email().max(254),
   password: z.string(),
 });

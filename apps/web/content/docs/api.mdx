@@ -1,0 +1,76 @@
+---
+title: API reference
+description: The generated OpenAPI spec, and the three-step flow that gets you a verdict.
+order: 6
+---
+
+The full reference is generated from the zod schemas the routes validate with,
+so it cannot drift into fiction:
+
+- **[Interactive reference](https://api.sadhak.online/reference)**
+- **[openapi.json](https://api.sadhak.online/openapi.json)**
+
+CI regenerates the spec on every pull request and fails if the committed copy
+disagrees, which means a route whose request shape changed cannot merge with a
+document that still describes the old one.
+
+## Three steps to a verdict
+
+**1. Mint a key** in Settings → API keys. Send it as `X-API-Key` or
+`Authorization: Bearer`. A key can never hold more capability than the person
+who created it.
+
+**2. Ask the gate.** Nothing is forwarded — this is the question, not the act:
+
+```sh
+curl -s -X POST https://api.sadhak.online/api/verdicts \
+  -H "X-API-Key: sadhak_…" \
+  -H 'content-type: application/json' \
+  -d '{
+    "target": "field",
+    "operation": "delete",
+    "connector": "postgres",
+    "externalId": "1/db/demo_billing/column/public.invoices.vat_rate"
+  }'
+```
+
+**3. Read the decision.**
+
+```jsonc
+{
+  "id": "41b661a0-4851-4fa2-a082-0423dda8b6fd",
+  "verdict": "BLOCK",
+  "evidence": [
+    {
+      "node": "public.eu_vat_report",
+      "kind": "report",
+      "hops": 1,
+      "impact": 1.0,
+      "provenance": "static_parse"
+    }
+  ]
+}
+```
+
+## Conventions worth knowing before you build
+
+**Errors** are RFC 9457 problem details, served as `application/problem+json`,
+and every response carries `X-Request-Id`. Quote that header at us and we can
+find your exact request.
+
+**Lists** return `{ items, nextCursor }`. `?limit=` defaults to 50 and caps at
+200; outside that range is a 400, never a silent clamp. Cursors are opaque, and
+a tampered one is a 400, never a 500.
+
+**Rate limits** answer 429 with `Retry-After`.
+
+**Tenancy** is resolved from your credential, never from input. Org-scoped
+routes also answer at `/api/orgs/{orgId}/…`, where the id is *asserted* against
+the org your credential resolved to — a mismatch is a **404, not a 403**, so a
+wrong org id is indistinguishable from one that does not exist.
+
+## The two capabilities worth understanding
+
+`gate:invoke` asks for a verdict. `gate:execute` forwards a change through the
+gate. They are separate on purpose: **an agent that may ask is not necessarily
+an agent that may act**, and most agents should hold only the first.

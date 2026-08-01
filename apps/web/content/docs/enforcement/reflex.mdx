@@ -1,0 +1,42 @@
+---
+title: Reflex
+description: Detection and revert for the changes nothing can prevent. Never described as blocking.
+group: Enforcement
+order: 23
+---
+
+**Reflex does not block anything, and it cannot.** Airtable's admin UI, the
+Zapier editor and every other SaaS console have no pre-commit hook to veto a
+change. There is no interception point, so there is nothing to intercept with.
+
+What Reflex does instead: hears the webhook, computes the blast radius against
+your graph, and — if it mattered — puts an alert in front of a human with a
+one-click revert. Observed to reverted is typically around eleven seconds.
+
+## The honest framing
+
+> We block what can be blocked, and we make everything else reversible.
+
+That sentence is the whole product strategy in one line, and the second half is
+the part that would be easy to overstate. A compensating control is genuinely
+weaker than prevention. It is also the only thing available for this class of
+change, and a fast undo beats finding out at quarter close.
+
+## What a revert restores
+
+| System | Restores | Does not restore |
+|---|---|---|
+| Airtable | Field schema, name, type | **Cell data.** Use Airtable's base trash for that — the confirm dialog says so at the moment you need it |
+| Postgres | Nothing automatically | Reverts are proposed as SQL for a human to run |
+| n8n | Workflow node configuration | Execution history |
+
+The confirmation dialog states the limit for the specific system you are
+reverting, before you click, rather than in a help page you would read
+afterwards.
+
+## What it costs to be wrong
+
+A revert is a write, and writes need a separate credential you grant
+deliberately. If you never set one up, Reflex still detects and still alerts —
+it simply cannot act, which is a reasonable posture for a system you are still
+learning to trust.
