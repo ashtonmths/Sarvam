@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, Text, View } from "react-native";
 import {
   api,
   type Coverage,
@@ -9,9 +8,21 @@ import {
   type GraphStats,
   type Page,
 } from "../../lib/api";
+import { ScreenHead } from "../../lib/brand";
 import { useSession } from "../../lib/session";
 import { T, timeAgo } from "../../lib/theme";
-import { Card, Empty, ErrorNote, Figure, Loading, VerdictChip } from "../../lib/ui";
+import { body, display, mono } from "../../lib/type";
+import {
+  Card,
+  Empty,
+  ErrorNote,
+  Figure,
+  Loading,
+  Meter,
+  Row,
+  Screen,
+  VerdictChip,
+} from "../../lib/ui";
 
 /**
  * The analytical view. Read-only by design: the numbers the gate produces, and
@@ -28,9 +39,17 @@ interface Data {
 
 const EMPTY: Data = { stats: null, coverage: null, drift: null, decisions: [] };
 
+/** `remove target/path/thing` → "remove thing". The tail is what identifies it. */
+function describe(change: Record<string, string>): string {
+  const tail = String(change.externalId ?? change.target ?? "")
+    .split("/")
+    .filter(Boolean)
+    .pop();
+  return `${change.operation ?? "change"} ${tail ?? ""}`.trim();
+}
+
 export default function Overview() {
   const { user, org } = useSession();
-  const insets = useSafeAreaInsets();
   const [data, setData] = useState<Data>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -78,23 +97,15 @@ export default function Overview() {
     coverage && coverage.totalEdges > 0
       ? Math.round((coverage.coverageConfirmed / coverage.totalEdges) * 100)
       : 0;
+  const drifting = (drift?.open ?? 0) > 0;
 
   return (
-    <ScrollView
-      style={s.root}
-      contentContainerStyle={[s.content, { paddingTop: insets.top + 16 }]}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={T.thread}
-        />
-      }
-    >
-      <Text style={s.hello}>{org?.name ?? "Overview"}</Text>
-      <Text style={s.sub}>
-        Signed in as {user?.name ?? user?.email ?? "you"} · pull to refresh
-      </Text>
+    <Screen onRefresh={onRefresh} refreshing={refreshing}>
+      <ScreenHead
+        brand
+        title={org?.name ?? "Overview"}
+        subtitle={`Signed in as ${user?.name ?? user?.email ?? "you"} · pull to refresh`}
+      />
 
       {error ? <ErrorNote message={error} /> : null}
       {loading ? <Loading /> : null}
@@ -120,24 +131,25 @@ export default function Overview() {
                 confirmed
               </Text>
             </View>
-            <View style={s.meter}>
-              <View style={[s.meterFill, { width: `${covered}%` }]} />
-            </View>
+            <Meter value={covered} />
           </Card>
 
           <Card title="Drift">
-            {drift && drift.open > 0 ? (
-              <>
-                <Text style={s.driftBig}>
-                  {drift.open} finding{drift.open === 1 ? "" : "s"} open
-                </Text>
-                <Text style={s.driftNote}>
-                  The live systems and the map disagree
-                  {drift.lastCheckedAt
-                    ? ` · checked ${timeAgo(drift.lastCheckedAt)}`
-                    : ""}
-                </Text>
-              </>
+            {drifting ? (
+              <View style={s.drift}>
+                <View style={s.driftDot} />
+                <View style={s.driftBody}>
+                  <Text style={s.driftBig}>
+                    {drift?.open} finding{drift?.open === 1 ? "" : "s"} open
+                  </Text>
+                  <Text style={s.driftNote}>
+                    The live systems and the map disagree
+                    {drift?.lastCheckedAt
+                      ? ` · checked ${timeAgo(drift.lastCheckedAt)}`
+                      : ""}
+                  </Text>
+                </View>
+              </View>
             ) : (
               <Empty
                 text={
@@ -151,63 +163,58 @@ export default function Overview() {
 
           <Card title="Recent decisions">
             {decisions.length === 0 ? (
-              <Empty text="Nothing has been through the gate yet." />
+              <Empty icon="inbox" text="Nothing has been through the gate yet." />
             ) : (
               decisions.map((d, i) => (
-                <View key={d.id} style={[s.row, i === 0 && s.rowFirst]}>
-                  <View style={s.rowBody}>
-                    <Text style={s.rowTitle} numberOfLines={1}>
-                      {d.change.operation ?? "change"}{" "}
-                      {String(d.change.externalId ?? "")
-                        .split("/")
-                        .filter(Boolean)
-                        .pop() ?? ""}
-                    </Text>
-                    <Text style={s.rowMeta} numberOfLines={1}>
-                      {d.mode} · {d.computedInMs}ms · {timeAgo(d.createdAt)}
-                    </Text>
-                  </View>
-                  <VerdictChip verdict={d.verdict} />
-                </View>
+                <Row
+                  key={d.id}
+                  first={i === 0}
+                  title={describe(d.change)}
+                  meta={`${d.mode} · ${d.computedInMs}ms · ${timeAgo(d.createdAt)}`}
+                  right={<VerdictChip verdict={d.verdict} />}
+                />
               ))
             )}
           </Card>
         </>
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: T.paper },
-  content: { padding: 16, paddingBottom: 32 },
-  hello: { fontSize: 25, fontWeight: "700", color: T.ink, letterSpacing: -0.5 },
-  sub: { fontSize: 12.5, color: T.inkFaint, marginTop: 4, marginBottom: 18 },
   figures: { flexDirection: "row", gap: 12 },
-  figuresGap: { marginTop: 18 },
-  coverRow: { flexDirection: "row", alignItems: "baseline", gap: 10 },
-  coverPct: { fontSize: 34, fontWeight: "700", color: T.ink, letterSpacing: -1 },
-  coverNote: { fontSize: 12, color: T.inkFaint, flexShrink: 1 },
-  meter: {
-    height: 6,
-    borderRadius: 99,
-    backgroundColor: T.lineSoft,
-    marginTop: 12,
-    overflow: "hidden",
+  figuresGap: { marginTop: 20 },
+
+  coverRow: { flexDirection: "row", alignItems: "baseline", gap: 11 },
+  coverPct: {
+    fontFamily: display("700"),
+    fontSize: 36,
+    letterSpacing: -1.4,
+    color: T.ink,
   },
-  meterFill: { height: 6, borderRadius: 99, backgroundColor: T.thread },
-  driftBig: { fontSize: 17, fontWeight: "600", color: T.warnInk },
-  driftNote: { fontSize: 12.5, color: T.inkSoft, marginTop: 4, lineHeight: 18 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 11,
-    borderTopWidth: 1,
-    borderTopColor: T.lineSoft,
+  coverNote: {
+    fontFamily: mono("400"),
+    fontSize: 11.5,
+    color: T.inkFaint,
+    flexShrink: 1,
   },
-  rowFirst: { borderTopWidth: 0 },
-  rowBody: { flex: 1, minWidth: 0 },
-  rowTitle: { fontSize: 13.5, fontWeight: "600", color: T.ink },
-  rowMeta: { fontSize: 11.5, color: T.inkFaint, marginTop: 2 },
+
+  drift: { flexDirection: "row", alignItems: "flex-start", gap: 11 },
+  driftDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: T.warn,
+    marginTop: 6,
+  },
+  driftBody: { flex: 1, minWidth: 0 },
+  driftBig: { fontFamily: display("600"), fontSize: 17, color: T.warnInk },
+  driftNote: {
+    fontFamily: body("400"),
+    fontSize: 12.5,
+    color: T.inkSoft,
+    marginTop: 5,
+    lineHeight: 18,
+  },
 });

@@ -7,17 +7,33 @@
     "scheme": "sadhak",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "icon": "./assets/logo.png",
     "splash": {
+      "image": "./assets/logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ebe9e2"
     },
-    "ios": { "supportsTablet": true, "bundleIdentifier": "online.sadhak.app" },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "online.sadhak.app"
+    },
     "android": {
       "package": "online.sadhak.app",
-      "adaptiveIcon": { "backgroundColor": "#ebe9e2" }
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#ebe9e2"
+      }
     },
-    "web": { "bundler": "metro", "output": "static" },
-    "plugins": ["expo-router", "expo-secure-store"],
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/logo.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font"
+    ],
     "extra": {
       "apiUrl": "https://api.sadhak.online"
     }

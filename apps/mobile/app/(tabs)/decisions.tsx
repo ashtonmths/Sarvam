@@ -1,23 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { api, type DecisionRow, type Page, type VerdictName } from "../../lib/api";
-import { T, timeAgo } from "../../lib/theme";
-import { Card, Empty, ErrorNote, Figure, Loading, VerdictChip } from "../../lib/ui";
+import { ScreenHead } from "../../lib/brand";
+import { R, T, timeAgo, VERDICT } from "../../lib/theme";
+import { mono } from "../../lib/type";
+import {
+  Card,
+  Empty,
+  ErrorNote,
+  Figure,
+  Loading,
+  Row,
+  Screen,
+  VerdictChip,
+} from "../../lib/ui";
 
 /** Every verdict the gate issued, with a filter. Read-only. */
 
 const FILTERS: (VerdictName | "ALL")[] = ["ALL", "BLOCK", "WARN", "APPROVE"];
 
 export default function Decisions() {
-  const insets = useSafeAreaInsets();
   const [rows, setRows] = useState<DecisionRow[]>([]);
   const [filter, setFilter] = useState<VerdictName | "ALL">("ALL");
   const [loading, setLoading] = useState(true);
@@ -61,42 +63,59 @@ export default function Decisions() {
   );
 
   return (
-    <ScrollView
-      style={s.root}
-      contentContainerStyle={[s.content, { paddingTop: insets.top + 16 }]}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={T.thread}
-        />
-      }
-    >
-      <Text style={s.title}>Decisions</Text>
-      <Text style={s.sub}>The last 50 verdicts, newest first</Text>
+    <Screen onRefresh={onRefresh} refreshing={refreshing}>
+      <ScreenHead title="Decisions" subtitle="The last 50 verdicts, newest first" />
 
       {error ? <ErrorNote message={error} /> : null}
 
       <Card title="Verdict mix">
         <View style={s.figures}>
-          <Figure value={counts.APPROVE} label="Approved" />
-          <Figure value={counts.WARN} label="Warned" />
-          <Figure value={counts.BLOCK} label="Blocked" />
+          {/* Coloured, because a count of blocks is not the same kind of fact
+              as a count of approvals and the eye should not have to read the
+              label to know which is which. */}
+          <Figure value={counts.APPROVE} label="Approved" tone={T.approveInk} />
+          <Figure value={counts.WARN} label="Warned" tone={T.warnInk} />
+          <Figure value={counts.BLOCK} label="Blocked" tone={T.blockInk} />
         </View>
       </Card>
 
-      <View style={s.filters}>
-        {FILTERS.map((f) => (
-          <Pressable
-            key={f}
-            onPress={() => setFilter(f)}
-            style={[s.filter, filter === f && s.filterOn]}
-            accessibilityRole="button"
-          >
-            <Text style={[s.filterText, filter === f && s.filterTextOn]}>{f}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {/*
+        Horizontal rather than wrapping. Four chips fit on every phone in
+        portrait, but they wrapped to a second line on the narrow ones and the
+        list below jumped by a row height depending on the device. A scroller
+        is the same control at any width.
+      */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.filters}
+        style={s.filterStrip}
+      >
+        {FILTERS.map((f) => {
+          const on = filter === f;
+          const tint = f === "ALL" ? null : VERDICT[f];
+          return (
+            <Pressable
+              key={f}
+              onPress={() => setFilter(f)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              style={({ pressed }) => [
+                s.filter,
+                on && s.filterOn,
+                pressed && !on && s.filterPressed,
+              ]}
+            >
+              {tint ? (
+                <View
+                  style={[s.filterDot, { backgroundColor: on ? T.paper : tint.dot }]}
+                />
+              ) : null}
+              <Text style={[s.filterText, on && s.filterTextOn]}>{f}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
       {loading ? <Loading /> : null}
 
@@ -104,62 +123,59 @@ export default function Decisions() {
         <Card>
           {shown.length === 0 ? (
             <Empty
+              icon={rows.length === 0 ? "inbox" : "filter"}
               text={rows.length === 0 ? "No decisions yet." : `No ${filter} verdicts.`}
             />
           ) : (
             shown.map((d, i) => (
-              <View key={d.id} style={[s.row, i === 0 && s.rowFirst]}>
-                <View style={s.rowBody}>
-                  <Text style={s.rowTitle} numberOfLines={1}>
-                    {d.change.operation ?? "change"}{" "}
-                    {String(d.change.externalId ?? "")
-                      .split("/")
-                      .filter(Boolean)
-                      .pop() ?? ""}
-                  </Text>
-                  <Text style={s.rowMeta} numberOfLines={1}>
-                    {d.mode} · {d.computedInMs}ms · {timeAgo(d.createdAt)}
-                    {d.dryRun ? " · dry run" : ""}
-                  </Text>
-                </View>
-                <VerdictChip verdict={d.verdict} />
-              </View>
+              <Row
+                key={d.id}
+                first={i === 0}
+                title={`${d.change.operation ?? "change"} ${
+                  String(d.change.externalId ?? "")
+                    .split("/")
+                    .filter(Boolean)
+                    .pop() ?? ""
+                }`.trim()}
+                meta={`${d.mode} · ${d.computedInMs}ms · ${timeAgo(d.createdAt)}${
+                  d.dryRun ? " · dry run" : ""
+                }`}
+                right={<VerdictChip verdict={d.verdict} />}
+              />
             ))
           )}
         </Card>
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: T.paper },
-  content: { padding: 16, paddingBottom: 32 },
-  title: { fontSize: 25, fontWeight: "700", color: T.ink, letterSpacing: -0.5 },
-  sub: { fontSize: 12.5, color: T.inkFaint, marginTop: 4, marginBottom: 18 },
   figures: { flexDirection: "row", gap: 12 },
-  filters: { flexDirection: "row", gap: 6, marginBottom: 14, flexWrap: "wrap" },
+
+  // Negative margins let the strip bleed to the screen edges so a chip
+  // scrolling past does not stop short of the gutter and look clipped.
+  filterStrip: { marginHorizontal: -16, marginBottom: 14 },
+  filters: { paddingHorizontal: 16, gap: 7, alignItems: "center" },
   filter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 99,
+    paddingVertical: 8,
+    borderRadius: R.pill,
     backgroundColor: T.panel,
     borderWidth: 1,
     borderColor: T.lineSoft,
   },
   filterOn: { backgroundColor: T.ink, borderColor: T.ink },
-  filterText: { fontSize: 12, fontWeight: "600", color: T.inkFaint },
-  filterTextOn: { color: T.paper },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 11,
-    borderTopWidth: 1,
-    borderTopColor: T.lineSoft,
+  filterPressed: { backgroundColor: T.lineSoft },
+  filterDot: { width: 6, height: 6, borderRadius: 3 },
+  filterText: {
+    fontFamily: mono("500"),
+    fontSize: 10.5,
+    letterSpacing: 0.5,
+    color: T.inkSoft,
   },
-  rowFirst: { borderTopWidth: 0 },
-  rowBody: { flex: 1, minWidth: 0 },
-  rowTitle: { fontSize: 13.5, fontWeight: "600", color: T.ink },
-  rowMeta: { fontSize: 11.5, color: T.inkFaint, marginTop: 2 },
+  filterTextOn: { fontFamily: mono("600"), color: T.paper },
 });

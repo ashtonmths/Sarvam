@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, Switch, Text, View } from "react-native";
 import {
   type Alert,
   askPermission,
@@ -11,8 +10,10 @@ import {
   POLL_MS,
   ping,
 } from "../../lib/alerts";
+import { ScreenHead } from "../../lib/brand";
 import { T, timeAgo } from "../../lib/theme";
-import { Card, Empty, ErrorNote, Loading } from "../../lib/ui";
+import { body, display } from "../../lib/type";
+import { Card, Empty, ErrorNote, Loading, Row, Screen } from "../../lib/ui";
 
 /**
  * Alerts and pings.
@@ -23,7 +24,6 @@ import { Card, Empty, ErrorNote, Loading } from "../../lib/ui";
  * implying a delivery guarantee the app cannot make.
  */
 export default function Alerts() {
-  const insets = useSafeAreaInsets();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -82,20 +82,25 @@ export default function Alerts() {
     if (!granted) setError("Notifications are off for Sadhak in system settings.");
   }, []);
 
+  const blocks = alerts.filter((a) => a.kind === "block").length;
+
   return (
-    <ScrollView
-      style={s.root}
-      contentContainerStyle={[s.content, { paddingTop: insets.top + 16 }]}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={T.thread}
-        />
-      }
-    >
-      <Text style={s.title}>Alerts</Text>
-      <Text style={s.sub}>Blocked changes and open drift</Text>
+    <Screen onRefresh={onRefresh} refreshing={refreshing}>
+      <ScreenHead
+        title="Alerts"
+        subtitle="Blocked changes and open drift"
+        // The count belongs beside the title, not buried in a card heading —
+        // it is the one number this screen exists to report.
+        right={
+          !loading && alerts.length > 0 ? (
+            <View style={[s.count, blocks > 0 && s.countBad]}>
+              <Text style={[s.countText, blocks > 0 && s.countTextBad]}>
+                {alerts.length}
+              </Text>
+            </View>
+          ) : null
+        }
+      />
 
       {error ? <ErrorNote message={error} /> : null}
 
@@ -114,6 +119,8 @@ export default function Alerts() {
             onValueChange={togglePings}
             disabled={!PINGS_SUPPORTED}
             trackColor={{ true: T.thread, false: T.line }}
+            thumbColor={T.card}
+            ios_backgroundColor={T.line}
           />
         </View>
       </Card>
@@ -121,53 +128,58 @@ export default function Alerts() {
       {loading ? <Loading /> : null}
 
       {!loading && (
-        <Card title={`Open (${alerts.length})`}>
+        <Card title="Open">
           {alerts.length === 0 ? (
             <Empty text="Nothing to flag. No blocked changes, no drift." />
           ) : (
             alerts.map((a, i) => (
-              <View key={a.id} style={[s.row, i === 0 && s.rowFirst]}>
-                <View
-                  style={[
-                    s.dot,
-                    { backgroundColor: a.kind === "block" ? T.block : T.warn },
-                  ]}
-                />
-                <View style={s.rowBody}>
-                  <Text style={s.rowTitle}>{a.title}</Text>
-                  <Text style={s.rowMeta} numberOfLines={2}>
-                    {a.body} · {timeAgo(a.at)}
-                  </Text>
-                </View>
-              </View>
+              <Row
+                key={a.id}
+                first={i === 0}
+                title={a.title}
+                meta={`${a.body} · ${timeAgo(a.at)}`}
+                metaKind="prose"
+                lead={
+                  <View
+                    style={[
+                      s.dot,
+                      { backgroundColor: a.kind === "block" ? T.block : T.warn },
+                    ]}
+                  />
+                }
+              />
             ))
           )}
         </Card>
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: T.paper },
-  content: { padding: 16, paddingBottom: 32 },
-  title: { fontSize: 25, fontWeight: "700", color: T.ink, letterSpacing: -0.5 },
-  sub: { fontSize: 12.5, color: T.inkFaint, marginTop: 4, marginBottom: 18 },
-  pingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  pingBody: { flex: 1 },
-  pingLabel: { fontSize: 14, fontWeight: "600", color: T.ink },
-  pingNote: { fontSize: 11.5, color: T.inkFaint, marginTop: 3, lineHeight: 16 },
-  row: {
-    flexDirection: "row",
+  count: {
+    minWidth: 30,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 99,
+    backgroundColor: T.warnSoft,
     alignItems: "center",
-    gap: 11,
-    paddingVertical: 11,
-    borderTopWidth: 1,
-    borderTopColor: T.lineSoft,
+    marginBottom: 3,
   },
-  rowFirst: { borderTopWidth: 0 },
+  countBad: { backgroundColor: T.blockSoft },
+  countText: { fontFamily: display("700"), fontSize: 13, color: T.warnInk },
+  countTextBad: { color: T.blockInk },
+
+  pingRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  pingBody: { flex: 1 },
+  pingLabel: { fontFamily: body("600"), fontSize: 14, color: T.ink },
+  pingNote: {
+    fontFamily: body("400"),
+    fontSize: 11.5,
+    color: T.inkFaint,
+    marginTop: 4,
+    lineHeight: 17,
+  },
+
   dot: { width: 8, height: 8, borderRadius: 4 },
-  rowBody: { flex: 1, minWidth: 0 },
-  rowTitle: { fontSize: 13.5, fontWeight: "600", color: T.ink },
-  rowMeta: { fontSize: 11.5, color: T.inkFaint, marginTop: 2, lineHeight: 16 },
 });

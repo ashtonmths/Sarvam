@@ -1,10 +1,12 @@
+import { Feather } from "@expo/vector-icons";
 import { useCallback, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { API_URL } from "../../lib/api";
+import { Brand, ScreenHead } from "../../lib/brand";
 import { useSession } from "../../lib/session";
 import { T } from "../../lib/theme";
-import { Card, Empty, ErrorNote } from "../../lib/ui";
+import { body, display, mono } from "../../lib/type";
+import { Button, Card, Empty, ErrorNote, Label, Screen } from "../../lib/ui";
 
 /**
  * Account, org, and the way out.
@@ -25,7 +27,6 @@ function initials(name: string | undefined, email: string | undefined): string {
 }
 
 export default function Account() {
-  const insets = useSafeAreaInsets();
   const { user, org, orgs, signOut, switchOrg } = useSession();
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,12 +48,8 @@ export default function Account() {
   );
 
   return (
-    <ScrollView
-      style={s.root}
-      contentContainerStyle={[s.content, { paddingTop: insets.top + 16 }]}
-    >
-      <Text style={s.title}>Account</Text>
-      <Text style={s.sub}>Who you are and which org you are reading</Text>
+    <Screen>
+      <ScreenHead title="Account" subtitle="Who you are and which org you are reading" />
 
       {error ? <ErrorNote message={error} /> : null}
 
@@ -74,16 +71,17 @@ export default function Account() {
 
       <Card title="Organisation">
         {orgs.length === 0 ? (
-          <Empty text="No memberships on this account." />
+          <Empty icon="users" text="No memberships on this account." />
         ) : (
           orgs.map((o, i) => {
             const active = o.orgId === org?.orgId;
+            const switching = busy === o.orgId;
             return (
               <Pressable
                 key={o.orgId}
                 onPress={() => void onSwitch(o.orgId)}
                 accessibilityRole="button"
-                accessibilityState={{ selected: active, busy: busy === o.orgId }}
+                accessibilityState={{ selected: active, busy: switching }}
                 style={({ pressed }) => [
                   s.orgRow,
                   i === 0 && s.orgRowFirst,
@@ -91,16 +89,17 @@ export default function Account() {
                 ]}
               >
                 <View style={[s.tick, active && s.tickOn]}>
-                  {active ? <View style={s.tickDot} /> : null}
+                  {active ? <Feather name="check" size={12} color={T.card} /> : null}
                 </View>
                 <View style={s.orgBody}>
                   <Text style={[s.orgName, active && s.orgNameOn]} numberOfLines={1}>
                     {o.name}
                   </Text>
                   <Text style={s.orgRole}>
-                    {busy === o.orgId ? "Switching…" : o.role}
+                    {switching ? "Switching…" : o.role.toUpperCase()}
                   </Text>
                 </View>
+                {switching ? <ActivityIndicator size="small" color={T.thread} /> : null}
               </Pressable>
             );
           })
@@ -114,95 +113,92 @@ export default function Account() {
 
       <Card title="Connection">
         <View style={s.metaRow}>
-          <Text style={s.metaKey}>API</Text>
-          <Text style={s.metaValue}>{API_URL.replace(/^https?:\/\//, "")}</Text>
+          <Label>API</Label>
+          <Text style={s.metaValue} numberOfLines={1}>
+            {API_URL.replace(/^https?:\/\//, "")}
+          </Text>
         </View>
       </Card>
 
-      <Pressable
-        style={({ pressed }) => [s.signout, pressed && s.signoutPressed]}
-        onPress={() => void signOut()}
-        accessibilityRole="button"
-      >
-        <Text style={s.signoutText}>Sign out</Text>
-      </Pressable>
-    </ScrollView>
+      <Button label="Sign out" tone="quiet" onPress={() => void signOut()} />
+
+      {/* The wordmark closes the scroll rather than opening it: the top of this
+          screen belongs to whoever is signed in, not to the product. */}
+      <View style={s.footer}>
+        <Brand size={19} />
+      </View>
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: T.paper },
-  content: { padding: 16, paddingBottom: 40 },
-  title: { fontSize: 25, fontWeight: "700", color: T.ink, letterSpacing: -0.5 },
-  sub: { fontSize: 12.5, color: T.inkFaint, marginTop: 4, marginBottom: 18 },
-
   identity: { flexDirection: "row", alignItems: "center", gap: 14 },
   avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: T.threadSoft,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { fontSize: 17, fontWeight: "700", color: T.thread, letterSpacing: 0.5 },
+  avatarText: {
+    fontFamily: display("700"),
+    fontSize: 18,
+    color: T.thread,
+    letterSpacing: 0.2,
+  },
   identityBody: { flex: 1, minWidth: 0 },
-  name: { fontSize: 17, fontWeight: "700", color: T.ink, letterSpacing: -0.3 },
-  email: { fontSize: 12.5, color: T.inkFaint, marginTop: 3 },
+  name: {
+    fontFamily: display("700"),
+    fontSize: 18,
+    color: T.ink,
+    letterSpacing: -0.4,
+  },
+  email: { fontFamily: mono("400"), fontSize: 11.5, color: T.inkFaint, marginTop: 4 },
 
   orgRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
+    gap: 13,
+    paddingVertical: 13,
     borderTopWidth: 1,
     borderTopColor: T.lineSoft,
   },
   orgRowFirst: { borderTopWidth: 0 },
   orgRowPressed: { opacity: 0.55 },
   tick: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 21,
+    height: 21,
+    borderRadius: 11,
     borderWidth: 1.5,
     borderColor: T.line,
     alignItems: "center",
     justifyContent: "center",
   },
   tickOn: { borderColor: T.thread, backgroundColor: T.thread },
-  tickDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: T.card },
   orgBody: { flex: 1, minWidth: 0 },
-  orgName: { fontSize: 14, fontWeight: "600", color: T.inkSoft },
+  orgName: { fontFamily: body("600"), fontSize: 14.5, color: T.inkSoft },
   orgNameOn: { color: T.ink },
-  orgRole: { fontSize: 11.5, color: T.inkFaint, marginTop: 2 },
+  orgRole: {
+    fontFamily: mono("400"),
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: T.inkFaint,
+    marginTop: 3,
+  },
   orgNote: {
+    fontFamily: body("400"),
     fontSize: 11.5,
     color: T.inkFaint,
-    lineHeight: 16,
-    marginTop: 12,
-    paddingTop: 12,
+    lineHeight: 17,
+    marginTop: 13,
+    paddingTop: 13,
     borderTopWidth: 1,
     borderTopColor: T.lineSoft,
   },
 
-  metaRow: { flexDirection: "row", alignItems: "baseline", gap: 12 },
-  metaKey: {
-    fontSize: 9.5,
-    letterSpacing: 1.2,
-    color: T.inkFaint,
-    width: 40,
-  },
-  metaValue: { fontSize: 13, color: T.ink, flex: 1 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  metaValue: { fontFamily: mono("400"), fontSize: 12.5, color: T.ink, flex: 1 },
 
-  signout: {
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: T.line,
-    borderRadius: 99,
-    paddingVertical: 13,
-    alignItems: "center",
-    backgroundColor: T.card,
-  },
-  signoutPressed: { backgroundColor: T.blockSoft, borderColor: T.block },
-  signoutText: { fontSize: 13.5, fontWeight: "600", color: T.blockInk },
+  footer: { alignItems: "center", marginTop: 26, opacity: 0.45 },
 });

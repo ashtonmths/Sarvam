@@ -4,23 +4,30 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_URL } from "../lib/api";
+import { Brand } from "../lib/brand";
 import { useSession } from "../lib/session";
-import { T } from "../lib/theme";
-import { ErrorNote } from "../lib/ui";
+import { R, T } from "../lib/theme";
+import { body, display, mono } from "../lib/type";
+import { Button, ErrorNote, Label } from "../lib/ui";
 
 export default function SignIn() {
+  const insets = useSafeAreaInsets();
   const { user, ready, signIn } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Focus is the only feedback a text field gives before you submit it, and
+  // RN has no `:focus-within`, so the state has to be held rather than styled.
+  const [focused, setFocused] = useState<"email" | "password" | null>(null);
 
   if (ready && user) return <Redirect href="/(tabs)" />;
 
@@ -44,8 +51,16 @@ export default function SignIn() {
       style={s.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={s.brand}>साधक</Text>
+      <ScrollView
+        contentContainerStyle={[
+          s.scroll,
+          { paddingTop: insets.top + 52, paddingBottom: insets.bottom + 32 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Brand size={34} />
+
         <Text style={s.title}>Sign in</Text>
         <Text style={s.sub}>
           The read-only companion. Every control that changes something stays on the web
@@ -54,48 +69,55 @@ export default function SignIn() {
 
         {error ? <ErrorNote message={error} /> : null}
 
-        <Text style={s.label}>WORK EMAIL</Text>
-        <TextInput
-          style={s.input}
-          value={email}
-          onChangeText={setEmail}
-          placeholder="you@company.com"
-          placeholderTextColor={T.inkFaint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          returnKeyType="next"
-        />
+        <View style={s.field}>
+          <Label>Work email</Label>
+          <TextInput
+            style={[s.input, focused === "email" && s.inputOn]}
+            value={email}
+            onChangeText={setEmail}
+            onFocus={() => setFocused("email")}
+            onBlur={() => setFocused(null)}
+            placeholder="you@company.com"
+            placeholderTextColor={T.inkFaint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            textContentType="emailAddress"
+            returnKeyType="next"
+          />
+        </View>
 
-        <Text style={s.label}>PASSWORD</Text>
-        <TextInput
-          style={s.input}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Your password"
-          placeholderTextColor={T.inkFaint}
-          secureTextEntry
-          autoCapitalize="none"
-          textContentType="password"
-          returnKeyType="go"
-          onSubmitEditing={submit}
-        />
+        <View style={s.field}>
+          <Label>Password</Label>
+          <TextInput
+            style={[s.input, focused === "password" && s.inputOn]}
+            value={password}
+            onChangeText={setPassword}
+            onFocus={() => setFocused("password")}
+            onBlur={() => setFocused(null)}
+            placeholder="Your password"
+            placeholderTextColor={T.inkFaint}
+            secureTextEntry
+            autoCapitalize="none"
+            textContentType="password"
+            returnKeyType="go"
+            onSubmitEditing={submit}
+          />
+        </View>
 
-        <Pressable
-          style={[s.button, !canSubmit && s.buttonOff]}
-          onPress={submit}
-          disabled={!canSubmit}
-          accessibilityRole="button"
-        >
-          {busy ? (
-            <ActivityIndicator color={T.paper} />
-          ) : (
-            <Text style={s.buttonText}>Sign in</Text>
-          )}
-        </Pressable>
+        <View style={s.action}>
+          <Button
+            label="Sign in"
+            onPress={submit}
+            disabled={!canSubmit}
+            busy={busy ? <ActivityIndicator color={T.paper} /> : undefined}
+          />
+        </View>
 
-        <Text style={s.host}>{API_URL.replace(/^https?:\/\//, "")}</Text>
+        <View style={s.host}>
+          <View style={s.hostDot} />
+          <Text style={s.hostText}>{API_URL.replace(/^https?:\/\//, "")}</Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -103,30 +125,50 @@ export default function SignIn() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.paper },
-  scroll: { padding: 24, paddingTop: 90, flexGrow: 1 },
-  brand: { fontSize: 26, fontWeight: "700", color: T.ink, marginBottom: 26 },
-  title: { fontSize: 30, fontWeight: "700", color: T.ink, letterSpacing: -0.6 },
-  sub: { fontSize: 14, color: T.inkSoft, marginTop: 8, marginBottom: 26, lineHeight: 20 },
-  label: { fontSize: 10, letterSpacing: 1.3, color: T.inkFaint, marginBottom: 7 },
+  scroll: { paddingHorizontal: 24, flexGrow: 1 },
+
+  title: {
+    fontFamily: display("700"),
+    fontSize: 32,
+    letterSpacing: -0.9,
+    color: T.ink,
+    marginTop: 34,
+  },
+  sub: {
+    fontFamily: body("400"),
+    fontSize: 14,
+    lineHeight: 21,
+    color: T.inkSoft,
+    marginTop: 9,
+    marginBottom: 28,
+    maxWidth: 340,
+  },
+
+  field: { marginBottom: 18, gap: 8 },
   input: {
+    fontFamily: body("500"),
     backgroundColor: T.card,
     borderWidth: 1,
     borderColor: T.line,
-    borderRadius: 14,
+    borderRadius: R.md,
     paddingHorizontal: 15,
-    paddingVertical: 13,
+    paddingVertical: 14,
     fontSize: 15,
     color: T.ink,
-    marginBottom: 18,
   },
-  button: {
-    backgroundColor: T.ink,
-    borderRadius: 99,
-    paddingVertical: 15,
+  // Two rings would be cleaner, but a second border reflows the field by a
+  // pixel on focus. Colour alone moves nothing.
+  inputOn: { borderColor: T.thread, backgroundColor: T.panel },
+
+  action: { marginTop: 10 },
+
+  host: {
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 6,
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 26,
   },
-  buttonOff: { opacity: 0.45 },
-  buttonText: { color: T.paper, fontSize: 15, fontWeight: "600" },
-  host: { textAlign: "center", marginTop: 22, fontSize: 11, color: T.inkFaint },
+  hostDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: T.approve },
+  hostText: { fontFamily: mono("400"), fontSize: 11, color: T.inkFaint },
 });
