@@ -438,7 +438,21 @@ jobs:
             echo "DOKPLOY_WEBHOOK_URL is not set — refusing to report a deploy that did not happen."
             exit 1
           fi
-          curl -fsS -X POST "$HOOK"
+          # Dokploy answers 200 even when it decides not to deploy, so -f alone
+          # proves nothing. It returned {"message":"Branch Not Match"} on every
+          # push while this step reported success, and the only reason anyone
+          # noticed was the smoke test failing 180s later for a stack that had
+          # never been redeployed. Read the body and refuse to claim a deploy
+          # that did not start.
+          body=$(curl -fsS -X POST "$HOOK")
+          echo "Dokploy said: $body"
+          case "$body" in
+            *"Not Match"*|*error*|*Error*)
+              echo "Dokploy declined the webhook. Check that the Dokploy app points at this"
+              echo "repository and that its configured branch matches ${GITHUB_REF_NAME}."
+              exit 1
+              ;;
+          esac
           echo "Dokploy redeploy triggered."
 
       # This proves the stack *responds*, not that it is correct — and there is
