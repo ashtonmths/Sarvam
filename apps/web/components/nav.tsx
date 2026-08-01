@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { LogoMark } from "./marks";
 
-const LINKS = [
+// The three product pages are a guided walkthrough with prev/next pagers,
+// so the nav draws them as stops on one dashed thread. Pricing sits apart.
+const TRAIL = [
   { href: "/product/blast-radius", label: "Blast radius" },
   { href: "/product/agents", label: "Agents" },
   { href: "/product/gate", label: "The gate" },
-  { href: "/pricing", label: "Pricing" },
 ];
 
 export function Nav() {
@@ -41,24 +42,43 @@ export function Nav() {
           className={`nav__links${open ? " nav__links--open" : ""}`}
           aria-label="Main"
         >
-          {LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="nav__link"
-              aria-current={pathname === link.href ? "page" : undefined}
-            >
-              {link.label}
-            </Link>
-          ))}
-          <Link href="/signin" className="btn btn--ink btn--small nav__cta-mobile">
-            Sign in
+          <span className="nav__trail">
+            {TRAIL.map((link, i) => (
+              <Fragment key={link.href}>
+                {i > 0 && <i className="nav__dash" aria-hidden="true" />}
+                <Link
+                  href={link.href}
+                  className="nav__link"
+                  aria-current={pathname === link.href ? "page" : undefined}
+                >
+                  {link.label}
+                </Link>
+              </Fragment>
+            ))}
+          </span>
+          <Link
+            href="/pricing"
+            className="nav__link"
+            aria-current={pathname === "/pricing" ? "page" : undefined}
+          >
+            Pricing
           </Link>
+          <div className="nav__cta-mobile">
+            <Link href="/signin" className="btn btn--ghost btn--small">
+              Sign in
+            </Link>
+            <Link href="/signup" className="btn btn--ink btn--small">
+              Get started
+            </Link>
+          </div>
         </nav>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Link href="/signin" className="btn btn--ink btn--small nav__cta">
+        <div className="nav__actions">
+          <Link href="/signin" className="nav__signin nav__cta">
             Sign in
+          </Link>
+          <Link href="/signup" className="btn btn--ink btn--small nav__cta">
+            Get started
           </Link>
           <button
             type="button"
