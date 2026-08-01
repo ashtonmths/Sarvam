@@ -973,6 +973,118 @@ button {
   50% { opacity: 0.35; }
 }
 
+/* ------------------------------------------------------------ hop chain */
+
+.hop {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.hop__name {
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hop__meter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-soft);
+}
+
+.hop__bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.hop__fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--block);
+}
+
+.hop__note {
+  margin-top: 8px;
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+/* ------------------------------------------------------------ scene line */
+
+.scene-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  color: var(--ink-soft);
+}
+
+.scene-line strong {
+  font-weight: 500;
+}
+
+.scene-line--block {
+  background: color-mix(in srgb, var(--block-soft) 55%, var(--card));
+  border-color: color-mix(in srgb, var(--block) 30%, var(--line-soft));
+}
+
+.scene-line--block strong {
+  color: var(--block);
+}
+
+.scene-line--warn {
+  background: color-mix(in srgb, var(--warn-soft) 55%, var(--card));
+  border-color: color-mix(in srgb, var(--warn) 30%, var(--line-soft));
+}
+
+.scene-line--warn strong {
+  color: var(--warn);
+}
+
+/* value chips inside the impact model card */
+
+.chiprow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 12px;
+}
+
+.chiprow span {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  color: var(--ink-soft);
+}
+
+.chiprow span.is-warn {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 30%, var(--line-soft));
+  color: var(--warn);
+}
+
 /* ----------------------------------------------------------------- modes */
 
 .modes {
