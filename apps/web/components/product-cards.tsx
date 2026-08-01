@@ -1,12 +1,55 @@
+import type { ReactNode } from "react";
+import { GlyphBranch } from "./marks";
+
 /**
  * Product tableau cards. Everything shown is true to the seeded demo company:
  * the field, the impacted flows, the impact scores and the rationale thread
  * all exist in the seed data, so marketing and product never drift apart.
  */
 
+/** A mined message: what Historian actually attaches to an edge. */
+export function Msg({
+  author,
+  meta,
+  children,
+  source = "person",
+  bare = false,
+}: {
+  author: string;
+  meta: string;
+  children: ReactNode;
+  source?: "person" | "code";
+  bare?: boolean;
+}) {
+  return (
+    <div className={bare ? "msg msg--bare" : "msg"}>
+      {source === "person" ? (
+        <span className="msg__avatar" aria-hidden="true">
+          {author.replace("@", "").charAt(0).toUpperCase()}
+        </span>
+      ) : (
+        <span className="msg__avatar msg__avatar--src" aria-hidden="true">
+          <GlyphBranch size={16} />
+        </span>
+      )}
+      <div>
+        <div className="msg__meta">
+          <strong>{author}</strong> · {meta}
+        </div>
+        <div className="msg__text">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 export function ChangeCard() {
   return (
-    <div className="pcard">
+    <div className="pcard" style={{ width: "100%" }}>
+      <div className="pcard__chrome" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </div>
       <div className="pcard__eyebrow">
         <span>Airtable · change detected</span>
         <span>14:03:07</span>
@@ -24,7 +67,7 @@ export function ChangeCard() {
 
 export function VerdictCard() {
   return (
-    <div className="pcard pcard--verdict">
+    <div className="pcard pcard--verdict" style={{ width: "100%" }}>
       <div className="pcard__eyebrow">
         <span>Verdict · deterministic</span>
         <span>41ms</span>
@@ -62,10 +105,9 @@ export function VerdictCard() {
       </div>
 
       <div className="pcard__divider" />
-      <blockquote className="rationale-quote" style={{ margin: 0 }}>
-        &ldquo;feeds EU VAT reporting&rdquo; · <strong>@priya</strong> in #ops,
-        Mar 2024
-      </blockquote>
+      <Msg bare author="@priya" meta="#ops · Mar 2024">
+        &ldquo;feeds EU VAT reporting&rdquo;
+      </Msg>
     </div>
   );
 }
