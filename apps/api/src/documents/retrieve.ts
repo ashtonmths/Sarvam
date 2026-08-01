@@ -32,9 +32,13 @@ export interface DocumentHit {
  * link may be dead, permissioned, or simply wrong. Sadhak is the authority for
  * a document it was given.
  */
-export function chunkPermalink(documentId: number, ordinal: number): string {
+export function documentPermalink(documentId: number): string {
   const origin = (config.WEB_ORIGINS[0] ?? "").replace(/\/$/, "");
-  return `${origin}/app/documents/${documentId}#chunk-${ordinal}`;
+  return `${origin}/app/documents/${documentId}`;
+}
+
+export function chunkPermalink(documentId: number, ordinal: number): string {
+  return `${documentPermalink(documentId)}#chunk-${ordinal}`;
 }
 
 /** Parses a permalink back to its ids. Returns null for anything else. */

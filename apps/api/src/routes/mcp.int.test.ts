@@ -270,7 +270,7 @@ describe("initialize", () => {
 });
 
 describe("tools/list", () => {
-  it("advertises exactly the four tools the product documents", async () => {
+  it("advertises exactly the five tools the product documents", async () => {
     const res = await post({ jsonrpc: "2.0", id: 1, method: "tools/list" }, auth);
     const body = (await res.json()) as RpcResponse;
 
@@ -279,7 +279,27 @@ describe("tools/list", () => {
       "query_blast_radius",
       "get_node",
       "ask_docs",
+      "ingest_document",
     ]);
+  });
+
+  it("tells the model, in the tool description, to transcribe an image itself", async () => {
+    // The image contract lives in the description or it lives nowhere: the
+    // connected agent decides what to send before this server sees anything,
+    // and a tool that silently takes text is one an agent will hand a base64
+    // blob to and then report success on.
+    const res = await post({ jsonrpc: "2.0", id: 1, method: "tools/list" }, auth);
+    const body = (await res.json()) as RpcResponse;
+    const ingest = body.result.tools.find(
+      (t: { name: string }) => t.name === "ingest_document",
+    );
+
+    expect(ingest?.description).toContain("IMAGE");
+    expect(ingest?.description).toContain("read it yourself");
+    expect(ingest?.description).toContain('source="image"');
+    expect(ingest?.description).toContain("never receives the image");
+    // The instruction that keeps a transcription honest about its own gaps.
+    expect(ingest?.description).toContain("[unclear]");
   });
 
   it("gives every tool a description and a JSON-Schema input", async () => {
@@ -318,7 +338,7 @@ describe("tools/list", () => {
       { authorization: `Bearer ${noScope}` },
     );
 
-    expect(((await res.json()) as RpcResponse).result?.tools).toHaveLength(4);
+    expect(((await res.json()) as RpcResponse).result?.tools).toHaveLength(5);
   });
 });
 
@@ -454,6 +474,38 @@ describe("capability enforcement", () => {
 
     expect(body.result.isError).toBe(true);
     expect(body.result.content[0]?.text).toContain("graph:read");
+  });
+
+  it("refuses ingest_document to a key that can only read", async () => {
+    // The claim that separates the two document tools. `ask_docs` answers from
+    // the corpus; this one writes to it, and a key handed to an agent for
+    // questions must not be able to put words into the very corpus those
+    // answers are drawn from. `graph:read` and `gate:invoke` together are
+    // still not enough.
+    const readOnly = await seedKey(orgId, ["graph:read", "gate:invoke"]);
+
+    const res = await post(
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "ingest_document",
+          arguments: { title: "Standup", text: "Priya: we shipped the gate." },
+        },
+      },
+      { authorization: `Bearer ${readOnly}` },
+    );
+    const body = (await res.json()) as RpcResponse;
+
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0]?.text).toContain("connector:manage");
+
+    // And nothing was written on the way to being refused.
+    const [row] = await sql<{ count: string }[]>`
+      SELECT count(*)::text AS count FROM documents WHERE org_id = ${orgId}
+    `;
+    expect(row?.count).toBe("0");
   });
 
   it("reports a refusal as a tool error, not a transport error", async () => {
@@ -761,7 +813,7 @@ describe("the endpoint's method surface", () => {
       auth,
     );
 
-    expect(body.result.tools).toHaveLength(4);
+    expect(body.result.tools).toHaveLength(5);
   });
 
   it("treats tools/call with no params as a call to no tool", async () => {

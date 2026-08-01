@@ -35,6 +35,34 @@ export async function audit(
   });
 }
 
+/**
+ * For a named actor with no Hono context — the MCP tools, which carry their
+ * own credential rather than the session middleware's.
+ *
+ * Separate from `auditSystem` because "system" is a claim, not a fallback: a
+ * write an agent performed and an action the scheduler performed must not be
+ * indistinguishable in the log that exists to answer who did this. There is no
+ * ip or user agent to record, which is a property of the transport rather than
+ * something to invent.
+ */
+export async function auditActor(
+  action: string,
+  orgId: number,
+  actor: { type: string; id: string | number },
+  target?: AuditTarget,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  await db.insert(auditLog).values({
+    orgId,
+    actorType: actor.type,
+    actorId: String(actor.id),
+    action,
+    targetKind: target?.kind ?? null,
+    targetId: target ? String(target.id) : null,
+    metadata,
+  });
+}
+
 /** For job handlers and scripts, which have no request context. */
 export async function auditSystem(
   action: string,

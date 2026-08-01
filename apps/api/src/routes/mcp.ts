@@ -6,6 +6,8 @@ import {
   askDocs,
   askDocsInput,
   getNode,
+  ingestDocument,
+  ingestDocumentInput,
   type McpContext,
   nodeRefInput,
   proposeChange,
@@ -87,6 +89,61 @@ const TOOLS = [
         },
       },
       required: ["question"],
+    },
+  },
+  {
+    /**
+     * The write half of the document surface, and the only tool here that
+     * takes prose rather than identifiers.
+     *
+     * Images are handled by *not* accepting them. The connected agent can
+     * already read an image; this server cannot, and adding an OCR dependency
+     * to do worse what the caller does natively would be the wrong seam. So
+     * the contract is that the agent transcribes and this stores text — with
+     * `source` recording which of the two happened, because a transcription is
+     * not a copy and a reader who follows a citation into it deserves to know
+     * that before quoting it back to anyone.
+     */
+    name: "ingest_document",
+    description:
+      'Store a meeting transcript, handover note or decision record in this organisation\'s document corpus so it becomes searchable and citable by ask_docs. Paste the text directly. If the user gives you an IMAGE of a transcript, whiteboard, slide or screenshot, read it yourself and pass the extracted text here with source="image" — this tool stores text only and never receives the image. Transcribe what is actually visible, keep speaker labels, and do not fill in anything you cannot read; write [unclear] instead. Ingesting is idempotent on exact content, so the same text stored twice writes nothing the second time.',
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description:
+            'What this document is, e.g. "Billing sync handover, 11 Mar" — shown in the document list and in every citation.',
+        },
+        text: {
+          type: "string",
+          description:
+            'The full text. Keep "Speaker: line" turns on their own lines and VTT/SRT cues intact; chunking splits on those boundaries, and losing them costs per-speaker attribution in later citations.',
+        },
+        occurred_at: {
+          type: "string",
+          description:
+            "ISO 8601 timestamp of when the meeting happened, if known. Not when it was ingested.",
+        },
+        source: {
+          type: "string",
+          enum: ["pasted_text", "image"],
+          default: "pasted_text",
+          description:
+            'Where the text came from. Use "image" whenever you produced it by reading an image rather than copying text you were given — it is recorded on the document so later readers can weigh a transcription differently from a verbatim copy.',
+        },
+        original_name: {
+          type: "string",
+          description:
+            "The source filename, if there was one. Text extensions only (.txt, .md, .vtt, .srt); omit it for a paste rather than inventing one.",
+        },
+        source_url: {
+          type: "string",
+          description:
+            "Where the document came from, for provenance. Citations never point here.",
+        },
+      },
+      required: ["title", "text"],
     },
   },
 ];
@@ -193,6 +250,15 @@ async function callTool(name: string, args: Record<string, unknown>, ctx: McpCon
       // hand, and every claim carries the link to do so.
       requireScope(ctx, "graph:read");
       return askDocs(ctx, askDocsInput.parse(args));
+    }
+    case "ingest_document": {
+      // The same capability `POST /documents` requires: deciding what Sadhak
+      // is allowed to read on the org's behalf. Deliberately not `graph:read`
+      // — this is the one document tool that writes, and a key handed out for
+      // questions must not be able to put words into the corpus those
+      // questions are answered from.
+      requireScope(ctx, "connector:manage");
+      return ingestDocument(ctx, ingestDocumentInput.parse(args));
     }
     default:
       throw new UserError(`Unknown tool: ${name}`);

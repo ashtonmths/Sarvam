@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { AskAnswer } from "../documents/ask.js";
 import {
   askDocsInput,
+  ingestDocumentInput,
+  ingestedByLabel,
   nodeRefInput,
   proposeChangeInput,
   renderAskText,
+  renderIngestText,
   renderVerdictText,
 } from "./tools.js";
 
@@ -368,6 +371,136 @@ describe("askDocsInput", () => {
     // this one.
     expect(() => askDocsInput.parse({ question: "hi" })).toThrow();
     expect(() => askDocsInput.parse({ question: "x".repeat(501) })).toThrow();
+  });
+});
+
+describe("ingestDocumentInput", () => {
+  it("defaults source to a paste, so an omitted flag never overclaims", () => {
+    // The safe default is the one that does not invent provenance. An agent
+    // that forgets the field must not have its paste recorded as a
+    // transcription, nor a transcription silently recorded as a paste — the
+    // former is a lie about a document, and the latter is the one that
+    // matters, so it is the caller's job to set it and say so.
+    const parsed = ingestDocumentInput.parse({ title: "Standup", text: "Priya: hi." });
+
+    expect(parsed.source).toBe("pasted_text");
+  });
+
+  it("accepts the image source an agent sets after reading a screenshot", () => {
+    const parsed = ingestDocumentInput.parse({
+      title: "Whiteboard",
+      text: "Ledger writes to the queue.",
+      source: "image",
+    });
+
+    expect(parsed.source).toBe("image");
+  });
+
+  it("refuses a source it has no provenance wording for", () => {
+    // The enum is the reason a document cannot be labelled with an origin the
+    // document page would not know how to describe to a reader.
+    expect(() =>
+      ingestDocumentInput.parse({ title: "x", text: "y", source: "audio" }),
+    ).toThrow();
+  });
+
+  it("refuses an empty document and an untitled one", () => {
+    expect(() => ingestDocumentInput.parse({ title: "Standup", text: "" })).toThrow();
+    expect(() => ingestDocumentInput.parse({ title: "", text: "Priya: hi." })).toThrow();
+  });
+
+  it("refuses an occurred_at that is not a real offset-bearing timestamp", () => {
+    // "When the meeting happened" drives ordering and the date on every
+    // citation. A bare date string would be silently read as midnight UTC.
+    expect(() =>
+      ingestDocumentInput.parse({ title: "x", text: "y", occurred_at: "11 March" }),
+    ).toThrow();
+    expect(
+      ingestDocumentInput.parse({
+        title: "x",
+        text: "y",
+        occurred_at: "2026-03-11T09:30:00Z",
+      }).occurred_at,
+    ).toBe("2026-03-11T09:30:00Z");
+  });
+});
+
+describe("ingestedByLabel", () => {
+  const ctx = { orgId: 1, apiKeyId: 42, scopes: [], clientName: "claude" };
+
+  it("credits the key and the client for a paste", () => {
+    expect(ingestedByLabel(ctx, "pasted_text")).toBe("api_key:42 via claude");
+  });
+
+  it("says in words that an image was transcribed rather than copied", () => {
+    // The audience is whoever follows a citation into this document, and
+    // `source=image` means nothing to them. The sentence has to.
+    const label = ingestedByLabel(ctx, "image");
+
+    expect(label).toContain("api_key:42");
+    expect(label).toContain("read from an image by claude");
+    expect(label).toContain("not a verbatim copy");
+  });
+
+  it("still names an unidentified client rather than leaving a blank", () => {
+    const label = ingestedByLabel({ orgId: 1, apiKeyId: 7, scopes: [] }, "pasted_text");
+
+    expect(label).toBe("api_key:7 via an MCP client");
+  });
+
+  it("stays inside the column, whatever the client calls itself", () => {
+    // `uploaded_by` is capped at 200 characters by the upload schema, and a
+    // client name is attacker-influenced text from the initialize handshake.
+    // Overflowing it would fail the insert *after* chunking succeeded.
+    const label = ingestedByLabel(
+      { orgId: 1, apiKeyId: 7, scopes: [], clientName: "x".repeat(500) },
+      "image",
+    );
+
+    expect(label.length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe("renderIngestText", () => {
+  const stored = {
+    id: 12,
+    title: "Billing sync standup",
+    chunkCount: 3,
+    duplicate: false,
+  };
+
+  it("names the document it stored and warns that semantic search lags", () => {
+    // The agent's next instinct is to search for what it just ingested. Left
+    // unsaid, a text-only hit reads as a failed ingest and invites a retry.
+    const text = renderIngestText(stored, "pasted_text");
+
+    expect(text).toContain(
+      'Stored "Billing sync standup" as document 12, in 3 chunk(s).',
+    );
+    expect(text).toContain("Text search finds it now");
+  });
+
+  it("tells the agent to pass the image caveat on to its human", () => {
+    const text = renderIngestText(stored, "image");
+
+    expect(text).toContain("read from an image rather than pasted verbatim");
+    expect(text).toContain("Tell your human the same thing.");
+  });
+
+  it("says nothing about images when nothing was transcribed", () => {
+    expect(renderIngestText(stored, "pasted_text")).not.toContain("image");
+  });
+
+  it("says a duplicate wrote nothing and must not be retried", () => {
+    // Both halves matter and they fail in opposite directions: an agent that
+    // reads this as success reports two meetings ingested, and one that reads
+    // it as an error retries until something gives.
+    const text = renderIngestText({ ...stored, duplicate: true }, "pasted_text");
+
+    expect(text).toContain("Already stored — nothing was written.");
+    expect(text).toContain("document 12");
+    expect(text).toContain("Do not retry this ingest.");
+    expect(text).not.toContain("Stored ");
   });
 });
 

@@ -7,8 +7,11 @@ import {
 import { changeDescriptorSchema, type VerdictResult } from "@sadhak/shared/types";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { z } from "zod";
+import { auditActor } from "../audit.js";
 import { db } from "../db.js";
 import { type AskAnswer, askDocuments } from "../documents/ask.js";
+import { assertAcceptedName, uploadDocument } from "../documents/ingest.js";
+import { documentPermalink } from "../documents/retrieve.js";
 import { decide } from "../gate/decide.js";
 import { blastRadius, resolveNode } from "../sentinel/verdict.js";
 
@@ -33,6 +36,27 @@ export const nodeRefInput = z.object({
  * caller is pasting a document rather than asking about one. */
 export const askDocsInput = z.object({
   question: z.string().min(3).max(500),
+});
+
+/**
+ * The same fields `POST /documents` accepts, in MCP's snake_case.
+ *
+ * `source` is the field with no REST equivalent, and it is the reason this
+ * schema is not just the upload schema renamed. Text an agent read off a
+ * photograph of a whiteboard is a transcription, not a copy: it can drop a
+ * line, misread a name, or quietly smooth an ambiguity into a decision nobody
+ * made. That difference has to survive ingestion, because a citation pointing
+ * into such a document looks exactly like a citation into a pasted transcript
+ * once it is a chunk in a search result.
+ */
+export const ingestDocumentInput = z.object({
+  title: z.string().min(1).max(300),
+  text: z.string().min(1),
+  /** When the meeting happened. Not when it was ingested. */
+  occurred_at: z.string().datetime({ offset: true }).optional(),
+  source: z.enum(["pasted_text", "image"]).default("pasted_text"),
+  original_name: z.string().max(300).optional(),
+  source_url: z.string().url().optional(),
 });
 
 export interface McpContext {
@@ -159,6 +183,121 @@ export async function askDocs(ctx: McpContext, input: z.infer<typeof askDocsInpu
       })),
     },
     text: renderAskText(answer, input.question),
+  };
+}
+
+/**
+ * Who to credit for an ingested document, within the column's 200 characters.
+ *
+ * The transcription case is spelled out in words rather than encoded, because
+ * the audience is whoever opens the document page after following a citation
+ * into it, and `source=image` means nothing to them. "read from an image by
+ * claude, not a verbatim copy" tells them exactly how much to trust a sentence
+ * that looks like a quote.
+ */
+export function ingestedByLabel(
+  ctx: McpContext,
+  source: "pasted_text" | "image",
+): string {
+  const client = (ctx.clientName ?? "an MCP client").slice(0, 60);
+  const via = `api_key:${ctx.apiKeyId} via ${client}`;
+  return source === "image"
+    ? `${via} (read from an image by ${client}, not a verbatim copy)`.slice(0, 200)
+    : via.slice(0, 200);
+}
+
+/**
+ * What the agent is told after a document lands.
+ *
+ * The duplicate case says plainly that nothing was written, so an agent does
+ * not report a successful upload twice or retry to "make sure". The embedding
+ * delay is stated because the agent's very next instinct is to search for what
+ * it just ingested, find it ranked by text alone, and conclude the ingest
+ * failed.
+ */
+export function renderIngestText(
+  result: { id: number; title: string; chunkCount: number; duplicate: boolean },
+  source: "pasted_text" | "image",
+): string {
+  if (result.duplicate) {
+    return [
+      `Already stored — nothing was written. "${result.title}" is document ${result.id} and its existing copy is unchanged.`,
+      "Do not retry this ingest. If you meant to store a revised version, change the text or give it its own title.",
+    ].join("\n");
+  }
+
+  const lines = [
+    `Stored "${result.title}" as document ${result.id}, in ${result.chunkCount} chunk(s).`,
+    "Text search finds it now; semantic search follows within about a minute, once the embedding worker catches up.",
+  ];
+
+  if (source === "image") {
+    lines.push(
+      "Recorded as read from an image rather than pasted verbatim, so anyone citing it later can see that. Tell your human the same thing.",
+    );
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Ingest a transcript or note through the exact path an upload takes.
+ *
+ * The entire body of this function is argument translation. Normalising,
+ * chunking, hashing, the transaction, the embed enqueue and the size limit all
+ * belong to `uploadDocument`, and reimplementing any of them here would mean
+ * a document ingested by an agent chunked differently from the same text
+ * uploaded by a human — with retrieval quietly better or worse depending on
+ * which door the text came through.
+ */
+export async function ingestDocument(
+  ctx: McpContext,
+  input: z.infer<typeof ingestDocumentInput>,
+) {
+  // Only when a filename is given. A pasted transcript has no extension and
+  // should not need an invented one.
+  if (input.original_name) assertAcceptedName(input.original_name);
+
+  const result = await uploadDocument({
+    orgId: ctx.orgId,
+    title: input.title,
+    text: input.text,
+    ...(input.original_name ? { originalName: input.original_name } : {}),
+    ...(input.occurred_at ? { occurredAt: new Date(input.occurred_at) } : {}),
+    ...(input.source_url ? { sourceUrl: input.source_url } : {}),
+    uploadedBy: ingestedByLabel(ctx, input.source),
+  });
+
+  /**
+   * `uploadDocument` already writes a `system` audit row. This one carries the
+   * key that actually did it — an org reading its own audit log needs to see
+   * that an agent added a document, not that "the system" did.
+   */
+  if (!result.duplicate) {
+    await auditActor(
+      "document.uploaded",
+      ctx.orgId,
+      { type: "api_key", id: ctx.apiKeyId },
+      { kind: "document", id: result.id },
+      {
+        title: result.title,
+        chunks: result.chunkCount,
+        source: input.source,
+        mcpClient: ctx.clientName ?? null,
+      },
+    );
+  }
+
+  return {
+    structured: {
+      document_id: result.id,
+      title: result.title,
+      chunk_count: result.chunkCount,
+      duplicate: result.duplicate,
+      source: input.source,
+      permalink: documentPermalink(result.id),
+    },
+    text: renderIngestText(result, input.source),
   };
 }
 
