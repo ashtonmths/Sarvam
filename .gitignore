@@ -26,3 +26,4 @@ reports/
 ops/observability/prometheus/metrics-token
 ops/observability/alertmanager/slack-webhook-url
 ops/observability/alertmanager/watchdog-url
+.cache/

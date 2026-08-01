@@ -1,4 +1,6 @@
-import { type FeatureExtractionPipeline, pipeline } from "@huggingface/transformers";
+import { existsSync } from "node:fs";
+import { env, type FeatureExtractionPipeline, pipeline } from "@huggingface/transformers";
+import { config } from "./config.js";
 
 /**
  * Embeddings run locally. Two reasons: it removes a second vendor, and it means
@@ -10,12 +12,45 @@ import { type FeatureExtractionPipeline, pipeline } from "@huggingface/transform
 export const EMBEDDING_MODEL = "Xenova/bge-small-en-v1.5";
 export const EMBEDDING_DIMS = 384;
 
+/**
+ * Where the model is cached. Set here because nothing else sets it.
+ *
+ * The Dockerfile exports HF_HOME and TRANSFORMERS_CACHE, which belong to the
+ * *Python* transformers library. transformers.js ignores both and defaults to a
+ * `.cache` directory inside its own package under node_modules — which the
+ * image's non-root `node` user cannot write to. Every download failed with
+ * EACCES, so the model was never cached, the pipeline never resolved, and the
+ * `models` volume the compose files carefully mount sat empty.
+ *
+ * The visible symptom was chunks stuck on "embedding" forever with a job that
+ * looked like it was running. Nothing said "permission denied" above debug
+ * level, and semantic search silently returned nothing while lexical search
+ * kept working, so retrieval looked merely mediocre rather than broken.
+ *
+ * MODEL_CACHE_DIR overrides it. Outside a container /models does not exist and
+ * / is not writable, so the fallback is a directory under the repo — `pnpm dev`
+ * and the test run must not depend on a path that only exists in Docker.
+ */
+env.cacheDir =
+  config.MODEL_CACHE_DIR ?? (existsSync("/models") ? "/models" : ".cache/models");
+
 let extractor: Promise<FeatureExtractionPipeline> | null = null;
 
 function getExtractor(): Promise<FeatureExtractionPipeline> {
-  // First call downloads roughly 130MB into HF_HOME. In Docker that path is a
-  // volume, so it survives restarts.
-  extractor ??= pipeline("feature-extraction", EMBEDDING_MODEL);
+  // First call downloads roughly 130MB into env.cacheDir. In Docker that path
+  // is a volume, so it survives restarts.
+  //
+  // The catch clears the memo, and it is the whole point of this function.
+  // `??=` caches the promise, so a rejected one is cached just as happily as a
+  // fulfilled one: one failed load — a half-written cache, a network blip on
+  // boot — and every later call re-awaits that same rejection for the lifetime
+  // of the process. The retry budget then burns down against a failure that is
+  // never retried, and restarting the container "fixes" it, which is the sort
+  // of thing that gets written off as flakiness.
+  extractor ??= pipeline("feature-extraction", EMBEDDING_MODEL).catch((error) => {
+    extractor = null;
+    throw error;
+  });
   return extractor;
 }
 

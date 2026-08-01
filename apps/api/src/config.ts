@@ -187,6 +187,11 @@ const Env = z.object({
   OPENROUTER_MODEL_STRONG: z.string().min(1).optional(),
   OPENROUTER_MODEL_BULK: z.string().min(1).optional(),
 
+  // Where the local embedding model is cached. Unset, src/embed.ts uses /models
+  // in a container and .cache/models outside one. Set it when neither is
+  // writable — a read-only cache is not a degraded mode, it fails every embed.
+  MODEL_CACHE_DIR: z.string().min(1).optional(),
+
   // models (plans 7 and 10). The kill switch is the drill lever and the
   // incident lever; the quotas are hard product constraints, not footnotes.
   LLM_DISABLED: z

@@ -18,7 +18,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 # The embedding model downloads on first use. Mount /models as a volume or the
 # container re-downloads roughly 130MB on every restart.
-ENV HF_HOME=/models TRANSFORMERS_CACHE=/models
+# MODEL_CACHE_DIR is the one src/embed.ts reads. HF_HOME and TRANSFORMERS_CACHE
+# are the Python transformers variables and are ignored by transformers.js —
+# they were the only thing set here, so the cache defaulted into node_modules,
+# which this image's non-root user cannot write. Kept only for any tooling that
+# still looks for them.
+ENV MODEL_CACHE_DIR=/models HF_HOME=/models TRANSFORMERS_CACHE=/models
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules

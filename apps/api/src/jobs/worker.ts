@@ -82,17 +82,49 @@ async function claim(limit: number): Promise<ClaimedJob[]> {
   }));
 }
 
-/** Requeue jobs whose worker stopped heartbeating; dead-letter if exhausted. */
+/**
+ * Requeue jobs whose worker stopped heartbeating; dead-letter if exhausted, or
+ * if a queued job with the same dedupe key already covers the work.
+ *
+ * That second case is not a nicety. Every recurring handler re-enqueues itself
+ * from inside its own run, so a worker killed mid-job routinely leaves a
+ * `running` row whose successor is already `queued`. Reviving it produces two
+ * queued rows with one dedupe key, which the partial unique index refuses —
+ * and because this runs on every tick, the exception took the whole tick down
+ * with it. No job of any kind was claimed: uploads sat unembedded and crawls
+ * never started, with nothing in the queue looking wrong. Only the log said so.
+ *
+ * Dead-lettering the stalled row is right rather than merely convenient. The
+ * queued successor already represents the work, so reviving the corpse would
+ * run it twice, which is the exact duplication the index exists to prevent.
+ */
 async function reap(): Promise<void> {
   await sqlJobs`
-    UPDATE jobs
-    SET state = CASE WHEN attempts >= max_attempts THEN 'dead_letter'::job_state
+    WITH stalled AS (
+      SELECT j.id,
+             j.attempts >= j.max_attempts AS exhausted,
+             j.dedupe_key IS NOT NULL AND EXISTS (
+               SELECT 1 FROM jobs k
+               WHERE k.dedupe_key = j.dedupe_key
+                 AND k.state = 'queued'
+                 AND k.id <> j.id
+             ) AS superseded
+      FROM jobs j
+      WHERE j.state = 'running'
+        AND j.heartbeat_at < now() - ${VISIBILITY_TIMEOUT}::interval
+    )
+    UPDATE jobs j
+    SET state = CASE WHEN s.exhausted OR s.superseded THEN 'dead_letter'::job_state
                      ELSE 'queued'::job_state END,
-        last_error = coalesce(last_error, 'worker died mid-job (reaped)'),
+        last_error = coalesce(
+          j.last_error,
+          CASE WHEN s.superseded
+               THEN 'worker died mid-job; a queued job with the same dedupe key superseded it'
+               ELSE 'worker died mid-job (reaped)' END),
         locked_by = NULL,
-        finished_at = CASE WHEN attempts >= max_attempts THEN now() ELSE NULL END
-    WHERE state = 'running'
-      AND heartbeat_at < now() - ${VISIBILITY_TIMEOUT}::interval
+        finished_at = CASE WHEN s.exhausted OR s.superseded THEN now() ELSE NULL END
+    FROM stalled s
+    WHERE j.id = s.id
   `;
 }
 
@@ -179,14 +211,49 @@ async function runOneInContext(
       metrics.deadLettered += 1;
       jobsProcessed.inc({ kind: job.kind, outcome: "dead_letter" });
     } else {
-      await sqlJobs`
-        UPDATE jobs SET state = 'queued',
-                        last_error = ${message},
-                        run_after = now() + ${`${Math.round(settle.runAfterMs / 1000)} seconds`}::interval,
-                        locked_by = NULL
-        WHERE id = ${job.id}
-      `;
-      metrics.retried += 1;
+      /**
+       * Retry — unless a queued job with the same dedupe key already covers it.
+       *
+       * A plain `SET state = 'queued'` here violates the partial unique index
+       * whenever a self-rescheduling handler enqueued its successor before
+       * failing, which is the normal shape of every recurring job in this
+       * codebase. Worse than the reap case: this throw escapes runOne, and an
+       * unhandled rejection took the whole API process down. One failing crawl
+       * killed the server, and the restart replayed it.
+       *
+       * Dead-lettering is the honest outcome. The successor is already queued,
+       * so the work is not lost — retrying would only run it twice.
+       */
+      const settled = (await sqlJobs`
+        WITH superseded AS (
+          SELECT EXISTS (
+            SELECT 1 FROM jobs k
+            WHERE k.dedupe_key IS NOT NULL
+              AND k.dedupe_key = (SELECT dedupe_key FROM jobs WHERE id = ${job.id})
+              AND k.state = 'queued'
+              AND k.id <> ${job.id}
+          ) AS yes
+        )
+        UPDATE jobs j
+        SET state = CASE WHEN s.yes THEN 'dead_letter'::job_state
+                         ELSE 'queued'::job_state END,
+            last_error = CASE WHEN s.yes
+              THEN ${message} || ' [superseded by a queued job with the same dedupe key]'
+              ELSE ${message} END,
+            run_after = now() + ${`${Math.round(settle.runAfterMs / 1000)} seconds`}::interval,
+            finished_at = CASE WHEN s.yes THEN now() ELSE NULL END,
+            locked_by = NULL
+        FROM superseded s
+        WHERE j.id = ${job.id}
+        RETURNING j.state
+      `) as unknown as { state: string }[];
+
+      if (settled[0]?.state === "dead_letter") {
+        metrics.deadLettered += 1;
+        jobsProcessed.inc({ kind: job.kind, outcome: "dead_letter" });
+      } else {
+        metrics.retried += 1;
+      }
     }
   } finally {
     clearInterval(heartbeat);
@@ -197,7 +264,16 @@ async function runOneInContext(
 async function tick(): Promise<void> {
   if (stopping) return;
   try {
-    await reap();
+    // Reaping is maintenance; claiming is the job. A reap that throws used to
+    // abort the tick before a single job was claimed, and since it threw on
+    // every tick the queue stopped dead while looking merely idle. Recovering
+    // stalled jobs is worth doing, but never at the cost of running new ones.
+    try {
+      await reap();
+    } catch (error) {
+      log().error({ event: "job_reap_failed", err: error }, "jobs: reap failed");
+    }
+
     const capacity = config.JOBS_CONCURRENCY - inFlight.size;
     if (capacity <= 0) return;
 

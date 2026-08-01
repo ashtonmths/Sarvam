@@ -1,0 +1,81 @@
+# The api and web containers, on top of the local stack.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.app.yml up -d --build
+#
+# docker-compose.yml alone brings up db and n8n and expects the apps to run on
+# the host under `pnpm dev`, which is the right shape for writing code. This
+# file is for the other question: does the thing that gets deployed actually
+# work? It builds the same two Dockerfiles CI publishes and runs them against
+# the local database, so the images are exercised rather than assumed.
+#
+# It joins the `sadhak` project, so `pgdata` and `n8ndata` are the volumes you
+# already have — same org, same tracked repo, same checkpoints. Nothing is
+# reinitialised.
+#
+# The difference from docker-compose.dokploy.yml is deliberate: ports are
+# published directly instead of going through Traefik, and there are no
+# external networks. That removes the entire routing layer from the picture,
+# which is what makes this useful when the deployed stack is misbehaving --
+# if it works here and not there, the app is fine and the proxy is not.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    # Same as production: migrate, then serve. Running it here means a broken
+    # migration is caught on a laptop rather than during a deploy.
+    command: sh -c "pnpm --filter @sadhak/api db:migrate && pnpm --filter @sadhak/api start"
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      DATABASE_URL: postgres://sadhak:sadhak@db:5432/sadhak
+      # Read from .env so the vault opens the credentials already stored in the
+      # local database. A different key here would leave every connector
+      # unreadable and look like data loss.
+      CREDENTIAL_MASTER_KEY: ${CREDENTIAL_MASTER_KEY:?set CREDENTIAL_MASTER_KEY in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      # Both, because the containerised web app is on 3005 while `pnpm dev`
+      # keeps 3000. NODE_ENV is production in this container, so an origin that
+      # is missing here is refused outright — and it surfaces in the browser as
+      # a CORS error, which reads like a proxy fault rather than a config one.
+      WEB_ORIGINS: http://localhost:3000,http://localhost:3005
+      # `db` and `n8n` resolve to compose-network addresses, which the egress
+      # guard treats as private and refuses without this.
+      EGRESS_ALLOW_PRIVATE_HOSTS: n8n,db
+      N8N_BASE_URL: http://n8n:5678
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL_STRONG: ${OPENROUTER_MODEL_STRONG:-}
+      OPENROUTER_MODEL_BULK: ${OPENROUTER_MODEL_BULK:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_APP_WEBHOOK_SECRET: ${GITHUB_APP_WEBHOOK_SECRET:-}
+    ports:
+      - "3001:3001"
+    volumes:
+      # Keeps the embedding model across rebuilds. Without it every `up --build`
+      # re-downloads bge-small-en-v1.5.
+      - models:/models
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Baked in at build time, not read at runtime — the browser resolves
+        # this, so it is the host's address rather than the compose service's.
+        NEXT_PUBLIC_API_URL: http://localhost:3001
+    depends_on:
+      - api
+    # 3005 on the host, because `pnpm dev` already owns 3000 and taking it would
+    # mean killing someone's dev server to run a container. Inside, it is still
+    # 3000 — only the published port moves.
+    ports:
+      - "3005:3000"
+
+volumes:
+  models:
