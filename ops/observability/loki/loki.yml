@@ -1,0 +1,59 @@
+# Single-binary Loki on the filesystem. No object store, no ring to operate.
+#
+# Loki indexes labels only, never content, which is what makes it cheap at our
+# volume: the JSON body is stored compressed and searched at query time with
+# LogQL. That property is also why the label discipline in the Alloy config
+# matters so much — labels are the index, and an unbounded label is an
+# unbounded index.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # 30 days, enforced by the compactor below. Long enough to investigate an
+  # incident nobody noticed for a fortnight, short enough to bound the disk.
+  retention_period: 720h
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  # Our own volume is small; these exist so one runaway container cannot fill
+  # the disk faster than retention can clear it.
+  ingestion_rate_mb: 8
+  ingestion_burst_size_mb: 16
+  max_streams_per_user: 5000
+  max_query_series: 5000
+
+compactor:
+  working_directory: /loki/compactor
+  delete_request_store: filesystem
+  retention_enabled: true
+  retention_delete_delay: 2h
+  compaction_interval: 10m
+
+analytics:
+  reporting_enabled: false

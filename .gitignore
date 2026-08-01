@@ -21,3 +21,8 @@ dast/*.md.bak
 # Stryker
 reports/
 .stryker-tmp/
+
+# Holds the product stack's METRICS_TOKEN for the Prometheus scrape.
+ops/observability/prometheus/metrics-token
+ops/observability/alertmanager/slack-webhook-url
+ops/observability/alertmanager/watchdog-url

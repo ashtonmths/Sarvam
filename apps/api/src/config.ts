@@ -59,6 +59,12 @@ const Env = z.object({
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
 
   /**
+   * Sentry DSN. Absent ⇒ the SDK never initializes and every capture is a
+   * no-op. Errors only; Tempo owns tracing.
+   */
+  SENTRY_DSN: z.string().url().optional(),
+
+  /**
    * The image's commit sha, baked in at build time. Absent in dev, where the
    * running code is whatever is on disk and no sha would describe it honestly.
    * Tags log lines and trace spans, so "which build produced this" is

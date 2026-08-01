@@ -1,0 +1,205 @@
+# Alert rules.
+#
+# Every rule carries an `action` annotation: one imperative sentence naming the
+# first thing a human should do, plus the metric that confirms recovery. The
+# Alertmanager Slack template renders it in the message body rather than as a
+# link, so a responder at 2am needs zero clicks and zero repository access to
+# know the next move. `scripts/check-alert-actions.ts` fails CI if any rule
+# omits it or writes something too short to be a real instruction.
+#
+# `runbook_url` stays supported but optional — the runbook directory belongs to
+# Plan 16, which is deferred. When it lands, its job is to add links alongside
+# these actions, not to replace them.
+
+groups:
+  - name: liveness
+    rules:
+      # Always firing, by design. If Prometheus or Alertmanager dies, the
+      # *absence* of this alert is what pages, via the external heartbeat
+      # monitor. Without it, the alerting system's own death is the one failure
+      # that could never alert.
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: watchdog
+        annotations:
+          summary: Alerting pipeline is alive
+          action: >-
+            Nothing to do. This alert always fires; the external heartbeat
+            monitor pages when it stops arriving, which means Prometheus or
+            Alertmanager is down. Confirm recovery when the monitor shows a
+            fresh ping.
+
+      - alert: TargetDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.job }} has been unreachable for 5 minutes"
+          action: >-
+            Check the container is running with `docker compose ps`, then read
+            its last lines with `docker compose logs --tail=100 {{ $labels.job
+            }}`. If the host itself is unhealthy, the node dashboard shows disk
+            and memory. Confirm recovery when `up` for this job returns to 1.
+
+  - name: api
+    rules:
+      - alert: ApiHighErrorRate
+        expr: >-
+          sum(rate(sadhak_http_requests_total{status="5xx"}[5m]))
+          / sum(rate(sadhak_http_requests_total[5m])) > 0.02
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: Over 2% of requests are 5xx
+          action: >-
+            Open the API dashboard and find which route is failing, then query
+            Loki with `{service="api"} | json | level="error"` for that window
+            to get the actual exception. Confirm recovery when the 5xx ratio is
+            back under 2% for ten minutes.
+
+      - alert: ApiLatencyBudgetBurn
+        expr: >-
+          histogram_quantile(0.95,
+            sum by (le) (rate(sadhak_http_request_duration_ms_bucket{route="/api/verdicts"}[10m]))
+          ) > 250
+        for: 15m
+        labels:
+          severity: warn
+        annotations:
+          summary: Verdict p95 is over 250ms
+          action: >-
+            The verdict path is deterministic and does no model work, so this is
+            almost always the database. Check the Postgres dashboard for
+            connection saturation and slow queries, and open a trace in Tempo
+            for a slow verdict. Confirm recovery when the p95 returns under
+            250ms.
+
+  - name: jobs
+    rules:
+      - alert: JobsDeadLettering
+        expr: increase(sadhak_jobs_total{outcome="dead_letter"}[30m]) > 3
+        for: 5m
+        labels:
+          severity: warn
+        annotations:
+          summary: More than three jobs dead-lettered in half an hour
+          action: >-
+            Query Loki with `{service="api"} | json | event="job_dead_letter"`
+            to see which kind is failing and why. A single connector's
+            credentials expiring is the common cause. Confirm recovery when the
+            dead-letter rate returns to zero.
+
+  - name: llm
+    rules:
+      # The most important rule in this file, and the reason the gauge it reads
+      # exists at all.
+      #
+      # When the daily cap is spent, `llm.ts` fails fast — correctly, since a
+      # daily 429 is not retryable — and every consumer degrades exactly as
+      # designed: Historian loops end as `give_up`, Reviewer runs land
+      # `exhausted` with findings returned to `open` and re-enqueued (never
+      # `dismiss`, so nobody reads a starved finding as a judged one), the
+      # Explainer returns no prose, and the verdict path keeps serving
+      # perfectly because it never touches a model.
+      #
+      # Nothing 5xxs. Latency does not move. Every other alert here stays
+      # silent and every SLO stays green. The agents have simply stopped. That
+      # silence is why this pages.
+      - alert: LlmDailyQuotaExhausted
+        expr: sadhak_llm_daily_quota_remaining_ratio <= 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: Daily LLM request cap is spent; all agent work has stopped
+          action: >-
+            Free-tier daily request cap spent. Agent loops are down until the
+            provider's daily reset; verdicts are unaffected and no user-facing
+            request is failing. Buy the one-time $10 OpenRouter credit to move
+            the account from 50/day to 1000/day, or wait for reset. Confirm
+            recovery when `sadhak_llm_daily_quota_remaining_ratio` returns above
+            0.
+
+      - alert: LlmDailyQuotaLow
+        expr: sadhak_llm_daily_quota_remaining_ratio < 0.15
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: Under 15% of the daily LLM request cap remains
+          action: >-
+            The chance to act before agents stop. Reduce agent concurrency or
+            pause a large crawl fan-out to stretch the remainder, or buy the
+            OpenRouter credit now rather than after the page. Confirm recovery
+            when the remaining ratio climbs back above 0.15, which for a spent
+            day means waiting for reset.
+
+      # The 20 rpm ceiling is account-wide across every concurrent loop, so
+      # saturation is a fleet condition rather than a caller condition. The
+      # response is to reduce concurrency; adding retries makes it worse.
+      - alert: LlmThrottleSaturated
+        expr: sadhak_llm_rpm_window_used_ratio > 0.9
+        for: 15m
+        labels:
+          severity: warn
+        annotations:
+          summary: Per-minute LLM allowance has been over 90% full for 15 minutes
+          action: >-
+            Reduce agent concurrency or the crawl fan-out. Do not add retries —
+            the limit is account-wide, so retrying is the thing causing it.
+            If the daily quota gauge is also draining fast, expect
+            LlmDailyQuotaExhausted shortly. Confirm recovery when the window
+            used ratio holds under 0.9.
+
+  - name: host
+    rules:
+      - alert: DiskFillingUp
+        expr: >-
+          (node_filesystem_avail_bytes{mountpoint="/host/root"}
+           / node_filesystem_size_bytes{mountpoint="/host/root"}) < 0.15
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: Under 15% disk free on the host
+          action: >-
+            Usually Loki, Prometheus or Tempo data, or unrotated container
+            logs. Check `docker system df`, then `docker system prune -f` for
+            reclaimable layers. If the observability volumes are the cause,
+            shorten retention in loki.yml or the Prometheus flags rather than
+            deleting data by hand. Confirm recovery when free space is back
+            above 15%.
+
+      - alert: CertificateExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 14
+        for: 1h
+        labels:
+          severity: warn
+        annotations:
+          summary: "TLS certificate for {{ $labels.instance }} expires in under 14 days"
+          action: >-
+            Traefik renews automatically, so this usually means renewal is
+            failing rather than that nobody clicked renew. Read the Traefik
+            container logs for ACME errors, and check the domain still resolves
+            to this host. Confirm recovery when the expiry gauge exceeds 14
+            days.
+
+  - name: database
+    rules:
+      - alert: PostgresConnectionsSaturating
+        expr: >-
+          sum(pg_stat_activity_count)
+          / on () group_left max(pg_settings_max_connections) > 0.8
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: Over 80% of Postgres connections are in use
+          action: >-
+            Check which pool is holding them — connections are labelled by
+            application_name, so the Postgres dashboard shows whether it is the
+            API, the job worker or a stray session. A leak shows as a flat line
+            that never returns. Confirm recovery when usage falls under 80%.

@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { AppError, RateLimitedError } from "../errors.js";
 import { log, withLogContext } from "../log.js";
 import { httpDuration, httpRequests, routeLabel, statusClass } from "../metrics.js";
+import { captureError } from "../sentry.js";
 import { requestSpan } from "../tracing.js";
 
 /**
@@ -130,6 +131,12 @@ export const onError: ErrorHandler = (err, c) => {
     if (!err.expose) {
       log().error({ event: "app_error", name: err.name, meta: err.meta }, err.message);
     }
+    // captureError decides what is worth reporting; UserError never is.
+    captureError(err, {
+      requestId,
+      route: routeLabel(new URL(c.req.url).pathname),
+      ...(c.get("orgId") ? { orgId: c.get("orgId") } : {}),
+    });
     return problem(c, {
       type: `${BASE_TYPE_URI}/${err.type}`,
       title: err.expose ? err.message : "Internal server error",
@@ -141,6 +148,11 @@ export const onError: ErrorHandler = (err, c) => {
   }
 
   log().error({ event: "unhandled_error", err }, "unhandled error");
+  captureError(err, {
+    requestId,
+    route: routeLabel(instance),
+    ...(c.get("orgId") ? { orgId: c.get("orgId") } : {}),
+  });
   return problem(c, {
     type: `${BASE_TYPE_URI}/internal`,
     title: "Internal server error",

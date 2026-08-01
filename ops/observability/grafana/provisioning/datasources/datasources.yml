@@ -1,0 +1,42 @@
+# Datasources as code. A dashboard that references a UID not defined here fails
+# the observability-check CI job rather than rendering empty at 2am.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: sadhak-prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  - name: Loki
+    type: loki
+    uid: sadhak-loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      # The join that makes tracing worth opening: a log line carries traceId,
+      # and this turns it into a link into Tempo. Without it the two signals
+      # live in separate tabs and people stop crossing between them.
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"traceId":"(\w+)"'
+          url: "$${__value.raw}"
+          datasourceUid: sadhak-tempo
+
+  - name: Tempo
+    type: tempo
+    uid: sadhak-tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      # And the reverse direction: from a span, find the log lines it produced.
+      tracesToLogsV2:
+        datasourceUid: sadhak-loki
+        filterByTraceID: true
+        spanStartTimeShift: -2m
+        spanEndTimeShift: 2m
+      serviceMap:
+        datasourceUid: sadhak-prometheus

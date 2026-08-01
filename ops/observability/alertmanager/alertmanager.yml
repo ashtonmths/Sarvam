@@ -1,0 +1,75 @@
+# Slack is the pager. The team is small and there is no on-call rotation to
+# feed PagerDuty yet; revisit at Plan 18's operational cadence.
+#
+# Both URLs are read from files, not from the environment. Alertmanager does no
+# variable expansion in this file — `api_url: $SLACK_WEBHOOK` is taken
+# literally and fails validation with "unsupported scheme", which is how this
+# was found — and a webhook URL is a credential, so keeping it out of the
+# config that lives in git is right regardless. Copy the .example files beside
+# this one; both are gitignored.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: slack-warn
+  group_by: [alertname, job]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 24h
+
+  routes:
+    # The dead-man's switch goes nowhere near Slack. It is consumed by an
+    # external heartbeat monitor, whose job is to notice when these stop
+    # arriving — which is precisely the case where Slack routing would also be
+    # dead.
+    - matchers: [severity="watchdog"]
+      receiver: watchdog-heartbeat
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 1m
+
+    - matchers: [severity="page"]
+      receiver: slack-page
+      repeat_interval: 4h
+
+inhibit_rules:
+  # An unreachable API implies its own latency and error alerts. Firing all
+  # three for one cause is how people learn to ignore the channel.
+  - source_matchers: [alertname="TargetDown", job="sadhak-api"]
+    target_matchers: [severity=~"page|warn"]
+    equal: [env]
+
+receivers:
+  - name: slack-page
+    slack_configs:
+      - api_url_file: /etc/alertmanager/slack-webhook-url
+        channel: "#sadhak-alerts"
+        send_resolved: true
+        title: '<!channel> [PAGE] {{ .CommonLabels.alertname }}'
+        # `action` in the body, not behind a link: the responder should need
+        # zero clicks to know the next move.
+        text: |-
+          {{ range .Alerts }}*{{ .Annotations.summary }}*
+
+          *Do this:* {{ .Annotations.action }}
+          {{ end }}
+
+  - name: slack-warn
+    slack_configs:
+      - api_url_file: /etc/alertmanager/slack-webhook-url
+        channel: "#sadhak-alerts"
+        send_resolved: true
+        title: '[warn] {{ .CommonLabels.alertname }}'
+        text: |-
+          {{ range .Alerts }}*{{ .Annotations.summary }}*
+
+          *Do this:* {{ .Annotations.action }}
+          {{ end }}
+
+  # Pointed at an external heartbeat URL so it survives this VPS dying. Set
+  # WATCHDOG_HEARTBEAT_URL to the monitor's ping endpoint.
+  - name: watchdog-heartbeat
+    webhook_configs:
+      - url_file: /etc/alertmanager/watchdog-url
+        send_resolved: false

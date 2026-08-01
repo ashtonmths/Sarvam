@@ -33,11 +33,15 @@ const store = new AsyncLocalStorage<LogContext>();
  * Paths pino replaces with `[Redacted]` before serializing. Header names are
  * lowercase because that is how they arrive.
  *
+ * Exported because Sentry's `beforeSend` scrubs against the same list. Two
+ * hand-maintained redaction lists drift, and the day they do is the day a
+ * secret that never reached a log line reaches an error report instead.
+ *
  * A wildcard alone would not be enough — `*.password` misses a bare
  * `password` at the root — so both shapes are listed for anything that has
  * been seen at either depth.
  */
-const REDACTED = [
+export const REDACTED = [
   "password",
   "*.password",
   "token",

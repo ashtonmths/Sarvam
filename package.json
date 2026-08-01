@@ -27,7 +27,8 @@
     "check:env": "tsx scripts/check-env-example.ts",
     "check:docs": "tsx scripts/check-docs-honesty.ts",
     "docs:api": "tsx scripts/generate-api-reference.ts",
-    "check:api": "tsx scripts/generate-api-reference.ts --check"
+    "check:api": "tsx scripts/generate-api-reference.ts --check",
+    "check:obs": "tsx scripts/check-observability.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",

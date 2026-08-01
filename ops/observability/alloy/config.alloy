@@ -1,0 +1,98 @@
+// Log collection from the Docker daemon into Loki.
+//
+// SECURITY: this mounts the Docker socket. It is mounted read-only and Alloy
+// is never exposed over TCP, but a read-only Docker socket still discloses
+// every container's configuration and logs to this process. It is registered
+// in docs/security/THREAT-MODEL.md for that reason. The image is pinned by tag
+// here and should be pinned by digest once Renovate is watching it.
+//
+// FIRST START replays whatever history the container log files still hold, and
+// Loki rejects anything older than `reject_old_samples_max_age` with a 400. It
+// is noisy and it is harmless: Alloy records read positions in its data volume,
+// so it happens once. The json-file rotation on every service (10m x 3) is what
+// bounds how much history can exist to replay.
+//
+// LABEL DISCIPLINE, and it is the most important rule in this file: Loki
+// labels are `service`, `env` and `level` only. `orgId` and `requestId` stay in
+// the JSON body and are queried with `| json | orgId="..."`. Labels are Loki's
+// index — an org-id label would create one stream per customer per service and
+// become a cardinality bomb exactly as the product succeeds.
+
+logging {
+  level  = "warn"
+  format = "logfmt"
+}
+
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "15s"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  // Compose service name, not the container name: container names carry a
+  // replica suffix that would split one service across several streams.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "project"
+  }
+
+  // Drop anything not launched by compose. Without this, a stray container
+  // started by hand arrives with an empty service label and pollutes the index.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = ""
+    action        = "drop"
+  }
+
+  // Keep only this product's containers.
+  //
+  // A Docker host runs whatever else its owner put there — this one had four
+  // unrelated compose projects on it, and without this rule Alloy shipped all
+  // of them into Sadhak's Loki: someone else's Postgres, someone else's Celery
+  // workers, months of their history. That is a retention bill, a cardinality
+  // problem, and other people's data in our store, all from a collector doing
+  // exactly what it was told.
+  //
+  // Matches `sadhak` and `sadhak-observability`, so the monitoring stack
+  // watches itself.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = "sadhak(-.*)?"
+    action        = "keep"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  labels     = { env = "prod" }
+  forward_to = [loki.process.level.receiver]
+}
+
+// Pulls `level` out of the JSON body and promotes it to a label. Three values
+// in practice (info/warn/error), so the cardinality is bounded and known, and
+// "show me every error" is the query people actually type first.
+loki.process "level" {
+  stage.json {
+    expressions = { level = "level" }
+  }
+
+  stage.labels {
+    values = { level = "" }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

@@ -1,0 +1,36 @@
+# Tempo, receiving OTLP over HTTP from the API's tracing SDK.
+#
+# The API sends to http://tempo:4318 — set OTEL_EXPORTER_OTLP_ENDPOINT to that
+# in the product stack and traces start flowing with no code change, which is
+# the whole point of having written the spans before the collector existed.
+
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal
+
+compactor:
+  compaction:
+    # Shorter than logs and much shorter than metrics: a trace is for
+    # diagnosing something that happened this week, and traces are the bulkiest
+    # of the three signals per unit of insight.
+    block_retention: 168h
+
+usage_report:
+  reporting_enabled: false

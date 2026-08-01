@@ -47,6 +47,37 @@ class Counter {
 }
 
 /**
+ * A value that goes up and down, and — unlike a counter — is *sampled* rather
+ * than accumulated. Set by a collector at scrape time, because the quantity it
+ * reports (how much daily quota is left) lives in Postgres, not in a variable
+ * this process increments.
+ */
+class Gauge {
+  readonly #series = new Map<string, Series>();
+
+  constructor(
+    readonly name: string,
+    readonly help: string,
+  ) {}
+
+  set(value: number, labels: Labels = {}): void {
+    this.#series.set(keyOf(labels), { labels, value });
+  }
+
+  render(): string {
+    const lines = [`# HELP ${this.name} ${this.help}`, `# TYPE ${this.name} gauge`];
+    for (const series of this.#series.values()) {
+      lines.push(`${this.name}${renderLabels(series.labels)} ${series.value}`);
+    }
+    return lines.join("\n");
+  }
+
+  reset(): void {
+    this.#series.clear();
+  }
+}
+
+/**
  * Cumulative buckets, as Prometheus defines a histogram: each bucket counts
  * everything at or below its bound. Bounds are chosen around the gate's
  * budget — the interesting question is "how close to 75ms are we", not "how
@@ -179,6 +210,30 @@ export const driftFindingsOpened = new Counter(
  * getting to do it, and conflating them would hide a broken model path behind
  * a healthy-looking rate of honest uncertainty.
  */
+/**
+ * The single most important number in this file.
+ *
+ * When the free tier's daily request cap is spent, nothing breaks in a way any
+ * other alert can see: verdicts keep serving (they never touch a model),
+ * latency does not move, no 5xx appears, and the SLOs stay green. The agents
+ * have simply stopped. This gauge is the only signal that says so, which is
+ * why the rule reading it pages rather than warns.
+ */
+export const llmDailyQuotaRemaining = new Gauge(
+  "sadhak_llm_daily_quota_remaining_ratio",
+  "Fraction of the account-wide daily LLM request cap still unspent (0-1)",
+);
+
+/**
+ * How full the per-minute window is, 0-1. The 20 rpm ceiling is account-wide
+ * across every concurrent agent loop, so saturation here is a fleet condition
+ * and the response is to reduce concurrency — never to add retries.
+ */
+export const llmRpmWindowUsed = new Gauge(
+  "sadhak_llm_rpm_window_used_ratio",
+  "Fraction of the per-minute LLM request allowance used in the current window (0-1)",
+);
+
 export const driftTriage = new Counter(
   "sadhak_drift_triage_total",
   "Drift triage outcomes — benign, real, unsure, unavailable.",
@@ -193,16 +248,41 @@ const ALL = [
   driftTicks,
   driftFindingsOpened,
   driftTriage,
+  llmDailyQuotaRemaining,
+  llmRpmWindowUsed,
 ];
 
-/** The full exposition, in Prometheus text format. */
-export function render(): string {
+/**
+ * Sampled at scrape time rather than pushed.
+ *
+ * Registered by `index.ts` so this module keeps no imports of its own — a
+ * metrics registry that reaches into the database would be a cycle, and a
+ * collector that throws must not take the scrape down with it.
+ */
+type Collector = () => Promise<void>;
+const collectors: Collector[] = [];
+
+export function registerCollector(collect: Collector): void {
+  collectors.push(collect);
+}
+
+/**
+ * The full exposition, in Prometheus text format.
+ *
+ * A failing collector leaves its gauge at the last value it held rather than
+ * failing the scrape. Prometheus reads a stale sample as stale — the `up`
+ * metric and the staleness of the series both say so — whereas a 500 here
+ * blinds every rule at once, including the ones that would have explained why.
+ */
+export async function render(): Promise<string> {
+  await Promise.allSettled(collectors.map((collect) => collect()));
   return `${ALL.map((metric) => metric.render()).join("\n\n")}\n`;
 }
 
 /** Test seam. */
 export function resetMetrics(): void {
   for (const metric of ALL) metric.reset();
+  collectors.length = 0;
 }
 
 /**

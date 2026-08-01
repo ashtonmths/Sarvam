@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { constantTimeEqual } from "./crypto/compare.js";
 import { closePools } from "./db.js";
 import { NotFoundError } from "./errors.js";
+import { requestsRemainingToday } from "./historian/budget.js";
 import { beginDraining, readiness } from "./http/health.js";
 import { notFound, onError, requestId, requestLog } from "./http/middleware.js";
 import { identityRateLimit, ipRateLimit, webhookRateLimit } from "./http/rate-limit.js";
@@ -11,8 +12,14 @@ import { bodyGuard, corsMiddleware, securityHeaders } from "./http/security.js";
 import { registerJobHandlers, scheduleDueCrawls } from "./jobs/handlers.js";
 import { queueStats } from "./jobs/queue.js";
 import { startWorker, stopWorker } from "./jobs/worker.js";
+import { requestsInCurrentWindow } from "./llm.js";
 import { log } from "./log.js";
-import { render } from "./metrics.js";
+import {
+  llmDailyQuotaRemaining,
+  llmRpmWindowUsed,
+  registerCollector,
+  render,
+} from "./metrics.js";
 import { requireAuth, requireOrg } from "./middleware/auth.js";
 import { authRoutes } from "./routes/auth.js";
 import { connectorRoutes } from "./routes/connectors.js";
@@ -27,6 +34,7 @@ import { reflexRoutes } from "./routes/reflex.js";
 import { reviewerRoutes } from "./routes/reviewer.js";
 import { verdictRoutes } from "./routes/verdict.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { startErrorTracking } from "./sentry.js";
 import { startTracing } from "./tracing.js";
 
 /**
@@ -35,6 +43,22 @@ import { startTracing } from "./tracing.js";
  * the window a slow start needs explaining.
  */
 startTracing();
+startErrorTracking();
+
+/**
+ * Sampled from Postgres at scrape time, not incremented in process. The daily
+ * cap is account-wide and this process is one of possibly several readers, so
+ * a local counter would drift the moment a worker ran anywhere else.
+ */
+registerCollector(async () => {
+  const remaining = await requestsRemainingToday();
+  llmDailyQuotaRemaining.set(
+    config.LLM_DAILY_REQUEST_CAP > 0 ? remaining / config.LLM_DAILY_REQUEST_CAP : 0,
+  );
+  llmRpmWindowUsed.set(
+    config.LLM_RPM_LIMIT > 0 ? requestsInCurrentWindow() / config.LLM_RPM_LIMIT : 0,
+  );
+});
 
 const app = new Hono();
 
@@ -90,7 +114,7 @@ app.get("/health", async (c) => {
  * the endpoint exists at all. Traffic volume, org counts and which callers are
  * hitting their limits are not public facts.
  */
-app.get("/metrics", (c) => {
+app.get("/metrics", async (c) => {
   const expected = config.METRICS_TOKEN;
   if (!expected) throw new NotFoundError();
 
@@ -99,7 +123,7 @@ app.get("/metrics", (c) => {
     throw new NotFoundError();
   }
 
-  return c.text(render(), 200, { "Content-Type": "text/plain; version=0.0.4" });
+  return c.text(await render(), 200, { "Content-Type": "text/plain; version=0.0.4" });
 });
 
 // Unauthenticated by necessity: this is where sessions are created.

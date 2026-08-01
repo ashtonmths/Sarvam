@@ -1,3 +1,5 @@
+import { withSentryConfig } from "@sentry/nextjs";
+
 /**
  * The web app's edge.
  *
@@ -15,6 +17,24 @@
  * — so the sink an inline-script policy protects against does not exist here.
  * Revisit the moment any page renders something a user typed.
  */
+/**
+ * Sentry's ingest origin, derived from the DSN rather than hardcoded.
+ *
+ * This has to be in `connect-src` or the browser blocks the report and the
+ * console message is the only sign — error tracking that looks configured and
+ * silently sends nothing. Deriving it from the DSN means enabling Sentry is one
+ * variable and not two things that must agree.
+ */
+const sentryOrigin = (() => {
+  const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+  if (!dsn) return "";
+  try {
+    return ` ${new URL(dsn).origin}`;
+  } catch {
+    return "";
+  }
+})();
+
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
@@ -24,7 +44,7 @@ const CSP = [
   // The API is a different origin by design, so it is named rather than
   // implied. Adding an origin here is a reviewed diff, never something
   // discovered when a feature silently stops working.
-  `connect-src 'self' ${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"}`,
+  `connect-src 'self' ${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"}${sentryOrigin}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -53,7 +73,7 @@ const SECURITY_HEADERS = [
 ];
 
 /** @type {import('next').NextConfig} */
-export default {
+const nextConfig = {
   // Required by the Dockerfile runtime stage.
   output: "standalone",
   outputFileTracingRoot: new URL("../../", import.meta.url).pathname,
@@ -64,3 +84,27 @@ export default {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },
 };
+
+/**
+ * Sentry wraps the config only when a DSN exists.
+ *
+ * `withSentryConfig` otherwise adds its webpack plugin, its instrumentation
+ * hooks and a source-map upload step to every build for a destination that is
+ * not configured — slower builds and a pile of warnings in exchange for
+ * nothing. Same gate as everywhere else: absent means absent.
+ */
+export default process.env.NEXT_PUBLIC_SENTRY_DSN
+  ? withSentryConfig(nextConfig, {
+      silent: true,
+      // Minified client bundles need maps to be readable. They are uploaded to
+      // Sentry during the CI image build and deleted from the public output,
+      // so a stack trace is legible to us and the sources are not served.
+      widenClientFileUpload: true,
+      sourcemaps: { deleteSourcemapsAfterUpload: true },
+      // The tunnel would proxy reports through our own origin to dodge ad
+      // blockers. Deliberately off: it would also route customer browser data
+      // through our server, and the CSP entry above is the honest way to make
+      // reports work.
+      disableLogger: true,
+    })
+  : nextConfig;

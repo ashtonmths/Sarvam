@@ -17,10 +17,27 @@
 # Connector tokens are no longer passed through: credentials are stored per org
 # in the encrypted vault (docs/connectors/README.md).
 
+# Fixed so the Alloy log collector can filter on it: it keeps only
+# containers whose compose project matches `sadhak`, and a project name that
+# varies by deployment directory would silently collect nothing.
+name: sadhak
+
+# Container logs are rotated, on every service.
+#
+# Docker's json-file driver is unbounded by default: one chatty container can
+# fill the disk and take the whole box down, and that is true whether or not
+# Loki is healthy. This closes it at the source, independently of anything the
+# monitoring stack does.
+x-logging: &logging
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
 services:
   db:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    <<: *logging
     environment:
       POSTGRES_USER: sadhak
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in Dokploy}
@@ -37,6 +54,7 @@ services:
   n8n:
     image: n8nio/n8n:1.75.2
     restart: unless-stopped
+    <<: *logging
     depends_on:
       db:
         condition: service_healthy
@@ -66,6 +84,7 @@ services:
   api:
     image: ghcr.io/finite-loop-club-nmamit/sadhak-api:latest
     restart: unless-stopped
+    <<: *logging
     depends_on:
       db:
         condition: service_healthy
@@ -115,10 +134,14 @@ services:
     networks:
       - default
       - dokploy-network
+      # Lets Prometheus reach /metrics as http://api:3001 without the endpoint
+      # ever being published to the internet.
+      - sadhak-obs
 
   web:
     image: ghcr.io/finite-loop-club-nmamit/sadhak-web:latest
     restart: unless-stopped
+    <<: *logging
     depends_on:
       - api
     expose:
@@ -133,5 +156,8 @@ volumes:
   models:
 
 networks:
+  sadhak-obs:
+    external: true
+    name: sadhak-obs
   dokploy-network:
     external: true
