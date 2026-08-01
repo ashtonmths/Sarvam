@@ -4767,3 +4767,528 @@
   white-space: pre;
   tab-size: 2;
 }
+
+/* --------------------------------------------------------------- metrics */
+
+/* The opening band. Figures sit directly on the paper rather than in cards:
+   four bordered boxes in a row read as a toolbar, and these are the headline
+   facts, not controls. The rules between them do the separating that borders
+   would otherwise have to. */
+.mx-hero {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  margin-bottom: 22px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.mx-hero > * + * {
+  border-left: 1px solid var(--line-soft);
+}
+
+.mx-fig {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px;
+}
+
+/* Large enough to read before the label does, and lining figures so a column
+   of numbers stays on a common baseline. */
+.mx-fig__value {
+  font-family: var(--font-display);
+  font-size: 40px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+}
+
+.mx-fig[data-tone="thread"] .mx-fig__value {
+  color: var(--thread);
+}
+.mx-fig[data-tone="approve"] .mx-fig__value {
+  color: var(--approve);
+}
+.mx-fig[data-tone="warn"] .mx-fig__value {
+  color: var(--warn);
+}
+.mx-fig[data-tone="block"] .mx-fig__value {
+  color: var(--block);
+}
+
+.mx-fig__label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.mx-fig__note {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.mx-panel {
+  margin-bottom: 16px;
+}
+
+.mx-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+/* ------------------------------------------------------- the gate strip */
+
+/* One column per day, with a floor. Days with no decisions keep a visible tick
+   rather than collapsing to nothing: a run of empty days is information, and a
+   chart that renders them as blank space looks like it failed to load. */
+.mx-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 132px;
+  margin: 18px 0 10px;
+  padding-bottom: 18px;
+  position: relative;
+}
+
+.mx-strip::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mx-strip__day {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  height: 100%;
+  position: relative;
+}
+
+.mx-strip__stack {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.mx-strip__bar {
+  display: block;
+  width: 100%;
+  min-height: 4px;
+  border-radius: 3px 3px 0 0;
+}
+
+.mx-strip__bar--block {
+  background: var(--block);
+}
+.mx-strip__bar--warn {
+  background: var(--warn);
+}
+.mx-strip__bar--approve {
+  background: var(--approve);
+}
+
+/* The floor for a day that decided nothing. */
+.mx-strip__none {
+  display: block;
+  height: 3px;
+  width: 100%;
+  border-radius: 2px;
+  background: var(--line-soft);
+}
+
+.mx-strip__tick {
+  position: absolute;
+  bottom: -18px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.mx-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.mx-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.mx-legend__item::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.mx-legend__item--block::before {
+  background: var(--block);
+}
+.mx-legend__item--warn::before {
+  background: var(--warn);
+}
+.mx-legend__item--approve::before {
+  background: var(--approve);
+}
+
+.mx-legend__spacer {
+  flex: 1;
+}
+
+.mx-legend__note {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.mx-empty {
+  margin: 16px 0 0;
+  padding: 22px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  background: var(--panel);
+}
+
+/* ------------------------------------------------------------ two-up */
+
+.mx-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.mx-split > .mx-panel {
+  margin-bottom: 0;
+}
+
+/* ---------------------------------------------------------- coverage */
+
+.mx-cov {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin: 18px 0 4px;
+}
+
+.mx-cov__figure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.mx-cov__pct {
+  font-family: var(--font-display);
+  font-size: 46px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+}
+
+.mx-cov__of {
+  font-size: 12px;
+  color: var(--ink-soft);
+  max-width: 16ch;
+  line-height: 1.4;
+}
+
+.mx-cov__bars {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mx-cov__row {
+  display: grid;
+  grid-template-columns: 66px 1fr 34px;
+  align-items: center;
+  gap: 10px;
+}
+
+.mx-cov__key {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.mx-cov__track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.mx-cov__fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+
+.mx-cov__fill--approve {
+  background: var(--approve);
+}
+.mx-cov__fill--warn {
+  background: var(--warn);
+}
+
+.mx-cov__num {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-align: right;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.mx-cta {
+  margin: 16px 0 0;
+  font-size: 13.5px;
+}
+
+.mx-cta a {
+  color: var(--thread);
+  font-weight: 550;
+  text-decoration: none;
+}
+
+.mx-cta a:hover {
+  text-decoration: underline;
+}
+
+/* -------------------------------------------------------- provenance */
+
+.mx-prov {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.mx-prov__row {
+  display: grid;
+  grid-template-columns: 108px 1fr 28px;
+  align-items: center;
+  gap: 10px;
+}
+
+.mx-prov__kind {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.mx-prov__bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.mx-prov__fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--thread);
+}
+
+.mx-prov__count {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-align: right;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.mx-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.mx-notes strong {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+/* ----------------------------------------------------------- latency */
+
+.mx-lat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin: 18px 0 4px;
+}
+
+.mx-lat {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+/* An unmeasured latency is a stage of the deployment, not a fault. Dashed
+   rather than solid, and it names the event that fills it — a dash here would
+   read as broken and a zero would read as instant. */
+.mx-lat--waiting {
+  border-style: dashed;
+  background: transparent;
+}
+
+.mx-lat__label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.mx-lat__value {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+}
+
+.mx-lat__hint,
+.mx-lat__await {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.mx-lat__await {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+/* --------------------------------------------------------- disclaimer */
+
+/* Deliberately not a panel. This is the page telling you what it will not
+   pretend to know, and dressing that as another metric card would make it look
+   like a number was coming. */
+.mx-disclaim {
+  margin-top: 4px;
+  padding: 18px 20px;
+  border-left: 2px solid var(--line);
+  color: var(--ink-soft);
+}
+
+.mx-disclaim__title {
+  margin: 0 0 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.mx-disclaim p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 78ch;
+}
+
+.mx-disclaim__value {
+  margin-top: 8px !important;
+}
+
+.mx-disclaim__value strong {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--ink);
+}
+
+.mx-skeleton {
+  height: 220px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, var(--panel), var(--card), var(--panel));
+  background-size: 200% 100%;
+  animation: mx-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes mx-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mx-skeleton {
+    animation: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .mx-hero {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .mx-hero > *:nth-child(3) {
+    border-left: 0;
+  }
+  .mx-hero > *:nth-child(n + 3) {
+    border-top: 1px solid var(--line-soft);
+  }
+  .mx-split {
+    grid-template-columns: 1fr;
+  }
+  .mx-lat-grid {
+    grid-template-columns: 1fr;
+  }
+  .mx-cov {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .mx-cov__bars {
+    width: 100%;
+  }
+}
