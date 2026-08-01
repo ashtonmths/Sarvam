@@ -2,8 +2,8 @@ import type { ReflexIncident } from "@sadhak/shared/schema";
 import { connectorInstances, structureSnapshots } from "@sadhak/shared/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { baseUrlFor, egressOptionsFor } from "../../connectors/registry.js";
-import { pinnedFetch } from "../../net/pinned-fetch.js";
 import { db } from "../../db.js";
+import { pinnedFetch } from "../../net/pinned-fetch.js";
 import { getCredential } from "../../vault/vault.js";
 import type { RevertOutcome } from "./index.js";
 

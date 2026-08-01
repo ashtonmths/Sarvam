@@ -2,10 +2,10 @@ import { connectorInstances, gateDecisions } from "@sadhak/shared/schema";
 import type { ChangeDescriptor, VerdictResult } from "@sadhak/shared/types";
 import { and, eq } from "drizzle-orm";
 import { baseUrlFor, egressOptionsFor } from "../connectors/registry.js";
-import type { EgressOptions } from "../net/guard.js";
-import { pinnedFetch } from "../net/pinned-fetch.js";
 import { db } from "../db.js";
 import { UserError } from "../errors.js";
+import type { EgressOptions } from "../net/guard.js";
+import { pinnedFetch } from "../net/pinned-fetch.js";
 import { getCredential } from "../vault/vault.js";
 
 /**

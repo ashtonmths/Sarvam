@@ -5,6 +5,7 @@ import {
   BarChart3,
   Check,
   ChevronsUpDown,
+  FileText,
   Inbox,
   LayoutDashboard,
   Play,
@@ -44,6 +45,7 @@ const MAP: NavItem[] = [
 const OPERATE: NavItem[] = [
   { href: "/app/queue", label: "Queue", icon: <Inbox {...ICON} />, badged: true },
   { href: "/app/agents", label: "Agents", icon: <SquareTerminal {...ICON} /> },
+  { href: "/app/documents", label: "Documents", icon: <FileText {...ICON} /> },
   { href: "/app/decisions", label: "Decisions", icon: <ShieldCheck {...ICON} /> },
   { href: "/app/drift", label: "Drift", icon: <Radar {...ICON} /> },
   { href: "/app/metrics", label: "Metrics", icon: <BarChart3 {...ICON} /> },

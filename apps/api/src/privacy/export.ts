@@ -2,6 +2,8 @@ import {
   auditLog,
   connectorInstances,
   criticalityOverrides,
+  documentChunks,
+  documents,
   edges,
   gateDecisions,
   members,
@@ -70,6 +72,8 @@ export async function exportOrg(orgId: number) {
     overrideRows,
     scopeRows,
     auditRows,
+    documentRows,
+    documentChunkRows,
   ] = await Promise.all([
     db
       .select({
@@ -125,6 +129,36 @@ export async function exportOrg(orgId: number) {
     db.select().from(criticalityOverrides).where(eq(criticalityOverrides.orgId, orgId)),
     db.select().from(miningScopes).where(eq(miningScopes.orgId, orgId)),
     db.select().from(auditLog).where(eq(auditLog.orgId, orgId)),
+    // Documents carry their full text, and that text is the org's own data —
+    // an export that omitted it would hand back everything derived from a
+    // transcript except the transcript.
+    db
+      .select({
+        id: documents.id,
+        title: documents.title,
+        originalName: documents.originalName,
+        content: documents.content,
+        byteSize: documents.byteSize,
+        occurredAt: documents.occurredAt,
+        sourceUrl: documents.sourceUrl,
+        uploadedBy: documents.uploadedBy,
+        createdAt: documents.createdAt,
+      })
+      .from(documents)
+      .where(eq(documents.orgId, orgId)),
+    // Chunks without their embeddings, for the same reason rationale drops
+    // them: 384 floats per row, reproducible from the body.
+    db
+      .select({
+        documentId: documentChunks.documentId,
+        ordinal: documentChunks.ordinal,
+        body: documentChunks.body,
+        speaker: documentChunks.speaker,
+        startOffset: documentChunks.startOffset,
+        endOffset: documentChunks.endOffset,
+      })
+      .from(documentChunks)
+      .where(eq(documentChunks.orgId, orgId)),
   ]);
 
   return {
@@ -133,7 +167,8 @@ export async function exportOrg(orgId: number) {
     notes: [
       "Connector credentials are deliberately excluded. They are encrypted and bound to this organisation and connector instance, so the ciphertext would not work anywhere else.",
       "Rationale embeddings are excluded. They are derived from the body text and recomputable.",
-      "Sadhak never stores the contents of your records, so none appear here.",
+      "Sadhak never reads or stores the contents of your records. It reads structure — table, column and workflow names — so none of your row data appears here.",
+      "Documents you uploaded are the one exception, and they appear in full: you gave Sadhak that text deliberately, and it is stored so a citation can be read in context. Chunk embeddings are excluded as recomputable.",
     ],
     organization: { id: org.id, name: org.name, createdAt: org.createdAt },
     members: memberRows,
@@ -147,5 +182,7 @@ export async function exportOrg(orgId: number) {
     criticalityOverrides: overrideRows,
     miningScopes: scopeRows,
     auditLog: auditRows,
+    documents: documentRows,
+    documentChunks: documentChunkRows,
   };
 }

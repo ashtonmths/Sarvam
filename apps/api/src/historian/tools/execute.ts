@@ -7,6 +7,11 @@ import {
 } from "@sadhak/shared/schema";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db.js";
+import {
+  chunkBelongsToOrg,
+  parseChunkPermalink,
+  searchDocuments,
+} from "../../documents/retrieve.js";
 import { enqueue } from "../../jobs/queue.js";
 import type { LoopOutcome } from "../loop.js";
 import { type ToolName, toolArgSchemas } from "./defs.js";
@@ -71,6 +76,26 @@ export async function executeTool(
       for (const hit of kept) {
         ctx.seenUrls.add(hit.url);
         ctx.seenContent.set(hit.url, hit.snippet);
+      }
+      return { terminal: false, output: withOmitted({ hits: kept }, dropped) };
+    }
+
+    case "search_documents": {
+      const all = await searchDocuments(ctx.orgId, String(args.query));
+      const hits = all.map((hit) => ({
+        title: hit.title,
+        // Attributed only when the chunk is one voice, so a multi-speaker span
+        // is never presented as somebody's statement.
+        author: hit.speaker ?? "document",
+        text: hit.body,
+        authored_at: hit.occurredAt ? hit.occurredAt.toISOString() : null,
+        permalink: hit.permalink,
+      }));
+
+      const { kept, dropped } = fitItems(hits);
+      for (const hit of kept) {
+        ctx.seenUrls.add(hit.permalink);
+        ctx.seenContent.set(hit.permalink, hit.text);
       }
       return { terminal: false, output: withOmitted({ hits: kept }, dropped) };
     }
@@ -159,6 +184,16 @@ function withOmitted<T extends Record<string, unknown>>(
   };
 }
 
+/**
+ * Which source a citation came from. Checked in order of specificity: a
+ * document permalink is ours and has a known shape, so it is recognised before
+ * falling back to the vendor guess.
+ */
+function sourceKindFor(url: string): "doc" | "pr" | "slack" {
+  if (parseChunkPermalink(url)) return "doc";
+  return url.includes("github.com") ? "pr" : "slack";
+}
+
 interface ProposeArgs {
   text: string;
   source_url: string;
@@ -244,7 +279,7 @@ async function proposeRationale(ctx: LoopCtx, args: ProposeArgs): Promise<ToolRe
       .values({
         orgId: ctx.orgId,
         body: args.text,
-        sourceKind: args.source_url.includes("github.com") ? "pr" : "slack",
+        sourceKind: sourceKindFor(args.source_url),
         sourceUrl: args.source_url,
         author: args.author,
         authoredAt: args.authored_at ? new Date(args.authored_at) : null,
@@ -298,6 +333,19 @@ async function proposeRationale(ctx: LoopCtx, args: ProposeArgs): Promise<ToolRe
 }
 
 async function urlInScope(orgId: number, url: string): Promise<boolean> {
+  /**
+   * A document the org uploaded is in scope by construction — uploading it was
+   * the act of granting access, the way ticking a channel is for Slack.
+   *
+   * Checked before the mining scopes, and by lookup rather than by substring:
+   * a document permalink carries an id, not a channel or a repo name, so
+   * ownership is a query or it is nothing. This also has to come first because
+   * the scope list below short-circuits to false when it is empty, which would
+   * otherwise make an org that has only ever uploaded documents unable to cite
+   * anything at all.
+   */
+  if (await chunkBelongsToOrg(orgId, url)) return true;
+
   const scopes = await db
     .select({ connector: miningScopes.connector, value: miningScopes.scopeValue })
     .from(miningScopes)

@@ -4,8 +4,6 @@ import { describe, expect, it } from "vitest";
 import * as airtable from "./airtable/index.js";
 import * as n8nConnector from "./n8n/index.js";
 import * as postgresConnector from "./postgres/index.js";
-import { slackConnector } from "./slack/index.js";
-import { BOT_SCOPES, USER_SCOPES } from "./slack/oauth.js";
 import {
   allDescriptors,
   baseUrlFor,
@@ -13,6 +11,8 @@ import {
   egressOptionsFor,
   getConnector,
 } from "./registry.js";
+import { slackConnector } from "./slack/index.js";
+import { BOT_SCOPES, USER_SCOPES } from "./slack/oauth.js";
 
 describe("registry", () => {
   it("returns a descriptor-complete implementation for every slug", () => {

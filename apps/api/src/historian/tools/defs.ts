@@ -15,6 +15,7 @@ export const TOOL_NAMES = [
   "get_edge_context",
   "search_slack",
   "search_github",
+  "search_documents",
   "read_thread",
   "propose_rationale",
   "give_up",
@@ -29,6 +30,7 @@ export const toolArgSchemas = {
     query: z.string().min(1).max(300),
     kind: z.enum(["pr", "commit"]).default("pr"),
   }),
+  search_documents: z.object({ query: z.string().min(1).max(300) }),
   read_thread: z.object({ permalink: z.string().url() }),
   propose_rationale: z.object({
     text: z.string().min(10).max(1000),
@@ -82,6 +84,19 @@ export const TOOL_DEFS: ToolDef[] = [
           query: { type: "string" },
           kind: { type: "string", enum: ["pr", "commit"] },
         },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_documents",
+      description:
+        "Search documents the org uploaded: meeting transcripts, handover notes, design docs. Use this when a decision was probably spoken in a meeting rather than typed into Slack or a PR. Returns quoted spans with permalinks you may cite.",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string" } },
         required: ["query"],
       },
     },
@@ -168,6 +183,8 @@ Reply with exactly one JSON object and nothing else — no prose, no code fences
 Rules:
 - Call get_edge_context first.
 - Search before you conclude. Quote spans verbatim; never paraphrase into a citation.
+- Search more than one place before giving up. Slack and pull requests hold decisions that were typed; search_documents holds the ones that were spoken, in uploaded meeting transcripts and handover notes. A dependency nobody wrote down in Slack was often explained out loud in a call.
+- Copy authored_at from the tool result into propose_rationale when it is present, verbatim. Never invent or reformat it.
 - You may only cite a source_url that a tool returned to you in this run.
 - The quoted text must actually appear in that source.
 - If no written trace explains the edge, call give_up with the reason. That is a correct, expected answer — an honest "unexplained" is far more valuable than a plausible guess.

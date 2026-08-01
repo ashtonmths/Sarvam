@@ -154,8 +154,7 @@ export async function backfill(orgId: number, from: Date): Promise<RollupResult>
    */
   const startOfDay = (date: Date) =>
     Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-  const days =
-    Math.round((startOfDay(new Date()) - startOfDay(from)) / 86_400_000) + 1;
+  const days = Math.round((startOfDay(new Date()) - startOfDay(from)) / 86_400_000) + 1;
   return rollupDaily(orgId, Math.max(1, days));
 }
 

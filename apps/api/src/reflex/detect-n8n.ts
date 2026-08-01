@@ -7,9 +7,9 @@ import {
 import type { ChangeDescriptor } from "@sadhak/shared/types";
 import { and, desc, eq } from "drizzle-orm";
 import { baseUrlFor, egressOptionsFor } from "../connectors/registry.js";
-import { pinnedFetch } from "../net/pinned-fetch.js";
 import { db } from "../db.js";
 import { enqueue } from "../jobs/queue.js";
+import { pinnedFetch } from "../net/pinned-fetch.js";
 import { getReadCredential } from "../vault/vault.js";
 import { recordDetection } from "./incidents.js";
 
