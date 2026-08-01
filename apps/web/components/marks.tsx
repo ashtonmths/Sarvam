@@ -5,19 +5,11 @@
  */
 
 export function LogoMark({ size = 26 }: { size?: number }) {
+  // The labyrinth mark. Served from public/logo.png at 192px, which stays
+  // crisp for every size the site renders it at.
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-      <rect width="64" height="64" rx="14" fill="var(--ink)" />
-      <path
-        d="M12 48 C12 30 22 16 32 16 C42 16 52 30 52 48 M20 48 C20 36 26 26 32 26 C38 26 44 36 44 48"
-        fill="none"
-        stroke="var(--panel)"
-        strokeWidth="3.2"
-        strokeLinecap="round"
-        strokeDasharray="3.5 5"
-      />
-      <circle cx="32" cy="40" r="5" fill="var(--thread)" />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src="/logo.png" alt="" width={size} height={size} aria-hidden="true" />
   );
 }
 
