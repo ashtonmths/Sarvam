@@ -8,7 +8,7 @@
 
 .shell {
   display: grid;
-  grid-template-columns: 232px 1fr;
+  grid-template-columns: auto 1fr;
   min-height: 100dvh;
   background: var(--paper);
 }
@@ -17,23 +17,82 @@
   position: sticky;
   top: 0;
   height: 100dvh;
+  width: 236px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 18px 14px;
+  gap: 16px;
+  padding: 16px 14px;
   border-right: 1px solid var(--line-soft);
   background: var(--panel);
+  transition: width 0.22s ease;
+}
+
+.shell__rail--min {
+  width: 72px;
+  padding-inline: 12px;
+}
+
+/* label text fades out of existence in the icon rail */
+.rail__text {
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.shell__rail--min .rail__text {
+  display: none;
+}
+
+.rail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.shell__rail--min .rail__head {
+  flex-direction: column;
+  gap: 10px;
 }
 
 .shell__rail .logo {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 8px;
+  padding: 4px 6px;
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 19px;
   letter-spacing: -0.02em;
+}
+
+.rail__toggle {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-faint);
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.rail__toggle:hover {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--card);
+}
+
+.rail__org-wrap {
+  position: relative;
+}
+
+.shell__rail--min .rail__org-wrap {
+  display: none;
 }
 
 .rail__org {
@@ -94,13 +153,42 @@
   flex-direction: column;
   gap: 2px;
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.rail__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 0 12px;
+  margin: 14px 0 6px;
+}
+
+.rail__nav .rail__label:first-child {
+  margin-top: 2px;
+}
+
+/* in the icon rail, section labels become dashed thread breaks */
+.shell__rail--min .rail__label {
+  padding: 0;
+  margin: 10px 6px;
+  height: 0;
+  overflow: hidden;
+  border-top: 1.5px dashed var(--line);
+  color: transparent;
 }
 
 .rail__item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 11px;
   padding: 9px 12px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   font-size: 14.5px;
   font-weight: 500;
@@ -110,6 +198,11 @@
     color 0.12s ease;
 }
 
+.shell__rail--min .rail__item {
+  justify-content: center;
+  padding: 11px 0;
+}
+
 .rail__item:hover {
   background: color-mix(in srgb, var(--card) 70%, transparent);
   color: var(--ink);
@@ -117,8 +210,15 @@
 
 .rail__item[aria-current="page"] {
   background: var(--card);
+  border-color: var(--line-soft);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgba(23, 25, 30, 0.05);
+  box-shadow:
+    0 1px 2px rgba(23, 25, 30, 0.05),
+    0 6px 14px -10px rgba(23, 25, 30, 0.25);
+}
+
+.rail__item[aria-current="page"] svg {
+  color: var(--thread);
 }
 
 .rail__item svg {
@@ -135,13 +235,125 @@
   color: var(--thread);
 }
 
+/* collapsed: the count becomes a dot riding the icon's corner */
+.shell__rail--min .rail__badge {
+  position: absolute;
+  top: 7px;
+  right: 13px;
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--thread);
+  color: transparent;
+  overflow: hidden;
+}
+
+/* ---- coverage card: the honest number, pinned where eyes rest ---- */
+
+.rail__card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 13px 14px;
+  background: var(--card);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 2px rgba(23, 25, 30, 0.04);
+  transition: border-color 0.15s ease;
+}
+
+.rail__card:hover {
+  border-color: var(--line);
+}
+
+.rail__card-eyebrow {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.rail__card-eyebrow span:last-child {
+  color: var(--thread);
+  letter-spacing: 0.04em;
+}
+
+.rail__card-meter {
+  display: block;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.rail__card-meter i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--thread);
+}
+
+.rail__card-note {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.shell__rail--min .rail__card {
+  display: none;
+}
+
+.rail__spark {
+  display: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-inline: auto;
+  border: 1px solid var(--thread-soft);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--thread);
+  transition: border-color 0.15s ease;
+}
+
+.rail__spark:hover {
+  border-color: var(--thread);
+}
+
+.shell__rail--min .rail__spark {
+  display: grid;
+}
+
+/* ---- footer group ---- */
+
+.rail__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
 .rail__user {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--line-soft);
+  padding: 10px 12px 2px;
   font-size: 13.5px;
+}
+
+.shell__rail--min .rail__user {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.shell__rail--min .rail__user-meta,
+.shell__rail--min .rail__signout {
+  display: none;
 }
 
 .rail__avatar {
@@ -217,8 +429,10 @@
   .shell {
     grid-template-columns: 1fr;
   }
-  .shell__rail {
+  .shell__rail,
+  .shell__rail--min {
     position: static;
+    width: auto;
     height: auto;
     flex-direction: row;
     align-items: center;
@@ -228,10 +442,49 @@
   }
   .rail__nav {
     flex-direction: row;
+    align-items: center;
+    overflow-y: visible;
+  }
+  .rail__toggle,
+  .rail__label,
+  .rail__card,
+  .rail__spark {
+    display: none;
+  }
+  .shell__rail--min .rail__text {
+    display: inline;
+  }
+  .shell__rail--min .rail__item {
+    padding: 9px 12px;
+  }
+  .shell__rail--min .rail__badge {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 1px 7px;
+    border-radius: 99px;
+    background: var(--thread-soft);
+    color: var(--thread);
+    overflow: visible;
+  }
+  .rail__foot {
+    flex-direction: row;
+    align-items: center;
+    border-top: 0;
+    padding-top: 0;
+    margin-left: auto;
   }
   .rail__user {
-    border-top: 0;
-    margin-left: auto;
+    padding: 0 4px;
+  }
+  .shell__rail--min .rail__user-meta {
+    display: block;
+  }
+  .shell__rail--min .rail__user {
+    justify-content: flex-start;
+  }
+  .rail__signout {
+    display: inline;
   }
   .shell__main {
     padding: 20px 18px 48px;
