@@ -117,7 +117,7 @@ export default function Decisions() {
                       .filter(Boolean)
                       .pop() ?? ""}
                   </Text>
-                  <Text style={s.rowMeta}>
+                  <Text style={s.rowMeta} numberOfLines={1}>
                     {d.mode} · {d.computedInMs}ms · {timeAgo(d.createdAt)}
                     {d.dryRun ? " · dry run" : ""}
                   </Text>

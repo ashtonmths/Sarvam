@@ -1,4 +1,4 @@
-import * as Notifications from "expo-notifications";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Platform } from "react-native";
 import { api, type DecisionRow, type DriftSummary, type Page } from "./api";
 
@@ -16,6 +16,44 @@ import { api, type DecisionRow, type DriftSummary, type Page } from "./api";
 
 export const POLL_MS = 60_000;
 
+/**
+ * Whether local pings can work at all here.
+ *
+ * Importing `expo-notifications` is not free: its entry module runs
+ * DevicePushTokenAutoRegistration at import time, which registers a *push
+ * token* listener whether or not the app ever asks for remote push. Expo Go on
+ * Android removed remote push in SDK 53, so that side effect throws there — and
+ * it threw during route load, because the Alerts screen imports this file. An
+ * app that only schedules local notifications was crashing on a feature it
+ * never used.
+ *
+ * There is no way to import the module without the registration, so the check
+ * has to happen before the import rather than around the calls.
+ */
+export const PINGS_SUPPORTED =
+  Platform.OS !== "web" &&
+  !(
+    Platform.OS === "android" &&
+    Constants.executionEnvironment === ExecutionEnvironment.StoreClient
+  );
+
+/** Why pings are off, for the screen to show instead of a dead switch. */
+export const PINGS_UNAVAILABLE_REASON =
+  Platform.OS === "web"
+    ? "Notifications are not available on web."
+    : "Expo Go dropped notification support on Android in SDK 53. Pings work in a development build or a release APK.";
+
+type NotificationsModule = typeof import("expo-notifications");
+
+let cached: NotificationsModule | null = null;
+
+/** Required on first use, never at module scope. Null where unsupported. */
+function notifications(): NotificationsModule | null {
+  if (!PINGS_SUPPORTED) return null;
+  if (!cached) cached = require("expo-notifications") as NotificationsModule;
+  return cached;
+}
+
 export interface Alert {
   id: string;
   kind: "block" | "drift";
@@ -28,8 +66,10 @@ let configured = false;
 
 export function configureNotifications() {
   if (configured) return;
+  const N = notifications();
+  if (!N) return;
   configured = true;
-  Notifications.setNotificationHandler({
+  N.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: false,
@@ -42,17 +82,19 @@ export function configureNotifications() {
 
 /** Asks once. A refusal is a valid answer — the in-app list still works. */
 export async function askPermission(): Promise<boolean> {
-  if (Platform.OS === "web") return false;
-  const existing = await Notifications.getPermissionsAsync();
+  const N = notifications();
+  if (!N) return false;
+  const existing = await N.getPermissionsAsync();
   if (existing.granted) return true;
-  const asked = await Notifications.requestPermissionsAsync();
+  const asked = await N.requestPermissionsAsync();
   return asked.granted;
 }
 
 export async function ping(alert: Alert) {
-  if (Platform.OS === "web") return;
+  const N = notifications();
+  if (!N) return;
   try {
-    await Notifications.scheduleNotificationAsync({
+    await N.scheduleNotificationAsync({
       content: { title: alert.title, body: alert.body },
       trigger: null,
     });

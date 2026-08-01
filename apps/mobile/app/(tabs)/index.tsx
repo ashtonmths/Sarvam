@@ -163,7 +163,7 @@ export default function Overview() {
                         .filter(Boolean)
                         .pop() ?? ""}
                     </Text>
-                    <Text style={s.rowMeta}>
+                    <Text style={s.rowMeta} numberOfLines={1}>
                       {d.mode} · {d.computedInMs}ms · {timeAgo(d.createdAt)}
                     </Text>
                   </View>

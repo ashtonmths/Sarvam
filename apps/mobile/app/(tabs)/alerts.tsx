@@ -6,6 +6,8 @@ import {
   askPermission,
   fetchAlerts,
   newSince,
+  PINGS_SUPPORTED,
+  PINGS_UNAVAILABLE_REASON,
   POLL_MS,
   ping,
 } from "../../lib/alerts";
@@ -102,13 +104,15 @@ export default function Alerts() {
           <View style={s.pingBody}>
             <Text style={s.pingLabel}>Notify me on this device</Text>
             <Text style={s.pingNote}>
-              Checks every {Math.round(POLL_MS / 1000)}s while the app is open. Not remote
-              push — closing the app stops the checks.
+              {PINGS_SUPPORTED
+                ? `Checks every ${Math.round(POLL_MS / 1000)}s while the app is open. Not remote push — closing the app stops the checks.`
+                : PINGS_UNAVAILABLE_REASON}
             </Text>
           </View>
           <Switch
             value={pingsOn}
             onValueChange={togglePings}
+            disabled={!PINGS_SUPPORTED}
             trackColor={{ true: T.thread, false: T.line }}
           />
         </View>
