@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Footer } from "../components/footer";
-import { HeroBackdrop, HeroGraph, ThreadLines } from "../components/hero-graph";
+import { Footer } from "../../components/footer";
+import { HeroBackdrop, HeroGraph, ThreadLines } from "../../components/hero-graph";
 import {
   GlyphBranch,
   GlyphChat,
@@ -8,9 +8,14 @@ import {
   GlyphFlow,
   GlyphGrid,
   LogoMark,
-} from "../components/marks";
-import { Nav } from "../components/nav";
-import { AgentRefusal, GiveUpTrace, HistorianTrace, Msg } from "../components/product-cards";
+} from "../../components/marks";
+import { Nav } from "../../components/nav";
+import {
+  AgentRefusal,
+  GiveUpTrace,
+  HistorianTrace,
+  Msg,
+} from "../../components/product-cards";
 
 export default function Home() {
   return (
@@ -23,7 +28,11 @@ export default function Home() {
             <div className="hero__panel">
               <HeroBackdrop />
 
-              <span className="chip" style={{ top: "11%", left: "6%" }} aria-hidden="true">
+              <span
+                className="chip"
+                style={{ top: "11%", left: "6%" }}
+                aria-hidden="true"
+              >
                 <GlyphFlow />
               </span>
               <span
@@ -64,9 +73,9 @@ export default function Home() {
                   See the blast radius <em>before</em> you break it
                 </h1>
                 <p className="hero__lede">
-                  Sadhak keeps a living map of your automations, data and APIs,
-                  remembers why every connection exists, and gates the changes
-                  that would take revenue down with them.
+                  Sadhak keeps a living map of your automations, data and APIs, remembers
+                  why every connection exists, and gates the changes that would take
+                  revenue down with them.
                 </p>
                 <div className="hero__actions">
                   <Link href="/signup" className="btn btn--ink">
@@ -122,8 +131,8 @@ export default function Home() {
               <span className="eyebrow eyebrow--thread">How it works</span>
               <h2 className="section__title">Map. Explain. Gate.</h2>
               <p className="section__lede">
-                Three moves, in order. The map makes the graph, the graph makes
-                the rationale useful, and both together make the gate possible.
+                Three moves, in order. The map makes the graph, the graph makes the
+                rationale useful, and both together make the gate possible.
               </p>
             </div>
 
@@ -132,9 +141,9 @@ export default function Home() {
                 <span className="step__no">01 · Map</span>
                 <h3 className="step__title">Crawl everything that runs</h3>
                 <p className="step__body">
-                  Cartographer reads your n8n flows, Airtable bases, Postgres
-                  schemas and GitHub repos, and builds one dependency graph of
-                  who reads what, who writes what, and what breaks what.
+                  Cartographer reads your n8n flows, Airtable bases, Postgres schemas and
+                  GitHub repos, and builds one dependency graph of who reads what, who
+                  writes what, and what breaks what.
                 </p>
                 <div className="step__art trace">
                   <div className="trace__line">
@@ -160,18 +169,26 @@ export default function Home() {
                 <span className="step__no">02 · Explain</span>
                 <h3 className="step__title">Recover the why</h3>
                 <p className="step__body">
-                  Historian agents investigate every unexplained edge: they
-                  search Slack, follow threads, check commits, and attach the
-                  human reasoning behind each connection with a source link.
+                  Historian agents investigate every unexplained edge: they search Slack,
+                  follow threads, check commits, and attach the human reasoning behind
+                  each connection with a source link.
                 </p>
                 <div className="step__art">
                   <Msg bare author="@priya" meta="#ops · Mar 2024">
                     &ldquo;feeds EU VAT reporting, do not drop&rdquo;
                   </Msg>
                   <div className="trace" style={{ marginTop: 4 }}>
-                    <div className="trace__line" style={{ borderTop: "1px dashed var(--line-soft)", borderBottom: "none" }}>
+                    <div
+                      className="trace__line"
+                      style={{
+                        borderTop: "1px dashed var(--line-soft)",
+                        borderBottom: "none",
+                      }}
+                    >
                       <span className="trace__step">→</span>
-                      <span className="trace__result">pinned to vat_rate → billing-sync</span>
+                      <span className="trace__result">
+                        pinned to vat_rate → billing-sync
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -181,12 +198,19 @@ export default function Home() {
                 <span className="step__no">03 · Gate</span>
                 <h3 className="step__title">Stand in the change path</h3>
                 <p className="step__body">
-                  Every proposed change gets a deterministic verdict with the
-                  evidence attached: approve, warn, or block. What cannot be
-                  blocked gets detected in seconds and reverted in one click.
+                  Every proposed change gets a deterministic verdict with the evidence
+                  attached: approve, warn, or block. What cannot be blocked gets detected
+                  in seconds and reverted in one click.
                 </p>
                 <div className="step__art">
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                      alignItems: "flex-start",
+                    }}
+                  >
                     <span className="verdict-tag verdict-tag--approve">
                       <span className="verdict-tag__dot" /> approve · rename field
                     </span>
@@ -198,9 +222,20 @@ export default function Home() {
                     </span>
                   </div>
                   <div className="trace" style={{ marginTop: 4 }}>
-                    <div className="trace__line" style={{ borderTop: "1px dashed var(--line-soft)", borderBottom: "none" }}>
+                    <div
+                      className="trace__line"
+                      style={{
+                        borderTop: "1px dashed var(--line-soft)",
+                        borderBottom: "none",
+                      }}
+                    >
                       <span className="trace__step">→</span>
-                      <span className="trace__note" style={{ marginLeft: 0, textAlign: "left" }}>same graph, same change, same verdict</span>
+                      <span
+                        className="trace__note"
+                        style={{ marginLeft: 0, textAlign: "left" }}
+                      >
+                        same graph, same change, same verdict
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -217,30 +252,29 @@ export default function Home() {
                 <span className="eyebrow eyebrow--thread">Agents that investigate</span>
                 <h2>Twelve investigations at once, none of them guessing</h2>
                 <p>
-                  When someone hands in notice, Sadhak finds every connection
-                  only they can explain and fans out an agent per edge. Each one
-                  searches, reads, follows leads, and decides for itself when it
-                  actually knows the answer.
+                  When someone hands in notice, Sadhak finds every connection only they
+                  can explain and fans out an agent per edge. Each one searches, reads,
+                  follows leads, and decides for itself when it actually knows the answer.
                 </p>
                 <ul className="split__points">
                   <li>
                     <span>
-                      <strong>Real tool loops, visible traces.</strong> Every
-                      step an agent takes is recorded and rendered, so the
-                      reasoning path is a product surface, not a log file.
+                      <strong>Real tool loops, visible traces.</strong> Every step an
+                      agent takes is recorded and rendered, so the reasoning path is a
+                      product surface, not a log file.
                     </span>
                   </li>
                   <li>
                     <span>
-                      <strong>Allowed to give up.</strong> An agent that must
-                      find an answer will invent one. Ours flag what they cannot
-                      explain instead of confabulating.
+                      <strong>Allowed to give up.</strong> An agent that must find an
+                      answer will invent one. Ours flag what they cannot explain instead
+                      of confabulating.
                     </span>
                   </li>
                   <li>
                     <span>
-                      <strong>Humans confirm, always.</strong> Drafts never
-                      count toward coverage until a person approves them.
+                      <strong>Humans confirm, always.</strong> Drafts never count toward
+                      coverage until a person approves them.
                     </span>
                   </li>
                 </ul>
@@ -260,12 +294,14 @@ export default function Home() {
               <AgentRefusal />
               <div className="split__copy">
                 <span className="eyebrow eyebrow--thread">Built for the agentic era</span>
-                <h2>Everyone ships agents that act. We ship the thing that tells them no.</h2>
+                <h2>
+                  Everyone ships agents that act. We ship the thing that tells them no.
+                </h2>
                 <p>
-                  AI agents are the fastest growing source of unreviewed
-                  production changes. Sadhak exposes its gate over MCP, so any
-                  agent must ask before it mutates a connected system, and gets
-                  refused with reasons when the blast radius says so.
+                  AI agents are the fastest growing source of unreviewed production
+                  changes. Sadhak exposes its gate over MCP, so any agent must ask before
+                  it mutates a connected system, and gets refused with reasons when the
+                  blast radius says so.
                 </p>
                 <div>
                   <Link href="/product/gate" className="btn btn--ghost btn--small">
@@ -289,8 +325,8 @@ export default function Home() {
                 <span className="eyebrow">Blast radius</span>
                 <h3 className="pillar__title">Know what a change touches</h3>
                 <p className="pillar__body">
-                  Scored, decaying impact across every downstream flow, table
-                  and report, with the rationale for each dependency attached.
+                  Scored, decaying impact across every downstream flow, table and report,
+                  with the rationale for each dependency attached.
                 </p>
                 <span className="pillar__link">Explore the graph →</span>
               </Link>
@@ -298,9 +334,8 @@ export default function Home() {
                 <span className="eyebrow">Knowledge capture</span>
                 <h3 className="pillar__title">Keep the why when people leave</h3>
                 <p className="pillar__body">
-                  Investigation agents recover the reasoning behind every
-                  connection from Slack, PRs and commits, before the person who
-                  knows it resigns.
+                  Investigation agents recover the reasoning behind every connection from
+                  Slack, PRs and commits, before the person who knows it resigns.
                 </p>
                 <span className="pillar__link">Meet the agents →</span>
               </Link>
@@ -308,8 +343,8 @@ export default function Home() {
                 <span className="eyebrow">Enforcement</span>
                 <h3 className="pillar__title">Gate the change path</h3>
                 <p className="pillar__body">
-                  True blocks where a hook exists, eleven second reverts where
-                  one does not, and an MCP gate every AI agent has to ask first.
+                  True blocks where a hook exists, eleven second reverts where one does
+                  not, and an MCP gate every AI agent has to ask first.
                 </p>
                 <span className="pillar__link">See the gate →</span>
               </Link>
@@ -327,8 +362,8 @@ export default function Home() {
               </span>
               <h2>CI got gates a decade ago. Your operations never did.</h2>
               <p>
-                Connect n8n, Airtable and Slack, watch the map draw itself, and
-                put a gate on the layer where your revenue actually runs.
+                Connect n8n, Airtable and Slack, watch the map draw itself, and put a gate
+                on the layer where your revenue actually runs.
               </p>
               <Link href="/signup" className="btn btn--paper">
                 Get early access <span className="btn__arrow">→</span>

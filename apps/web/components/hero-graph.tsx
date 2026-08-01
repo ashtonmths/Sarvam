@@ -52,16 +52,20 @@ export function HeroBackdrop() {
       preserveAspectRatio="none"
       aria-hidden="true"
     >
-      <g
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1"
-        strokeDasharray="4 7"
-      >
+      <g fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="4 7">
         <path d="M 240 0 V 180 Q 240 210 210 210 H 0" vectorEffect="non-scaling-stroke" />
-        <path d="M 960 0 V 150 Q 960 180 990 180 H 1200" vectorEffect="non-scaling-stroke" />
-        <path d="M 130 760 V 560 Q 130 530 160 530 H 240" vectorEffect="non-scaling-stroke" />
-        <path d="M 1070 760 V 540 Q 1070 510 1040 510 H 960" vectorEffect="non-scaling-stroke" />
+        <path
+          d="M 960 0 V 150 Q 960 180 990 180 H 1200"
+          vectorEffect="non-scaling-stroke"
+        />
+        <path
+          d="M 130 760 V 560 Q 130 530 160 530 H 240"
+          vectorEffect="non-scaling-stroke"
+        />
+        <path
+          d="M 1070 760 V 540 Q 1070 510 1040 510 H 960"
+          vectorEffect="non-scaling-stroke"
+        />
       </g>
     </svg>
   );

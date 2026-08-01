@@ -13,7 +13,15 @@ interface FeaturePageProps {
   next?: { href: string; title: string };
 }
 
-export function FeaturePage({ eyebrow, title, lede, visual, children, prev, next }: FeaturePageProps) {
+export function FeaturePage({
+  eyebrow,
+  title,
+  lede,
+  visual,
+  children,
+  prev,
+  next,
+}: FeaturePageProps) {
   return (
     <>
       <Nav />
@@ -55,8 +63,8 @@ export function FeaturePage({ eyebrow, title, lede, visual, children, prev, next
             <div className="cta__panel">
               <h2>Put a thread through your labyrinth</h2>
               <p>
-                Connect three systems and watch the map draw itself. Early
-                access is open now.
+                Connect three systems and watch the map draw itself. Early access is open
+                now.
               </p>
               <Link href="/signup" className="btn btn--paper">
                 Get early access <span className="btn__arrow">→</span>

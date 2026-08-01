@@ -1,13 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { DEMO_CREDENTIALS, signIn, signUp } from "../lib/session";
 import { ThreadLines } from "./hero-graph";
 import { LogoMark } from "./marks";
 
-export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
-  const [submitted, setSubmitted] = useState(false);
+function AuthFormInner({ mode }: { mode: "signin" | "signup" }) {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const isSignup = mode === "signup";
+  const next = searchParams.get("next") ?? "/app";
 
   return (
     <div className="auth">
@@ -28,8 +34,7 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             <p className="auth__sub">
               {isSignup ? (
                 <>
-                  Already mapped your labyrinth?{" "}
-                  <Link href="/signin">Sign in</Link>
+                  Already mapped your labyrinth? <Link href="/signin">Sign in</Link>
                 </>
               ) : (
                 <>
@@ -41,25 +46,67 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
 
           <form
             className="auth__form"
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
               event.preventDefault();
-              setSubmitted(true);
+              setBusy(true);
+              setError(null);
+
+              const data = new FormData(event.currentTarget);
+              const email = String(data.get("email") ?? "");
+              const password = String(data.get("password") ?? "");
+
+              const result = isSignup
+                ? await signUp({
+                    name: String(data.get("name") ?? ""),
+                    email,
+                    password,
+                    company: String(data.get("org") ?? "") || undefined,
+                  })
+                : await signIn(email, password);
+
+              if (result.ok) {
+                router.push(next.startsWith("/") ? next : "/app");
+                router.refresh();
+              } else {
+                setError(result.error);
+                setBusy(false);
+              }
             }}
           >
             {isSignup && (
               <div className="field">
                 <label htmlFor="name">Name</label>
-                <input id="name" name="name" type="text" placeholder="Priya Sharma" autoComplete="name" required />
+                <input
+                  id="name"
+                  name="name"
+                  type="text"
+                  placeholder="Priya Sharma"
+                  autoComplete="name"
+                  required
+                />
               </div>
             )}
             <div className="field">
               <label htmlFor="email">Work email</label>
-              <input id="email" name="email" type="email" placeholder="priya@company.com" autoComplete="email" required />
+              <input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="priya@company.com"
+                autoComplete="email"
+                required
+              />
             </div>
             {isSignup && (
               <div className="field">
                 <label htmlFor="org">Company</label>
-                <input id="org" name="org" type="text" placeholder="Acme Operations" autoComplete="organization" />
+                <input
+                  id="org"
+                  name="org"
+                  type="text"
+                  placeholder="Acme Operations"
+                  autoComplete="organization"
+                />
               </div>
             )}
             <div className="field">
@@ -71,18 +118,30 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
                 placeholder={isSignup ? "At least 12 characters" : "Your password"}
                 autoComplete={isSignup ? "new-password" : "current-password"}
                 required
-                minLength={isSignup ? 12 : undefined}
               />
             </div>
 
-            <button type="submit" className="btn btn--ink" style={{ justifyContent: "center" }}>
+            <button
+              type="submit"
+              className="btn btn--ink"
+              style={{ justifyContent: "center" }}
+              disabled={busy}
+              data-testid="auth-submit"
+            >
               {isSignup ? "Create account" : "Sign in"}
             </button>
 
-            {submitted && (
-              <p className="auth__notice" role="status">
-                Nothing is wired behind this button yet. Accounts open when the
-                API lands, and this form will start working without changing.
+            {error && (
+              <p className="auth__notice" role="alert">
+                {error}
+              </p>
+            )}
+
+            {!isSignup && (
+              <p className="auth__notice" role="note">
+                Seeded demo account (<code>pnpm seed</code>):{" "}
+                <code>{DEMO_CREDENTIALS.email}</code> /{" "}
+                <code>{DEMO_CREDENTIALS.password}</code>
               </p>
             )}
           </form>
@@ -93,12 +152,20 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
         <ThreadLines className="auth__art-thread" />
         <blockquote className="auth__art-quote">
           <p>
-            &ldquo;The one person who knew why that field existed left in
-            March.&rdquo;
+            &ldquo;The one person who knew why that field existed left in March.&rdquo;
           </p>
           <cite>Every ops team, eventually. Sadhak remembers the why.</cite>
         </blockquote>
       </div>
     </div>
+  );
+}
+
+export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
+  // useSearchParams needs a Suspense boundary during static generation.
+  return (
+    <Suspense fallback={null}>
+      <AuthFormInner mode={mode} />
+    </Suspense>
   );
 }

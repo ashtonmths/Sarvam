@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Footer } from "../../components/footer";
-import { Nav } from "../../components/nav";
+import { Footer } from "../../../components/footer";
+import { Nav } from "../../../components/nav";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -79,12 +79,14 @@ export default function PricingPage() {
           <section className="fpage-hero">
             <div className="fpage-hero__inner" style={{ maxWidth: 760 }}>
               <span className="eyebrow eyebrow--thread">Pricing</span>
-              <h1 className="fpage-hero__title">The map is free. The gate is the product.</h1>
+              <h1 className="fpage-hero__title">
+                The map is free. The gate is the product.
+              </h1>
               <p className="fpage-hero__lede">
-                Seats punish adoption, and connector counts punish exactly the
-                graph growth that makes Sadhak useful. So tiers cut on
-                enforcement instead: pay when Sadhak stands in your change
-                path, not when your team looks at the map.
+                Seats punish adoption, and connector counts punish exactly the graph
+                growth that makes Sadhak useful. So tiers cut on enforcement instead: pay
+                when Sadhak stands in your change path, not when your team looks at the
+                map.
               </p>
             </div>
           </section>
@@ -121,12 +123,11 @@ export default function PricingPage() {
 
           <section className="frow">
             <div className="fnote">
-              <strong>Why not per connector?</strong> Because every connector
-              you add makes the map more complete and the verdicts more
-              accurate. Charging for connectors would price you out of the
-              thing that protects you. Retention comes from the gate: teams
-              stop paying for gates only when they stop changing things, which
-              is never.
+              <strong>Why not per connector?</strong> Because every connector you add
+              makes the map more complete and the verdicts more accurate. Charging for
+              connectors would price you out of the thing that protects you. Retention
+              comes from the gate: teams stop paying for gates only when they stop
+              changing things, which is never.
             </div>
           </section>
         </div>
@@ -136,8 +137,8 @@ export default function PricingPage() {
             <div className="cta__panel">
               <h2>Start with the free map</h2>
               <p>
-                Connect n8n, Airtable and Slack. The first look at your own
-                labyrinth is usually enough.
+                Connect n8n, Airtable and Slack. The first look at your own labyrinth is
+                usually enough.
               </p>
               <Link href="/signup" className="btn btn--paper">
                 Get early access <span className="btn__arrow">→</span>

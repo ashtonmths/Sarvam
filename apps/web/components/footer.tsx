@@ -13,9 +13,9 @@ export function Footer() {
                 sadhak
               </Link>
               <p className="footer__tagline">
-                Every company&apos;s operations are a labyrinth. Sadhak is the
-                thread: it knows every passage, remembers why each wall was
-                built, and stops you before you knock down a load bearing one.
+                Every company&apos;s operations are a labyrinth. Sadhak is the thread: it
+                knows every passage, remembers why each wall was built, and stops you
+                before you knock down a load bearing one.
               </p>
             </div>
 

@@ -1,7 +1,7 @@
-import type { CSSProperties } from "react";
 import type { Metadata } from "next";
-import { FeaturePage } from "../../../components/feature-page";
-import { AgentRefusal } from "../../../components/product-cards";
+import type { CSSProperties } from "react";
+import { FeaturePage } from "../../../../components/feature-page";
+import { AgentRefusal } from "../../../../components/product-cards";
 
 export const metadata: Metadata = {
   title: "The gate",
@@ -38,8 +38,13 @@ function EngineScene() {
   return (
     <div style={{ width: "100%", maxWidth: 940 }}>
       <div className="graph" style={{ margin: 0, animation: "none" }}>
-        <div className="graph__col graph__col--card" style={{ "--col-basis": "280px" } as CSSProperties}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
+        <div
+          className="graph__col graph__col--card"
+          style={{ "--col-basis": "280px" } as CSSProperties}
+        >
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}
+          >
             <div className="scene-line">
               <strong>pull request</strong> deletes the field in git
             </div>
@@ -65,15 +70,29 @@ function EngineScene() {
 
         <div className="graph__link" aria-hidden="true" />
 
-        <div className="graph__col graph__col--card" style={{ "--col-basis": "250px" } as CSSProperties}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
-            <span className="verdict-tag verdict-tag--block" style={{ alignSelf: "stretch" }}>
+        <div
+          className="graph__col graph__col--card"
+          style={{ "--col-basis": "250px" } as CSSProperties}
+        >
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}
+          >
+            <span
+              className="verdict-tag verdict-tag--block"
+              style={{ alignSelf: "stretch" }}
+            >
               <span className="verdict-tag__dot" /> merge blocked
             </span>
-            <span className="verdict-tag verdict-tag--block" style={{ alignSelf: "stretch" }}>
+            <span
+              className="verdict-tag verdict-tag--block"
+              style={{ alignSelf: "stretch" }}
+            >
               <span className="verdict-tag__dot" /> mutation refused
             </span>
-            <span className="verdict-tag verdict-tag--warn" style={{ alignSelf: "stretch" }}>
+            <span
+              className="verdict-tag verdict-tag--warn"
+              style={{ alignSelf: "stretch" }}
+            >
               <span className="verdict-tag__dot" /> reverted in 11s
             </span>
           </div>
@@ -125,15 +144,14 @@ export default function GatePage() {
             <span className="eyebrow">The agentic era</span>
             <h2>The gate other agents have to ask</h2>
             <p>
-              Every team is shipping agents that act on production systems.
-              Almost nobody is shipping the layer that governs them. Sadhak
-              exposes its verdict engine as an MCP tool, so any agent, from any
-              vendor, must request permission before mutating a connected
-              system.
+              Every team is shipping agents that act on production systems. Almost nobody
+              is shipping the layer that governs them. Sadhak exposes its verdict engine
+              as an MCP tool, so any agent, from any vendor, must request permission
+              before mutating a connected system.
             </p>
             <p>
-              A refusal comes back with the blast radius and the reasoning, so
-              the agent can explain to its operator exactly why it stopped.
+              A refusal comes back with the blast radius and the reasoning, so the agent
+              can explain to its operator exactly why it stopped.
             </p>
           </div>
         </div>
@@ -145,10 +163,10 @@ export default function GatePage() {
             <span className="eyebrow">Reflex, in real time</span>
             <h2>Eleven seconds from mistake to undone</h2>
             <p>
-              The field is deleted at 14:03:07. The webhook lands at 14:03:09.
-              The radius is computed in forty milliseconds, the Slack alert is
-              in front of the person who did it, and the revert is one click.
-              What used to be a ruined weekend is now a shrug.
+              The field is deleted at 14:03:07. The webhook lands at 14:03:09. The radius
+              is computed in forty milliseconds, the Slack alert is in front of the person
+              who did it, and the revert is one click. What used to be a ruined weekend is
+              now a shrug.
             </p>
           </div>
           <div className="pcard trace" style={{ width: "100%" }}>
@@ -166,7 +184,10 @@ export default function GatePage() {
               ] as const
             ).map(([time, event]) => (
               <div className="trace__line" key={time + event}>
-                <span className="trace__note" style={{ marginLeft: 0, textAlign: "left" }}>
+                <span
+                  className="trace__note"
+                  style={{ marginLeft: 0, textAlign: "left" }}
+                >
                   {time}
                 </span>
                 <span style={{ color: "var(--ink-soft)" }}>{event}</span>
@@ -178,10 +199,10 @@ export default function GatePage() {
 
       <section className="frow">
         <div className="fnote">
-          <strong>Why honesty is the feature.</strong> A vendor that claims to
-          block GUI deletions is describing a modal, not a gate. Naming exactly
-          what each mode can and cannot enforce is what lets an ops team trust
-          the verdicts, and trust is the entire product.
+          <strong>Why honesty is the feature.</strong> A vendor that claims to block GUI
+          deletions is describing a modal, not a gate. Naming exactly what each mode can
+          and cannot enforce is what lets an ops team trust the verdicts, and trust is the
+          entire product.
         </div>
       </section>
     </FeaturePage>

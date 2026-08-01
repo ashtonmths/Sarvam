@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
+import { hasSessionCookie } from "../lib/session";
 import { LogoMark } from "./marks";
 
 // The three product pages are a guided walkthrough with prev/next pagers,
@@ -16,7 +17,12 @@ const TRAIL = [
 export function Nav() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
   const pathname = usePathname();
+
+  useEffect(() => {
+    setSignedIn(hasSessionCookie());
+  }, [pathname]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -64,22 +70,38 @@ export function Nav() {
             Pricing
           </Link>
           <div className="nav__cta-mobile">
-            <Link href="/signin" className="btn btn--ghost btn--small">
-              Sign in
-            </Link>
-            <Link href="/signup" className="btn btn--ink btn--small">
-              Get started
-            </Link>
+            {signedIn ? (
+              <Link href="/app" className="btn btn--ink btn--small">
+                Open app <span className="btn__arrow">-&gt;</span>
+              </Link>
+            ) : (
+              <>
+                <Link href="/signin" className="btn btn--ghost btn--small">
+                  Sign in
+                </Link>
+                <Link href="/signup" className="btn btn--ink btn--small">
+                  Get started
+                </Link>
+              </>
+            )}
           </div>
         </nav>
 
         <div className="nav__actions">
-          <Link href="/signin" className="nav__signin nav__cta">
-            Sign in
-          </Link>
-          <Link href="/signup" className="btn btn--ink btn--small nav__cta">
-            Get started
-          </Link>
+          {signedIn ? (
+            <Link href="/app" className="btn btn--ink btn--small nav__cta">
+              Open app <span className="btn__arrow">-&gt;</span>
+            </Link>
+          ) : (
+            <>
+              <Link href="/signin" className="nav__signin nav__cta">
+                Sign in
+              </Link>
+              <Link href="/signup" className="btn btn--ink btn--small nav__cta">
+                Get started
+              </Link>
+            </>
+          )}
           <button
             type="button"
             className="nav__toggle"

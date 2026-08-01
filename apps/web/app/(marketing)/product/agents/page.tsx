@@ -1,7 +1,7 @@
-import type { CSSProperties } from "react";
 import type { Metadata } from "next";
-import { FeaturePage, FeatureRow } from "../../../components/feature-page";
-import { GiveUpTrace, HistorianTrace } from "../../../components/product-cards";
+import type { CSSProperties } from "react";
+import { FeaturePage, FeatureRow } from "../../../../components/feature-page";
+import { GiveUpTrace, HistorianTrace } from "../../../../components/product-cards";
 
 export const metadata: Metadata = {
   title: "Agents",
@@ -38,7 +38,10 @@ function LoopScene() {
   return (
     <div style={{ width: "100%", maxWidth: 900 }}>
       <div className="graph" style={{ margin: 0, animation: "none" }}>
-        <div className="graph__col graph__col--card" style={{ "--col-basis": "300px" } as CSSProperties}>
+        <div
+          className="graph__col graph__col--card"
+          style={{ "--col-basis": "300px" } as CSSProperties}
+        >
           <div className="pcard" style={{ width: "100%" }}>
             <div className="pcard__eyebrow">
               <span>Unexplained edge</span>
@@ -66,12 +69,23 @@ function LoopScene() {
 
         <div className="graph__link" aria-hidden="true" />
 
-        <div className="graph__col graph__col--card" style={{ "--col-basis": "300px" } as CSSProperties}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
-            <span className="verdict-tag verdict-tag--approve" style={{ alignSelf: "stretch" }}>
+        <div
+          className="graph__col graph__col--card"
+          style={{ "--col-basis": "300px" } as CSSProperties}
+        >
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}
+          >
+            <span
+              className="verdict-tag verdict-tag--approve"
+              style={{ alignSelf: "stretch" }}
+            >
               <span className="verdict-tag__dot" /> drafted · with source link
             </span>
-            <span className="verdict-tag verdict-tag--warn" style={{ alignSelf: "stretch" }}>
+            <span
+              className="verdict-tag verdict-tag--warn"
+              style={{ alignSelf: "stretch" }}
+            >
               <span className="verdict-tag__dot" /> gave up · flagged honestly
             </span>
           </div>
@@ -98,22 +112,22 @@ export default function AgentsPage() {
         copy={
           <>
             <p>
-              Each agent gets a goal, six tools, and permission to fail. The
-              model picks a tool, observes the result, and repeats until it
-              either proposes a rationale with a source link, or gives up.
+              Each agent gets a goal, six tools, and permission to fail. The model picks a
+              tool, observes the result, and repeats until it either proposes a rationale
+              with a source link, or gives up.
             </p>
             <ul className="split__points">
               <li>
                 <span>
-                  <strong>Every claim carries a link.</strong> A rationale
-                  without a clickable source does not enter the knowledge base.
+                  <strong>Every claim carries a link.</strong> A rationale without a
+                  clickable source does not enter the knowledge base.
                 </span>
               </li>
               <li>
                 <span>
-                  <strong>give_up is a feature.</strong> An agent forced to
-                  answer will invent one, and a fabricated rationale is worse
-                  than none, because the next engineer will trust it.
+                  <strong>give_up is a feature.</strong> An agent forced to answer will
+                  invent one, and a fabricated rationale is worse than none, because the
+                  next engineer will trust it.
                 </span>
               </li>
             </ul>
@@ -141,15 +155,14 @@ export default function AgentsPage() {
         copy={
           <>
             <p>
-              &ldquo;Rahul is leaving&rdquo; becomes a query: every edge whose
-              reasoning lives only in his head. Each one spawns an independent
-              investigation, all running concurrently, traces streaming in as
-              they work.
+              &ldquo;Rahul is leaving&rdquo; becomes a query: every edge whose reasoning
+              lives only in his head. Each one spawns an independent investigation, all
+              running concurrently, traces streaming in as they work.
             </p>
             <p>
-              Minutes later: nine drafted explanations queued for human
-              confirmation, three honestly flagged as unexplained. The exit
-              interview wrote itself, before the exit.
+              Minutes later: nine drafted explanations queued for human confirmation,
+              three honestly flagged as unexplained. The exit interview wrote itself,
+              before the exit.
             </p>
           </>
         }
@@ -193,9 +206,8 @@ export default function AgentsPage() {
             Two investigations, exactly as they ran
           </h2>
           <p className="section__lede">
-            Traces are the interface, not a log file. One agent finds the
-            answer and drafts it with a source. The other runs out of evidence
-            and says so.
+            Traces are the interface, not a log file. One agent finds the answer and
+            drafts it with a source. The other runs out of evidence and says so.
           </p>
         </div>
         <div
@@ -213,10 +225,10 @@ export default function AgentsPage() {
 
       <section className="frow">
         <div className="fnote">
-          <strong>Humans stay in the loop.</strong> Agent drafts sit in a review
-          queue and never count toward coverage until a person confirms them.
-          The system cannot inflate its own numbers, which is exactly what an
-          auditor, or a judge, will ask about first.
+          <strong>Humans stay in the loop.</strong> Agent drafts sit in a review queue and
+          never count toward coverage until a person confirms them. The system cannot
+          inflate its own numbers, which is exactly what an auditor, or a judge, will ask
+          about first.
         </div>
       </section>
     </FeaturePage>
