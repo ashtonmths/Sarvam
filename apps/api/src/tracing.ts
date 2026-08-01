@@ -19,7 +19,7 @@ import { config } from "./config.js";
  * `OTEL_EXPORTER_OTLP_ENDPOINT` being unset means the SDK never starts and
  * every span below becomes a no-op the runtime discards.
  *
- * The span names double as the SLO vocabulary in `docs/SLO.md`, so a latency
+ * The span names double as the SLO vocabulary, so a latency
  * objective and the thing that measures it cannot drift into describing
  * different operations.
  */

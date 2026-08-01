@@ -6,7 +6,7 @@ import type { InstanceHttp } from "./http.js";
 export { CONNECTOR_SLUGS } from "@sadhak/shared/types";
 export type { ConnectorSlug };
 
-/** Published verbatim in docs/connectors/ — the buyer's security reviewer reads these. */
+/** A buyer's security reviewer reads these, so `purpose` is written for them. */
 export interface ScopeSpec {
   scope: string;
   purpose: string;

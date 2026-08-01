@@ -71,12 +71,24 @@ githubRoutes.post(
       .object({ installationId: z.number().int().positive() })
       .parse(await c.req.json());
 
+    /**
+     * `orgId IS NULL` is the ownership proof. Without it the predicate matches
+     * an installation another org has already claimed, and any admin who can
+     * read an installation id could re-point someone else's repositories at
+     * their own graph — their verdicts on the victim's merges, the victim's
+     * diffs in their UI, and the victim's gate silently dark.
+     *
+     * Claiming is therefore first-come-once. Re-linking after a genuine
+     * transfer means unlinking first, which is an audited act by the org that
+     * currently holds it.
+     */
     const updated = await db
       .update(githubInstallations)
       .set({ orgId })
       .where(
         and(
           eq(githubInstallations.installationId, body.installationId),
+          isNull(githubInstallations.orgId),
           isNull(githubInstallations.removedAt),
         ),
       )
@@ -84,7 +96,7 @@ githubRoutes.post(
 
     if (updated.length === 0) {
       throw new NotFoundError(
-        "No such installation — install the Sadhak app on the repository first, then link it here",
+        "No such unclaimed installation — install the Sadhak app on the repository first, then link it here. An installation already linked to an organisation must be unlinked there before it can be moved.",
       );
     }
 
@@ -96,21 +108,15 @@ githubRoutes.post(
   },
 );
 
-/** Unlinked installations, so an admin can see what is waiting to be claimed. */
-githubRoutes.get(
-  "/github/installations/pending",
-  requireCapability("connector:manage"),
-  async (c) => {
-    const rows = await db
-      .select({
-        installationId: githubInstallations.installationId,
-        accountLogin: githubInstallations.accountLogin,
-        createdAt: githubInstallations.createdAt,
-      })
-      .from(githubInstallations)
-      .where(
-        and(isNull(githubInstallations.orgId), isNull(githubInstallations.removedAt)),
-      );
-    return c.json({ items: rows });
-  },
-);
+/**
+ * There is deliberately no endpoint listing unclaimed installations.
+ *
+ * An unclaimed row has no org by definition, so such a list cannot be scoped
+ * to the caller: it would hand every admin the installation ids and account
+ * logins of every other customer mid-onboarding, which is both a disclosure in
+ * its own right and exactly the input needed to claim one.
+ *
+ * An admin links using the installation id GitHub shows them at install time
+ * (the trailing number in the settings/installations URL), which they have and
+ * strangers do not.
+ */

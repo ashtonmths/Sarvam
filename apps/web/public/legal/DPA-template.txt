@@ -1,0 +1,148 @@
+# Data Processing Agreement (template)
+
+**Version 1.0 — effective 26 July 2026**
+
+> **Drafted, not yet reviewed by counsel.** This template was written from
+> standard controller/processor terms and checked line by line against what
+> Sadhak's code actually does. It has not been through legal review, and the
+> operating entity is not yet incorporated — so the parties block below cannot
+> be completed on our side yet. If you need a counsel-reviewed and
+> countersigned DPA before connecting a production system, say so and we will
+> tell you plainly where we stand rather than sending this back signed.
+
+---
+
+## 1. Parties and roles
+
+**Controller:** the customer organisation using Sadhak.
+**Processor:** Sadhak (the Finite Loop Club project).
+
+The Controller decides which systems to connect and which channels to mine. The
+Processor processes personal data only to provide the service, and only on the
+Controller's documented instructions — of which connecting a connector and
+selecting a mining scope are the operative ones.
+
+## 2. Subject matter and duration
+
+The Processor maintains a dependency graph of the Controller's connected
+systems, together with the reasoning behind those dependencies, and evaluates
+proposed changes against it. Processing lasts as long as the Controller's
+organisation exists, and ends when the Controller deletes it.
+
+## 3. Nature of the data
+
+This section is unusually short, and the reason is architectural rather than
+editorial.
+
+**Processed:**
+
+| Category | Detail |
+|---|---|
+| Structural metadata | Table, column, workflow, report and API names, their types, and the references between them |
+| Discussion excerpts | Quoted spans of text from channels the Controller selects for mining, with author name and permalink |
+| Account data | Name, email, hashed password, organisation membership |
+| Operational records | Verdicts, decisions, incidents and an audit log of privileged actions |
+
+**Not processed:** the contents of the Controller's records. Sadhak indexes that
+a field named `invoices.vat_rate` exists and which report reads it. It does not
+read an invoice. This is enforced at the connector boundary, where crawlers emit
+schema and wiring only, and it is verified by an automated test that plants
+canary strings in cell values and fails the build if any of them reaches
+Sadhak's database.
+
+The only personal data of any sensitivity is therefore the **discussion
+excerpts** — a colleague's message explaining why something exists, with their
+name attached — and the account data of the Controller's own users.
+
+## 4. Security measures
+
+- Credentials are sealed with authenticated encryption before storage. The
+  additional authenticated data binds each credential to its organisation,
+  connector instance, scope and kind, so ciphertext moved to another
+  organisation's row fails to decrypt rather than opening.
+- Read and write credentials are separate records. Crawling uses read scope and
+  cannot be handed a write credential by accident.
+- Tenancy is enforced at the credential, not from request input. An organisation
+  id in a path is asserted against the one the credential resolved to, and a
+  mismatch answers 404 rather than 403 — a wrong organisation id is
+  indistinguishable from one that does not exist.
+- Outbound requests pass an egress guard with DNS pinning and per-connector host
+  allowlists.
+- All privileged actions are recorded in an append-only audit log.
+- Transport is TLS throughout; secrets are redacted from logs by configured
+  paths rather than by best effort at each call site.
+
+## 5. Subprocessors
+
+The current list, with purpose and data touched, is published at
+<https://sadhak.online/legal/subprocessors> and is the authoritative version.
+
+At the time of writing: **Hostinger** (VPS hosting, India — all data at rest),
+**Cloudflare** (DNS, TLS and proxy — all traffic in transit), **OpenRouter**
+(LLM inference — graph structure and mined discussion excerpts), and **GitHub**
+(source and container images — no customer data).
+
+Notably absent: any embedding vendor. Semantic search over rationale runs a
+model on the Processor's own server, so that text is not shipped to a third
+party for that purpose.
+
+The Processor gives the Controller at least 30 days' notice before adding a
+subprocessor. The Controller may object, and the remedy is to disconnect the
+affected connector or terminate without penalty.
+
+## 6. International transfers
+
+Data at rest is held in India. Traffic passes through Cloudflare's global
+network, and inference requests reach the United States and onward to the
+provider serving the model. Where a transfer requires them, the parties rely on
+the appropriate Standard Contractual Clauses, incorporated by reference and to
+be attached on execution.
+
+## 7. Assistance to the Controller
+
+- **Data subject requests.** The Processor provides a self-serve export of
+  everything belonging to an organisation, and self-serve deletion, both from
+  organisation settings. For anything those do not cover, the Processor responds
+  within 30 days.
+- **Breach notification.** The Processor notifies the Controller without undue
+  delay and in any case within 72 hours of becoming aware of a personal data
+  breach, with what is known at the time rather than waiting for a complete
+  picture.
+- **Audits.** The source is public. The Processor will additionally answer
+  reasonable written questions and supply evidence of the controls above.
+
+## 8. Deletion and return
+
+On termination, the Controller may export everything as a single JSON document
+before deleting. Deleting an organisation removes its graph, rationale,
+verdicts, decisions, credentials and audit log by database-level cascade.
+
+There is no grace period and no soft delete. That is deliberate: a thirty-day
+window during which the Processor still holds everything is a retention policy
+wearing a deletion policy's name. The Controller is asked to type the
+organisation name to confirm, which is what stands in for a recovery window.
+
+Backups are the one honest exception — a deleted organisation may persist in an
+encrypted backup until it rotates out. Backups are not readable by the service
+and are not used to restore individual organisations.
+
+## 9. Liability
+
+Liability under this agreement follows the [Terms of
+Service](https://sadhak.online/legal/terms). During open beta the service is
+free, and the limitation of liability reflects that.
+
+---
+
+## Signatures
+
+| | Controller | Processor |
+|---|---|---|
+| Name | | |
+| Title | | |
+| Date | | |
+| Signature | | |
+
+*The Processor block cannot be completed until the operating entity is
+incorporated. Stated here rather than left as an empty line someone might sign
+against.*

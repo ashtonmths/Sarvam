@@ -35,6 +35,7 @@ import { orgRoutes } from "./routes/org.js";
 import { rationaleRoutes } from "./routes/rationale.js";
 import { reflexRoutes } from "./routes/reflex.js";
 import { reviewerRoutes } from "./routes/reviewer.js";
+import { slackOauthCallback, slackOauthRoutes } from "./routes/slack-oauth.js";
 import { verdictRoutes } from "./routes/verdict.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { startErrorTracking } from "./sentry.js";
@@ -163,6 +164,12 @@ app.route("/api/comms", commsRoutes);
 // outside the session group. The key's org scopes every query.
 app.route("/", mcpRoutes);
 
+// Slack redirects the browser here after a grant, to PUBLIC_API_URL rather
+// than to the origin that set the session cookie - so no cookie arrives and
+// this cannot sit inside the session group. The organisation travels in an
+// HMAC-signed state parameter instead.
+app.route("/", slackOauthCallback);
+
 // Vendor ingress: signature-verified, never cookie-authenticated.
 app.use("/webhooks/*", webhookRateLimit);
 app.route("/", webhookRoutes);
@@ -186,6 +193,7 @@ api.route("/", reflexRoutes);
 api.route("/", reviewerRoutes);
 api.route("/", rationaleRoutes);
 api.route("/", historianRoutes);
+api.route("/", slackOauthRoutes);
 api.get("/jobs/stats", async (c) => c.json(await queueStats()));
 
 // Both shapes hit the same handlers; `:orgId` is asserted against the

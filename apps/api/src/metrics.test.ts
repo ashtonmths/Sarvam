@@ -116,24 +116,31 @@ describe("histogram", () => {
   });
 });
 
-describe("published docs", () => {
-  it("documents every metric this process exposes", async () => {
-    // Same guard as connector scopes and .env.example: a metric nobody
-    // documented is a metric nobody can alert on, because they never learn it
-    // exists.
-    const doc = readFileSync(
-      new URL("../../../docs/OBSERVABILITY.md", import.meta.url),
-      "utf8",
-    );
+describe("published metrics", () => {
+  // This used to assert that every exposed metric appeared in
+  // docs/OBSERVABILITY.md. That file is no longer in the repository, so the
+  // guard is re-pointed at the artifact that is: an exposed metric nobody
+  // alerts on or graphs is one nobody learns exists, which was the actual
+  // point. Alert rules and dashboards are checked by `pnpm check:obs`, so a
+  // name that drifts breaks there too.
+  it("is graphed or alerted on, for every metric this process exposes", async () => {
+    const obs = new URL("../../../ops/observability/", import.meta.url);
+    const referenced = [
+      readFileSync(new URL("prometheus/alerts/sadhak.yml", obs), "utf8"),
+      ...["api-health", "database-jobs", "agents-llm", "host"].map((name) =>
+        readFileSync(new URL(`grafana/dashboards/${name}.json`, obs), "utf8"),
+      ),
+    ].join("\n");
 
     const exposition = await render();
     const exposed = [...exposition.matchAll(/^# TYPE (\S+) /gm)].map((m) => m[1]);
     expect(exposed.length).toBeGreaterThan(0);
 
     for (const name of exposed) {
-      expect(doc, `${name} is exposed but absent from docs/OBSERVABILITY.md`).toContain(
-        name,
-      );
+      expect(
+        referenced,
+        `${name} is exposed but no alert rule or dashboard mentions it`,
+      ).toContain(name);
     }
   });
 });

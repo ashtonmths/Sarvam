@@ -1,5 +1,6 @@
 import postgres from "postgres";
-import { UpstreamError } from "../../errors.js";
+import { UpstreamError, UserError } from "../../errors.js";
+import { assertPublicHost } from "../../net/guard.js";
 import type {
   Connector,
   ConnectorDescriptor,
@@ -35,7 +36,7 @@ export const descriptor: ConnectorDescriptor = {
   revertible: false,
 };
 
-/** The exact grant published in docs/connectors/postgres.md. */
+/** The exact grant published on the docs site: content/docs/connectors/postgres.mdx. */
 export const SETUP_GRANT = `CREATE ROLE sadhak_ro LOGIN PASSWORD '…' NOSUPERUSER NOCREATEDB;
 GRANT CONNECT ON DATABASE app TO sadhak_ro;
 GRANT USAGE ON SCHEMA public TO sadhak_ro;`;
@@ -43,6 +44,26 @@ GRANT USAGE ON SCHEMA public TO sadhak_ro;`;
 const SKIP_SCHEMAS = ["pg_catalog", "information_schema", "pg_toast"];
 
 async function connect(connectionString: string, signal?: AbortSignal) {
+  /**
+   * The connection string is customer-supplied, so its host goes through the
+   * egress guard before anything dials it. Without this the crawler is a port
+   * scanner over the Docker network, pointed by whoever can save a connector
+   * credential — which is the exact case guard.ts names as its reason to exist.
+   */
+  let host: string;
+  try {
+    host = new URL(connectionString).hostname;
+  } catch {
+    throw new UserError(
+      "That Postgres connection string could not be parsed. It must look like postgres://user:password@host:5432/database",
+      { status: 422 },
+    );
+  }
+  if (!host) {
+    throw new UserError("That Postgres connection string names no host", { status: 422 });
+  }
+  await assertPublicHost(host);
+
   const sql = postgres(connectionString, {
     max: 1,
     idle_timeout: 10,

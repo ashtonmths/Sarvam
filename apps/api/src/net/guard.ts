@@ -195,7 +195,26 @@ export async function assertPublicUrl(
     });
   }
 
-  const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  return assertPublicHost(url.hostname, options);
+}
+
+/**
+ * The range check on its own, for protocols that are not HTTP.
+ *
+ * A Postgres connection string names a customer-supplied host, which is the
+ * other half of the reason this module exists — and `postgres.js` resolves the
+ * hostname itself, so the addresses returned here cannot be pinned the way
+ * `pinnedFetch` pins them. That leaves a DNS-rebinding window this function
+ * cannot close: it stops a literal `10.0.0.5` or `169.254.169.254`, and it
+ * does not stop a hostname that answers publicly here and privately a
+ * millisecond later. Closing that needs the driver to accept a pinned address,
+ * which it does not.
+ */
+export async function assertPublicHost(
+  rawHostname: string,
+  options: EgressOptions = {},
+): Promise<PinnedAddress[]> {
+  const hostname = rawHostname.replace(/^\[|\]$/g, "").toLowerCase();
   const allowed = options.allowPrivateHosts ?? config.EGRESS_ALLOW_PRIVATE_HOSTS;
   if (allowed.includes(hostname)) {
     // Still resolved, so the caller can pin — just not range-checked.

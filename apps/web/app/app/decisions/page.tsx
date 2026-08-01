@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Select } from "../../../components/app/select";
 import { EmptyState, PageHead, VerdictBadge } from "../../../components/app/ui";
 import { api, type DecisionDetail, type DecisionRow, type Page } from "../../../lib/api";
@@ -108,9 +108,11 @@ export default function DecisionsPage() {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <>
+                // The key belongs on the fragment, not on the rows inside it:
+                // a row and its expanded detail are two siblings from one
+                // item, so the fragment is what React is reconciling.
+                <Fragment key={row.id}>
                   <tr
-                    key={row.id}
                     data-selected={openId === row.id}
                     onClick={() => void open(row.id)}
                     onKeyDown={(e) => e.key === "Enter" && void open(row.id)}
@@ -142,7 +144,7 @@ export default function DecisionsPage() {
                     </td>
                   </tr>
                   {openId === row.id && (
-                    <tr key={`${row.id}-detail`}>
+                    <tr>
                       <td colSpan={6} style={{ background: "var(--panel)" }}>
                         {!detail ? (
                           <p className="dim" style={{ fontSize: 13 }}>
@@ -190,7 +192,7 @@ export default function DecisionsPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

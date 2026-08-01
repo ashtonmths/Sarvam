@@ -1637,29 +1637,34 @@ button {
 
 /* ------------------------------------------------------------------ auth */
 
+/* 46/54 rather than 50/50. The form needs a column, not a half: an even split
+   left a 400px form floating in 720px of paper with no edge to sit against,
+   which is what made the page read as unfinished. */
 .auth {
   min-height: 100dvh;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
 }
 
 .auth__form-side {
   display: flex;
   flex-direction: column;
-  padding: 28px clamp(24px, 6vw, 84px);
+  padding: 32px clamp(24px, 5vw, 72px);
 }
 
 .auth__form-wrap {
   margin: auto 0;
-  width: min(400px, 100%);
+  width: min(380px, 100%);
   display: flex;
   flex-direction: column;
-  gap: 26px;
-  padding: 48px 0;
+  gap: 22px;
+  padding: 40px 0;
 }
 
 .auth__title {
-  font-size: 30px;
+  font-size: 31px;
+  letter-spacing: -0.02em;
+  margin-top: 12px;
 }
 
 .auth__sub {
@@ -1719,12 +1724,71 @@ button {
   gap: 18px;
 }
 
+/* Errors only. The demo credentials used to live in a block of this colour,
+   which made a routine hint look like something had gone wrong. */
 .auth__notice {
-  background: var(--thread-soft);
-  border-radius: var(--radius-sm);
-  padding: 13px 16px;
+  background: var(--block-soft);
+  border-left: 2px solid var(--block);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 11px 14px;
   font-size: 13.5px;
-  color: var(--ink);
+  color: var(--block-ink);
+}
+
+/* The demo account, as something to act on rather than something to read and
+   retype. Quiet: it is a convenience on the way in, not the point of the page. */
+.auth__demo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px dashed var(--line);
+  padding-top: 16px;
+  margin-top: 2px;
+}
+
+.auth__demo-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.auth__demo-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.auth__demo-text code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.auth__demo-fill {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--thread);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 7px 13px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.auth__demo-fill:hover {
+  border-color: var(--thread);
+  background: var(--thread-soft);
 }
 
 .auth__art-side {
@@ -1732,41 +1796,198 @@ button {
   background: var(--ink);
   color: var(--panel);
   display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: clamp(32px, 5vw, 64px);
+  align-items: center;
+  justify-content: center;
+  padding: clamp(32px, 4vw, 56px);
   overflow: hidden;
 }
 
-.auth__art-quote {
-  position: relative;
-  max-width: 420px;
+/* --------------------------------------------------------- the auth scene
+
+   A verdict on a blast radius, which is the thing this product makes. It
+   replaced a pull quote: the quote could have sat beside any product's login
+   form, and this could not sit beside anybody else's.
+
+   One accent carries it — the thread running down the left of the impact list
+   into the verdict. Everything else on this panel is greyscale on ink, so the
+   one coloured thing is the one that means something. */
+
+.scene {
+  width: min(440px, 100%);
+}
+
+.scene__frame {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
 }
 
-.auth__art-quote p {
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 500;
-  line-height: 1.3;
-  letter-spacing: -0.015em;
-}
-
-.auth__art-quote cite {
-  font-style: normal;
+.scene__eyebrow {
   font-family: var(--font-mono);
-  font-size: 12px;
-  color: #9aa0ac;
-  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7d8492;
 }
 
-.auth__art-thread {
+.scene__change {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 15px;
+}
+
+.scene__op {
+  color: #e08b76;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  border: 1px solid rgba(224, 139, 118, 0.35);
+  border-radius: 4px;
+  padding: 3px 7px;
+}
+
+.scene__target {
+  color: var(--panel);
+  overflow-wrap: anywhere;
+}
+
+/* The thread: one continuous line down the impact chain. Drawn as a border on
+   the list rather than as an SVG, so it stretches with the content instead of
+   needing a viewBox kept in step with it. */
+/* The list is the grid, and each row is display:contents. Rows were grids of
+   their own before, and grid columns are only shared inside one container — so
+   every bar started after its own name and the column never lined up. */
+.scene__impacts {
+  display: grid;
+  grid-template-columns: auto max-content 76px auto;
+  justify-content: start;
+  align-items: center;
+  gap: 15px 11px;
+  list-style: none;
+  border-left: 1px solid rgba(64, 83, 200, 0.55);
+  padding-left: 18px;
+  margin-left: 7px;
+}
+
+.scene__impact {
+  display: contents;
+}
+
+/* The node sitting on the thread. Anchored to the hop chip rather than to the
+   row, because a display:contents row generates no box to position against. */
+.scene__hop {
+  position: relative;
+}
+
+.scene__hop::before {
+  content: "";
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.5;
+  left: -22px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--thread);
+  box-shadow: 0 0 0 3px var(--ink);
+}
+
+.scene__hop {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #7d8492;
+  border: 1px solid #343841;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.scene__node {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.scene__name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--panel);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene__kind {
+  font-size: 10.5px;
+  color: #7d8492;
+}
+
+.scene__bar {
+  height: 3px;
+  border-radius: 2px;
+  background: #2b2f37;
+  overflow: hidden;
+}
+
+.scene__fill {
+  display: block;
+  height: 100%;
+  background: var(--thread);
+}
+
+.scene__impact-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #9aa0ac;
+}
+
+.scene__verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(191, 58, 31, 0.11);
+  border: 1px solid rgba(191, 58, 31, 0.32);
+  border-radius: var(--radius-sm);
+  padding: 13px 15px;
+}
+
+.scene__verdict-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: #f0a08c;
+  white-space: nowrap;
+}
+
+.scene__verdict p {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #b9bec8;
+}
+
+.scene__inline {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--panel);
+}
+
+.scene__foot {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #7d8492;
+}
+
+.scene__foot svg {
+  flex: none;
+  margin-top: 2px;
+  opacity: 0.75;
 }
 
 /* The mobile-only sign-in pair inside the drawer. Declared before the
@@ -1925,7 +2146,24 @@ button {
   .auth {
     grid-template-columns: 1fr;
   }
+  /* The scene used to be display:none here, which left a bare form floating on
+     paper — the one viewport where the page said nothing about the product.
+     It stays, below the form: signing in is still the job, so the scene does
+     not get to push the fields under the fold. */
   .auth__art-side {
+    padding: 32px 24px 40px;
+  }
+  .auth__form-wrap {
+    padding: 24px 0 8px;
+    margin: 0;
+  }
+  .auth__form-side {
+    min-height: auto;
+  }
+  .scene {
+    width: 100%;
+  }
+  .scene__foot {
     display: none;
   }
 }

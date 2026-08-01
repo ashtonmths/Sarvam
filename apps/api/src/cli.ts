@@ -196,7 +196,7 @@ async function main(): Promise<void> {
     case "backtest": {
       const path = flag("fixtures");
       if (!path) {
-        log("backtest needs --fixtures <path>. See docs/launch/beta-playbook.md.");
+        log("backtest needs --fixtures <path>: a directory of incident fixtures.");
         break;
       }
       const fixtures = loadFixtures(path);

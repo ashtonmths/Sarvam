@@ -30,14 +30,14 @@ export default function DpaPage() {
               <p>
                 <a
                   className="btn btn--primary"
-                  href="/legal/DPA-template.md"
-                  download="Sadhak-DPA-template.md"
+                  href="/legal/DPA-template.txt"
+                  download="Sadhak-DPA-template.txt"
                 >
                   Download the DPA template
                 </a>
               </p>
               <p>
-                It is markdown rather than a PDF because it is meant to be redlined, and
+                It is plain text rather than a PDF because it is meant to be redlined, and
                 because the file you download is the same bytes that sit in the public
                 repository — there is no second copy that could quietly differ.
               </p>

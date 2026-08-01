@@ -6,7 +6,8 @@ import {
 } from "@sadhak/shared/schema";
 import type { ChangeDescriptor } from "@sadhak/shared/types";
 import { and, desc, eq } from "drizzle-orm";
-import { baseUrlFor } from "../connectors/registry.js";
+import { baseUrlFor, egressOptionsFor } from "../connectors/registry.js";
+import { pinnedFetch } from "../net/pinned-fetch.js";
 import { db } from "../db.js";
 import { enqueue } from "../jobs/queue.js";
 import { getReadCredential } from "../vault/vault.js";
@@ -73,11 +74,12 @@ export async function pollN8nWorkflows(orgId: number): Promise<number> {
 
     let workflows: N8nWorkflow[];
     try {
-      const res = await fetch(
+      const res = await pinnedFetch(
         `${baseUrlFor(instance)}/api/v1/workflows?limit=${POLL_LIMIT}`,
         {
           headers: { "X-N8N-API-KEY": secret.reveal(), accept: "application/json" },
         },
+        egressOptionsFor(instance),
       );
       if (!res.ok) continue;
       const body = (await res.json()) as { data?: N8nWorkflow[] };

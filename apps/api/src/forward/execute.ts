@@ -1,7 +1,9 @@
 import { connectorInstances, gateDecisions } from "@sadhak/shared/schema";
 import type { ChangeDescriptor, VerdictResult } from "@sadhak/shared/types";
 import { and, eq } from "drizzle-orm";
-import { baseUrlFor } from "../connectors/registry.js";
+import { baseUrlFor, egressOptionsFor } from "../connectors/registry.js";
+import type { EgressOptions } from "../net/guard.js";
+import { pinnedFetch } from "../net/pinned-fetch.js";
 import { db } from "../db.js";
 import { UserError } from "../errors.js";
 import { getCredential } from "../vault/vault.js";
@@ -88,7 +90,12 @@ export async function executeChange(
   const outcome =
     change.connector === "airtable"
       ? await renameAirtableField(secret.reveal(), change, instance.config)
-      : await disableN8nWorkflow(secret.reveal(), change, baseUrlFor(instance));
+      : await disableN8nWorkflow(
+          secret.reveal(),
+          change,
+          baseUrlFor(instance),
+          egressOptionsFor(instance),
+        );
 
   // The gate decision and the execution outcome are separate facts, which is
   // exactly why this lands on the enforcement row and never touches the
@@ -120,13 +127,14 @@ async function renameAirtableField(
     return { executed: false, error: "Instance config lacks baseId/tableId" };
   }
 
-  const res = await fetch(
+  const res = await pinnedFetch(
     `https://api.airtable.com/v0/meta/bases/${baseId}/tables/${tableId}/fields/${fieldId}`,
     {
       method: "PATCH",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({ name: change.newName }),
     },
+    { allowPrivateHosts: [] },
   );
 
   if (!res.ok) {
@@ -142,14 +150,16 @@ async function disableN8nWorkflow(
   token: string,
   change: ChangeDescriptor,
   baseUrl: string,
+  egress: EgressOptions,
 ): Promise<ExecuteOutcome> {
   const workflowId = change.externalId.replace(/^workflow\//, "").split("/")[0];
   if (!workflowId) return { executed: false, error: "Cannot derive a workflow id" };
 
-  const res = await fetch(`${baseUrl}/api/v1/workflows/${workflowId}/deactivate`, {
-    method: "POST",
-    headers: { "X-N8N-API-KEY": token },
-  });
+  const res = await pinnedFetch(
+    `${baseUrl}/api/v1/workflows/${workflowId}/deactivate`,
+    { method: "POST", headers: { "X-N8N-API-KEY": token } },
+    egress,
+  );
 
   if (!res.ok) {
     return {

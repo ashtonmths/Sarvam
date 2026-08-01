@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { DEMO_CREDENTIALS, signIn, signUp } from "../lib/session";
-import { ThreadLines } from "./hero-graph";
+import { AuthScene } from "./auth-scene";
 import { LogoMark } from "./marks";
 
 function AuthFormInner({ mode }: { mode: "signin" | "signup" }) {
@@ -32,7 +32,7 @@ function AuthFormInner({ mode }: { mode: "signin" | "signup" }) {
             <span className="eyebrow eyebrow--thread">
               {isSignup ? "Early access" : "Welcome back"}
             </span>
-            <h1 className="auth__title" style={{ marginTop: 12 }}>
+            <h1 className="auth__title">
               {isSignup ? "Create your account" : "Sign in to Sadhak"}
             </h1>
             <p className="auth__sub">
@@ -164,24 +164,38 @@ function AuthFormInner({ mode }: { mode: "signin" | "signup" }) {
             )}
 
             {!isSignup && (
-              <p className="auth__notice" role="note">
-                Seeded demo account (<code>pnpm seed</code>):{" "}
-                <code>{DEMO_CREDENTIALS.email}</code> /{" "}
-                <code>{DEMO_CREDENTIALS.password}</code>
-              </p>
+              <div className="auth__demo">
+                <div className="auth__demo-text">
+                  <span className="auth__demo-label">Demo account</span>
+                  <code>{DEMO_CREDENTIALS.email}</code>
+                </div>
+                <button
+                  type="button"
+                  className="auth__demo-fill"
+                  onClick={(event) => {
+                    // Fills rather than submits: the credentials stay visible,
+                    // which is the point of having them on the page at all.
+                    const form = event.currentTarget.closest("form");
+                    if (!form) return;
+                    const email = form.elements.namedItem("email") as HTMLInputElement;
+                    const password = form.elements.namedItem(
+                      "password",
+                    ) as HTMLInputElement;
+                    email.value = DEMO_CREDENTIALS.email;
+                    password.value = DEMO_CREDENTIALS.password;
+                    password.focus();
+                  }}
+                >
+                  Fill it in
+                </button>
+              </div>
             )}
           </form>
         </div>
       </div>
 
       <div className="auth__art-side">
-        <ThreadLines className="auth__art-thread" />
-        <blockquote className="auth__art-quote">
-          <p>
-            &ldquo;The one person who knew why that field existed left in March.&rdquo;
-          </p>
-          <cite>Every ops team, eventually. Sadhak remembers the why.</cite>
-        </blockquote>
+        <AuthScene />
       </div>
     </div>
   );

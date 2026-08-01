@@ -15,7 +15,7 @@ verdictRoutes.post("/verdicts", requireCapability("gate:invoke"), async (c) => {
   const actor = c.get("actor");
   const change = changeDescriptorSchema.parse(await c.req.json());
 
-  // Span name matches the SLO vocabulary in docs/SLO.md, so a latency
+  // Span name matches the SLO vocabulary, so a latency
   // objective and the thing measuring it cannot drift apart.
   const result = await traced(
     "sadhak.verdict",

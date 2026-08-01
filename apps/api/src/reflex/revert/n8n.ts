@@ -1,7 +1,8 @@
 import type { ReflexIncident } from "@sadhak/shared/schema";
 import { connectorInstances, structureSnapshots } from "@sadhak/shared/schema";
 import { and, desc, eq } from "drizzle-orm";
-import { baseUrlFor } from "../../connectors/registry.js";
+import { baseUrlFor, egressOptionsFor } from "../../connectors/registry.js";
+import { pinnedFetch } from "../../net/pinned-fetch.js";
 import { db } from "../../db.js";
 import { getCredential } from "../../vault/vault.js";
 import type { RevertOutcome } from "./index.js";
@@ -65,10 +66,11 @@ export async function revertN8nWorkflow(
 
   // A deactivation is undone by reactivating, not by pushing structure back.
   if (incident.operation === "disable") {
-    const res = await fetch(`${baseUrl}/api/v1/workflows/${workflowId}/activate`, {
-      method: "POST",
-      headers,
-    });
+    const res = await pinnedFetch(
+      `${baseUrl}/api/v1/workflows/${workflowId}/activate`,
+      { method: "POST", headers },
+      egressOptionsFor(instance),
+    );
     if (!res.ok) {
       return {
         ok: false,
@@ -102,11 +104,11 @@ export async function revertN8nWorkflow(
     };
   }
 
-  const res = await fetch(`${baseUrl}/api/v1/workflows/${workflowId}`, {
-    method: "PUT",
-    headers,
-    body: JSON.stringify(previous.structure),
-  });
+  const res = await pinnedFetch(
+    `${baseUrl}/api/v1/workflows/${workflowId}`,
+    { method: "PUT", headers, body: JSON.stringify(previous.structure) },
+    egressOptionsFor(instance),
+  );
 
   if (!res.ok) {
     return { ok: false, error: `n8n ${res.status}: ${(await res.text()).slice(0, 300)}` };

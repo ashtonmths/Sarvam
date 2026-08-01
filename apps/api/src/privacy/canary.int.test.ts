@@ -112,9 +112,7 @@ describe("structure, never payloads", () => {
         ? ""
         : `A connector shipped customer row data into Sadhak. Found: ${sightings
             .map((s) => `${s.table}.${s.column} contains "${s.canary}"`)
-            .join(
-              "; ",
-            )}. The invariant is "structure, never payloads" — see docs/DEVELOPMENT.md.`,
+            .join("; ")}. The invariant is "structure, never payloads".`,
     ).toEqual([]);
   });
 });

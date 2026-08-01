@@ -35,16 +35,6 @@ jobs:
       - name: .env.example is in step with the env schema
         run: pnpm check:env
 
-      # The positioning rests on being straighter than the category. A claim
-      # that drifts into the docs is caught here rather than by a reviewer.
-      - name: Docs make no claim this product cannot support
-        run: pnpm check:docs
-
-      # A reference that lies is worse than none: a caller builds against it
-      # and finds out at runtime.
-      - name: API reference matches the routes
-        run: pnpm check:api
-
       # Reflex detects and reverts; it cannot prevent a change made in a
       # browser tab. That is the sentence most tempting to soften and the one
       # whose softening would cost the most trust, so it is enforced here
@@ -104,6 +94,19 @@ jobs:
         run: |
           GF_SECURITY_ADMIN_PASSWORD=ci POSTGRES_EXPORTER_DSN=postgres://ci \
             docker compose -f ops/observability/docker-compose.observability.yml config >/dev/null
+
+      # The local overlay is the only way anyone opens these dashboards on a
+      # laptop, so it has to keep merging with the base file. A service renamed
+      # in the base file leaves an override targeting nothing, which compose
+      # accepts silently and which nobody notices until the day they need a
+      # graph.
+      - name: The local overlay still merges
+        run: |
+          GF_SECURITY_ADMIN_PASSWORD=ci POSTGRES_EXPORTER_DSN=postgres://ci \
+            docker compose \
+              -f ops/observability/docker-compose.observability.yml \
+              -f ops/observability/docker-compose.local.yml config >/dev/null
+
 
   # Supply chain. This repository holds read credentials to other people's
   # production systems, so a leaked key here is not a repository problem.
@@ -425,7 +428,7 @@ jobs:
 
       # This proves the stack *responds*, not that it is correct — and there is
       # no rollback for it to trigger. A red step means production is down, and
-      # the remediation is to revert the commit (docs/DEVELOPMENT.md).
+      # the remediation is to revert the commit.
       - name: Smoke — wait for both origins to answer
         run: |
           deadline=$((SECONDS + 180))

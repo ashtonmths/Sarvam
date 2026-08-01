@@ -3,7 +3,7 @@
 // SECURITY: this mounts the Docker socket. It is mounted read-only and Alloy
 // is never exposed over TCP, but a read-only Docker socket still discloses
 // every container's configuration and logs to this process. It is registered
-// in docs/security/THREAT-MODEL.md for that reason. The image is pinned by tag
+// as a deliberate, reviewed exposure for that reason. The image is pinned by tag
 // here and should be pinned by digest once Renovate is watching it.
 //
 // FIRST START replays whatever history the container log files still hold, and
@@ -12,11 +12,18 @@
 // so it happens once. The json-file rotation on every service (10m x 3) is what
 // bounds how much history can exist to replay.
 //
-// LABEL DISCIPLINE, and it is the most important rule in this file: Loki
-// labels are `service`, `env` and `level` only. `orgId` and `requestId` stay in
-// the JSON body and are queried with `| json | orgId="..."`. Labels are Loki's
-// index — an org-id label would create one stream per customer per service and
-// become a cardinality bomb exactly as the product succeeds.
+// LABEL DISCIPLINE, and it is the most important rule in this file. This
+// config sets four labels and no more: `service`, `project`, `env` and `level`.
+// `orgId` and `requestId` stay in the JSON body and are queried with
+// `| json | orgId="..."`. Labels are Loki's index — an org-id label would
+// create one stream per customer per service and become a cardinality bomb
+// exactly as the product succeeds.
+//
+// Loki 3.3 then adds two of its own, visible in a query result and not set
+// here: `service_name`, which mirrors `service`, and `detected_level`, which is
+// its own guess at severity from the raw line. Both are bounded, so neither is
+// a cardinality problem — but `detected_level` is a guess and `level` is what
+// the application actually logged, so alerts and saved queries use `level`.
 
 logging {
   level  = "warn"
@@ -70,9 +77,15 @@ discovery.relabel "containers" {
 }
 
 loki.source.docker "containers" {
-  host       = "unix:///var/run/docker.sock"
-  targets    = discovery.relabel.containers.output
-  labels     = { env = "prod" }
+  host    = "unix:///var/run/docker.sock"
+  targets = discovery.relabel.containers.output
+
+  // Defaults to prod, because prod is the deployment that does not get to set
+  // an environment variable by hand. The local overlay sets SADHAK_LOG_ENV=local
+  // so a laptop's logs are not filed under prod - without this every query in
+  // development reads {env="prod"}, and the one time it matters is the time
+  // somebody is looking at a laptop and believes they are looking at the VPS.
+  labels     = { env = coalesce(sys.env("SADHAK_LOG_ENV"), "prod") }
   forward_to = [loki.process.level.receiver]
 }
 

@@ -4,7 +4,13 @@ import { describe, expect, it } from "vitest";
 import * as airtable from "./airtable/index.js";
 import * as n8nConnector from "./n8n/index.js";
 import * as postgresConnector from "./postgres/index.js";
-import { allDescriptors, connectorConfigSchema, getConnector } from "./registry.js";
+import {
+  allDescriptors,
+  baseUrlFor,
+  connectorConfigSchema,
+  egressOptionsFor,
+  getConnector,
+} from "./registry.js";
 
 describe("registry", () => {
   it("returns a descriptor-complete implementation for every slug", () => {
@@ -18,6 +24,55 @@ describe("registry", () => {
 
   it("throws on an unknown slug rather than returning undefined", () => {
     expect(() => getConnector("stripe")).toThrow();
+  });
+});
+
+describe("baseUrlFor", () => {
+  const instance = (connector: string, config: Record<string, unknown> = {}) =>
+    ({ id: 1, connector, config }) as never;
+
+  /**
+   * The bug this pins: a configured baseUrl used to win for every connector,
+   * so an admin could point a fixed-vendor instance at a host they control and
+   * the next health check would send that org's token there.
+   */
+  it("ignores a configured baseUrl on connectors whose vendor domain is fixed", () => {
+    for (const [slug, vendor] of [
+      ["airtable", "https://api.airtable.com"],
+      ["github", "https://api.github.com"],
+      ["slack", "https://slack.com"],
+    ] as const) {
+      const hijacked = instance(slug, { baseUrl: "https://collector.attacker.tld" });
+      expect(baseUrlFor(hijacked)).toBe(vendor);
+    }
+  });
+
+  it("honours a configured baseUrl on n8n, which is self-hosted", () => {
+    expect(baseUrlFor(instance("n8n", { baseUrl: "https://n8n.acme.internal" }))).toBe(
+      "https://n8n.acme.internal",
+    );
+  });
+
+  it("throws rather than guessing when a self-hosted connector has no baseUrl", () => {
+    expect(() => baseUrlFor(instance("n8n"))).toThrow();
+  });
+});
+
+describe("egressOptionsFor", () => {
+  const instance = (connector: string) => ({ id: 1, connector, config: {} }) as never;
+
+  it("refuses private hosts and plain http for fixed-vendor connectors", () => {
+    const options = egressOptionsFor(instance("airtable"));
+    expect(options.allowHttp).toBe(false);
+    // An empty allowlist, not an absent one: absent falls back to the
+    // operator's EGRESS_ALLOW_PRIVATE_HOSTS, which exists for the bundled n8n.
+    expect(options.allowPrivateHosts).toEqual([]);
+  });
+
+  it("allows the bundled n8n to be a private http host", () => {
+    const options = egressOptionsFor(instance("n8n"));
+    expect(options.allowHttp).toBe(true);
+    expect(options.allowPrivateHosts).toBeUndefined();
   });
 });
 
@@ -38,24 +93,18 @@ describe("published scopes", () => {
     for (const descriptor of allDescriptors()) {
       for (const scope of descriptor.readScopes) {
         // Slack's channels:history is the one deliberate exception: mining is
-        // restricted to explicitly selected channels (ARCHITECTURE §9).
+        // restricted to explicitly selected channels.
         if (descriptor.slug === "slack" && scope.scope === "channels:history") continue;
         expect(scope.scope).not.toMatch(forbidden);
       }
     }
   });
 
-  it("keeps the published docs in step with the code", () => {
-    const doc = readFileSync(
-      new URL("../../../../docs/connectors/README.md", import.meta.url),
-      "utf8",
-    );
-    for (const descriptor of allDescriptors()) {
-      for (const scope of descriptor.readScopes) {
-        expect(doc).toContain(scope.scope);
-      }
-    }
-  });
+  // A third test here kept the published scope table in step with the code.
+  // That table lived in a markdown file no longer in the repository, so the
+  // assertion has nowhere to point. What it existed to protect is covered by
+  // the two tests above: every scope carries a stated purpose, and no
+  // descriptor may request a record-read scope.
 });
 
 describe("the URL allowlist is the payload firewall's second layer", () => {

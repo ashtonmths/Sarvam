@@ -1,8 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { AddConnector } from "../../../../components/app/add-connector";
+import { SlackChannels } from "../../../../components/app/slack-channels";
 import { EmptyState } from "../../../../components/app/ui";
-import { GlyphBranch, GlyphDb, GlyphFlow, GlyphGrid } from "../../../../components/marks";
+import {
+  GlyphBranch,
+  GlyphChat,
+  GlyphDb,
+  GlyphFlow,
+  GlyphGrid,
+} from "../../../../components/marks";
 import { ApiError, api } from "../../../../lib/api";
 import { useQuery } from "../../../../lib/queries";
 
@@ -36,6 +44,7 @@ const GLYPH: Record<string, React.ReactNode> = {
   n8n: <GlyphFlow />,
   airtable: <GlyphGrid />,
   github: <GlyphBranch />,
+  slack: <GlyphChat />,
 };
 
 export default function ConnectorsPane() {
@@ -181,7 +190,31 @@ export default function ConnectorsPane() {
             );
           })
         )}
+
+        <div className="conn-add">
+          <AddConnector
+            slugs={descriptors.map((d) => ({
+              slug: d.slug,
+              displayName: d.displayName,
+            }))}
+            onAdded={(message) => {
+              setNotice(message);
+              data.reload();
+            }}
+          />
+        </div>
       </section>
+
+      {instances.some((i) => i.connector === "slack") && (
+        <section className="panel" style={{ marginBottom: 16 }}>
+          <h2 className="panel__title">Slack channels</h2>
+          <p className="panel__caption">
+            Nothing is mined until a channel is ticked. Each one grants the Historian read
+            access to that channel's history and puts Sadhak in it.
+          </p>
+          <SlackChannels />
+        </section>
+      )}
 
       <section className="panel">
         <h2 className="panel__title">GitHub</h2>

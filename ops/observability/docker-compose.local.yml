@@ -1,0 +1,96 @@
+# Local development overlay for the monitoring stack.
+#
+#   pnpm obs:up      brings it up
+#   pnpm obs:down    takes it down
+#
+# The base file publishes no ports at all, on purpose: in production Grafana is
+# the only monitoring service behind Traefik and everything else is reachable
+# only inside the sadhak-obs network. That is the right shape for a box on the
+# internet and the wrong shape for a laptop, where there is no Traefik and the
+# whole point is to open the thing in a browser.
+#
+# So this overlay does exactly three things and changes no behaviour:
+#
+#   1. publishes the ports a human needs
+#   2. teaches the containers to reach the API and the database, which run on
+#      the host under `pnpm dev` rather than in the stack
+#   3. points the two URLs that appear in a browser at localhost
+#
+# Never merged into the base file. A published port here is a port published in
+# production too, and `expose, never ports` is what makes the last
+# X-Forwarded-For hop trustworthy in src/http/client-ip.ts.
+
+services:
+  # 9090 for the expression browser, /targets and /alerts.
+  #
+  # extra_hosts is the important line. The scrape config targets `api:3001`
+  # because in production the API container joins sadhak-obs under that alias.
+  # Locally the API is a `pnpm dev` process on the host, so `api` is pointed at
+  # the host gateway and the same unmodified scrape config finds it. That is
+  # why prometheus.yml needs no local variant, and a scrape config with no
+  # local variant cannot drift from the one production runs.
+  prometheus:
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "api:host-gateway"
+
+  # 3002, because 3000 is the web app and 3001 is the API.
+  #
+  # Login is admin / whatever GF_SECURITY_ADMIN_PASSWORD is set to; obs-local.sh
+  # defaults it to `sadhak-dev`. Anonymous access stays off even here: the
+  # dashboards are the same ones production serves and a local habit of "just
+  # click through" is the habit that gets carried over.
+  grafana:
+    ports:
+      - "3002:3000"
+    environment:
+      # Overrides the production root url. Grafana builds absolute links from
+      # this, so leaving it as grafana.sadhak.online sends every share link and
+      # every OAuth-style redirect to a host that is not this one.
+      GF_SERVER_ROOT_URL: http://localhost:3002
+
+  # 9093 for the alert list, the silence UI and the inhibition view.
+  #
+  # The command is repeated in full because compose replaces a command rather
+  # than merging it. Same shape as the base: an external-url with no path,
+  # because a path makes Alertmanager serve its whole API under that prefix and
+  # Prometheus posting to /api/v2/alerts silently gets a 404.
+  alertmanager:
+    ports:
+      - "9093:9093"
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --web.external-url=http://localhost:9093
+
+  # 4318 is the one that matters: it is where the API's tracing SDK sends spans.
+  # obs-local.sh writes OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 into
+  # .env, which is the whole of what turns tracing on. 3200 is Tempo's own API,
+  # published so it can be curled directly when Grafana says "no data" and the
+  # question is which half is wrong.
+  tempo:
+    ports:
+      - "4318:4318"
+      - "3200:3200"
+
+  # Published so LogQL can be run with curl against /loki/api/v1/query_range
+  # without going through Grafana, which is how a LogQL query gets tried
+  # before it goes into a dashboard.
+  loki:
+    ports:
+      - "3100:3100"
+
+  # Files a laptop's logs under env="local" instead of env="prod". The base
+  # config defaults to prod precisely because production is the deployment that
+  # cannot be relied on to set this.
+  alloy:
+    environment:
+      SADHAK_LOG_ENV: local
+
+  # The database runs in the `sadhak` dev project with 5432 published, so the
+  # exporter reaches it across the host rather than over a shared network.
+  # host.docker.internal is native on Docker Desktop; the mapping is declared
+  # anyway so this works on Linux too.
+  postgres-exporter:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

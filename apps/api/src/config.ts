@@ -216,6 +216,15 @@ const Env = z.object({
   GITHUB_APP_WEBHOOK_SECRET: z.string().min(1).optional(),
 
   // slack app (plan 9)
+  /**
+   * Where Slack sends the browser back after an OAuth grant. It must match the
+   * redirect URL registered on the Slack app byte for byte, and it is the API's
+   * own public address rather than the web app's - the callback is an API
+   * route. In development this is a tunnel hostname, which is why it is
+   * configuration and not derived from WEB_ORIGINS.
+   */
+  PUBLIC_API_URL: z.string().url().optional(),
+
   SLACK_CLIENT_ID: z.string().min(1).optional(),
   SLACK_CLIENT_SECRET: z.string().min(1).optional(),
   SLACK_SIGNING_SECRET: z.string().min(1).optional(),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { McpConnect } from "../../../../components/app/mcp-connect";
 import { EmptyState } from "../../../../components/app/ui";
 import { ApiError, api } from "../../../../lib/api";
 import { useQuery } from "../../../../lib/queries";
@@ -259,6 +260,8 @@ export default function ApiKeysPane() {
           </div>
         )}
       </section>
+
+      <McpConnect />
     </>
   );
 }
