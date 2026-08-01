@@ -15,6 +15,9 @@ import {
   catchUpPulls,
 } from "../changes/backfill.js";
 import { upsertRepository } from "../changes/store.js";
+import { analyseFailure } from "../ci/analyse.js";
+import { postCiAlert } from "../ci/notify.js";
+import { markCiFailed, orgForRepository, recordCiFailure } from "../ci/record.js";
 import { sendWeeklyDigests } from "../comms/digest.js";
 import { getConnector } from "../connectors/registry.js";
 import { db } from "../db.js";
@@ -587,6 +590,62 @@ export function registerJobHandlers(): void {
       );
     },
     { timeoutMs: 60_000, maxAttempts: 3 },
+  );
+
+  /**
+   * A CI run failed on the default branch: work out why, then say so in Slack.
+   *
+   * Capture and analysis are one job rather than two. Splitting them would let
+   * a row exist that nothing is scheduled to explain, and the failure of the
+   * expensive half is exactly when you want the retry to re-read the logs —
+   * Actions logs are only fetchable while GitHub still holds them.
+   *
+   * Posting is separate from analysing *within* the job, and deliberately not
+   * retried by throwing: a Slack outage should not roll back an analysis that
+   * cost a model call and is already stored and readable in the UI.
+   */
+  registerHandler(
+    "ci.analyse_failure",
+    async (payload, ctx) => {
+      const fullName = String(payload.fullName ?? "");
+      const [owner, name] = fullName.split("/");
+      const runId = Number(payload.runId);
+      if (!owner || !name || !Number.isInteger(runId)) return;
+
+      const orgId = ctx.orgId ?? (await orgForRepository(owner, name));
+      // No org owns this repository yet, so there is nobody to tell.
+      if (!orgId) return;
+
+      const failureId = await recordCiFailure({
+        orgId,
+        owner,
+        name,
+        runId,
+        runAttempt: Number(payload.runAttempt ?? 1),
+        headSha: String(payload.headSha ?? ""),
+        branch: String(payload.branch ?? "main"),
+        workflowName: String(payload.workflowName ?? "workflow"),
+        htmlUrl: String(payload.htmlUrl ?? ""),
+        prNumber: payload.prNumber === null ? null : Number(payload.prNumber),
+      });
+      if (failureId === null) return;
+
+      try {
+        await analyseFailure(failureId);
+      } catch (error) {
+        // Recorded on the row before rethrowing, so a failure that exhausts its
+        // retries is queryable rather than merely absent. A CI failure nobody
+        // was told about is the one case this feature must not produce quietly.
+        await markCiFailed(
+          failureId,
+          error instanceof Error ? error.message : String(error),
+        );
+        throw error;
+      }
+      await postCiAlert(orgId, failureId);
+    },
+    // Generous: it reads GitHub logs, searches Slack, and waits on a model.
+    { timeoutMs: 5 * 60_000, maxAttempts: 3 },
   );
 
   /**

@@ -1059,6 +1059,139 @@
         }
       }
     },
+    "/api/ask": {
+      "post": {
+        "summary": "Answer a question from this organisation's documents",
+        "tags": [
+          "Documents"
+        ],
+        "description": "Requires `graph:read`. Hybrid retrieval over uploaded documents,\nthen a model call constrained to what was retrieved.\n\nThe answer cites its sources as `[1]`, `[2]`, matching the `n`\nfield in `sources`. Every source carries a permalink to the exact\nchunk, so a claim can be read in context rather than taken on\ntrust.\n\n`grounded` is false when nothing matched, or when the model was\nunavailable and only the retrieved passages are returned. Callers\nshould show the sources in both cases: the retrieval is useful on\nits own.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "question"
+                ],
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An answer, with the passages it was drawn from.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No credential, or one that no longer resolves.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ci": {
+      "get": {
+        "summary": "Post-merge CI failures, most recent first",
+        "tags": [
+          "Documents"
+        ],
+        "description": "Requires `graph:read`.",
+        "responses": {
+          "200": {
+            "description": "Failures captured for this organisation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No credential, or one that no longer resolves.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ci/{id}": {
+      "get": {
+        "summary": "One CI failure, with the evidence behind its analysis",
+        "tags": [
+          "Documents"
+        ],
+        "description": "Requires `graph:read`. What the Slack alert links to: the failing\nlog, the files the merge changed, the passages the conclusion\nrests on, and any earlier occurrence of the same failure.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The failure and its analysis.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No credential, or one that no longer resolves.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such failure in this organisation.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/documents": {
       "get": {
         "summary": "Uploaded documents, with embedding progress",

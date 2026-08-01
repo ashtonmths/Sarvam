@@ -13,6 +13,49 @@ import { useQuery } from "../../../../lib/queries";
  * taking the quote's word for itself.
  */
 
+/**
+ * Rejoins lines a transcript hard-wrapped at some column.
+ *
+ * Meeting notes and subtitle exports arrive wrapped to 72 or 80 characters,
+ * and the chunk body is rendered `pre-wrap` because that is right for a
+ * verbatim quote. The two together produce the worst of both: the source's
+ * wrap points survive, the browser wraps again at its own width, and every
+ * paragraph comes out ragged with orphaned fragments and leading spaces.
+ *
+ * A line is treated as a continuation when it does not begin a new utterance —
+ * no `[12:04]` stamp, no `Name:` prefix, not a list item or heading — and the
+ * previous line did not end a sentence. Everything else, including blank lines
+ * and speaker turns, is left exactly as written.
+ *
+ * Only the rendering changes. The stored text is untouched, so offsets, chunk
+ * boundaries and quoted spans all still refer to the same characters.
+ */
+function reflow(body: string): string {
+  const lines = body.split("\n");
+  const out: string[] = [];
+
+  for (const line of lines) {
+    const previous = out[out.length - 1];
+    const startsUtterance =
+      /^\s*\[?\d{1,2}:\d{2}/.test(line) ||
+      /^\s*[A-Z][\w.'-]*(?: [A-Z][\w.'-]*){0,3}:/.test(line) ||
+      /^\s*(?:[-*•]|\d+\.)\s/.test(line) ||
+      /^[A-Z][A-Z ]{3,}$/.test(line.trim());
+
+    const continues =
+      previous !== undefined &&
+      previous.trim() !== "" &&
+      line.trim() !== "" &&
+      !startsUtterance &&
+      !/[.!?:]["')\]]?$/.test(previous.trim());
+
+    if (continues) out[out.length - 1] = `${previous.trimEnd()} ${line.trim()}`;
+    else out.push(line);
+  }
+
+  return out.join("\n");
+}
+
 interface Chunk {
   ordinal: number;
   body: string;
@@ -121,7 +164,7 @@ export default function DocumentPage({ params }: { params: Promise<{ id: string 
                 )}
                 {!chunk.embedded && <span className="tag tag--amber">embedding</span>}
               </div>
-              <p className="docchunk__body">{chunk.body}</p>
+              <p className="docchunk__body">{reflow(chunk.body)}</p>
             </section>
           ))}
         </div>

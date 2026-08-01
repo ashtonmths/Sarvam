@@ -32,6 +32,7 @@ import { useState } from "react";
 import { useQuery } from "../../lib/queries";
 import { signOut, switchOrg, useSession } from "../../lib/session";
 import { LogoMark } from "../marks";
+import { AskAi } from "./ask-ai";
 
 /**
  * The app's primary navigation. A top bar rather than a left rail: every group
@@ -392,6 +393,10 @@ export function TopNav() {
               </button>
             </form>
           </search>
+
+          {/* Beside search, because they are the same act at two levels: search
+              finds the node, this answers the question about it. */}
+          <AskAi />
 
           {/* The org's own initials, not a generic building glyph — it says
               which org you are in without needing a label beside it. */}

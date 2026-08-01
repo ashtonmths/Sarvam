@@ -4457,3 +4457,311 @@
 .graph-legend {
   border-radius: 99px;
 }
+
+/* ------------------------------------------------------------------ ask */
+
+/* The trigger sits between search and the org switcher. Same height and
+   radius as the search field beside it: they are two ways to ask the same
+   question, and making one look like a feature announcement would be a lie
+   about which is the primary path. */
+.topnav__ask {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.topnav__ask:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.topnav__ask[aria-expanded="true"] {
+  border-color: var(--thread);
+  color: var(--thread);
+}
+
+/* Transparent, and deliberately not a dimming overlay. The panel answers
+   questions about the page underneath it; darkening that page would hide the
+   thing being asked about. */
+.ask__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.ask {
+  position: fixed;
+  top: 62px;
+  right: 16px;
+  z-index: 41;
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(70vh, 760px);
+  overflow-y: auto;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg, 0 18px 48px rgb(0 0 0 / 12%));
+}
+
+.ask__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.ask__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ask__close {
+  display: inline-flex;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.ask__close:hover {
+  color: var(--ink);
+}
+
+.ask__form {
+  display: flex;
+  gap: 8px;
+}
+
+.ask__input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.ask__input:focus {
+  outline: none;
+  border-color: var(--thread);
+}
+
+.ask__hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.ask__result {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.ask__answer {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+.ask__sources-title {
+  margin: 18px 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.ask__sources {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Each source is a block with a visible left edge, matching .docchunk — a
+   citation here and the chunk it opens should read as the same object. */
+.ask__source {
+  border-left: 2px solid var(--line-soft);
+  padding: 2px 0 2px 12px;
+}
+
+.ask__source-link {
+  display: block;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--thread);
+  text-decoration: none;
+}
+
+.ask__source-link:hover {
+  text-decoration: underline;
+}
+
+.ask__source-excerpt {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 720px) {
+  .ask {
+    top: 56px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+  }
+
+  .topnav__ask span {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------ ci failure page */
+
+.ci__verdict {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.ci__heading {
+  margin: 20px 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.ci__heading:first-of-type {
+  margin-top: 0;
+}
+
+/* The recommendation is the one thing a reader came for, so it is the one
+   thing set larger than body text. Everything else on this page supports it. */
+.ci__recommendation {
+  margin: 0;
+  max-width: 72ch;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.ci__cause {
+  margin: 0;
+  max-width: 72ch;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+
+.ci__evidence,
+.ci__precedent,
+.ci__paths {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ci__evidence-item {
+  display: flex;
+  gap: 10px;
+  max-width: 72ch;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* Fixed width so the sources line up into a column and the eye can scan for
+   "which of these came from Slack" without reading each row. */
+.ci__evidence-source {
+  flex: 0 0 56px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-top: 2px;
+}
+
+.ci__precedent-item a {
+  font-size: 13.5px;
+  color: var(--thread);
+  text-decoration: none;
+}
+
+.ci__precedent-item a:hover {
+  text-decoration: underline;
+}
+
+.ci__precedent-fix {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.ci__paths li {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.ci__log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Scrolls on its own rather than stretching the page. A log tail is wide and
+   uneven, and letting it set the page width would push every panel above it
+   out of shape. */
+.ci__log {
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 480px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  white-space: pre;
+  tab-size: 2;
+}

@@ -83,6 +83,18 @@ webhookRoutes.post("/webhooks/github", async (c) => {
       return c.json({ ok: true });
     }
 
+    /**
+     * A CI run that failed after something landed.
+     *
+     * This is the trigger for the whole post-merge path: the moment a merge
+     * breaks the default branch is the moment the org's own history is worth
+     * the most, because the change that caused it is minutes old and whoever
+     * made it is still at their desk.
+     */
+    case "workflow_run":
+      await enqueueCiFailure(payload);
+      return c.json({ ok: true });
+
     case "check_run":
     case "check_suite": {
       // The re-run button: same head SHA, fresh evaluation.
@@ -114,6 +126,18 @@ interface GithubPayload {
     check_suite?: { head_sha?: string; pull_requests?: Array<{ number: number }> };
   };
   check_suite?: { head_sha?: string; pull_requests?: Array<{ number: number }> };
+  workflow_run?: {
+    id: number;
+    name?: string;
+    run_attempt?: number;
+    event?: string;
+    status?: string;
+    conclusion?: string;
+    head_branch?: string;
+    head_sha?: string;
+    html_url?: string;
+    pull_requests?: Array<{ number: number }>;
+  };
 }
 
 async function handleInstallation(payload: GithubPayload): Promise<void> {
@@ -185,6 +209,49 @@ async function enqueueChangeCapture(
       // one catch-up pass, not one job each.
       dedupeKey: `github.capture_changes:${fullName}`,
       priority: 4,
+    },
+  );
+}
+
+/**
+ * Records a failed CI run and queues the analysis.
+ *
+ * Narrow on purpose. Only completed failures, only on the default branch: a
+ * run still in progress has nothing to read, a green run has nothing to say,
+ * and a failure on a topic branch is the author's own feedback loop — posting
+ * that to a shared channel is how a useful bot becomes a muted one.
+ *
+ * `cancelled` is excluded with the same reasoning. Cancellation is almost
+ * always a human superseding their own push, and analysing it would spend a
+ * model call to explain that someone pressed a button.
+ */
+async function enqueueCiFailure(payload: GithubPayload): Promise<void> {
+  const run = payload.workflow_run;
+  const fullName = payload.repository?.full_name;
+  if (!run || !fullName) return;
+
+  if (run.status !== "completed" || run.conclusion !== "failure") return;
+
+  const defaultBranch = payload.repository?.default_branch ?? "main";
+  if (run.head_branch !== defaultBranch) return;
+
+  await enqueue(
+    "ci.analyse_failure",
+    {
+      fullName,
+      runId: run.id,
+      runAttempt: run.run_attempt ?? 1,
+      headSha: run.head_sha ?? "",
+      branch: run.head_branch ?? defaultBranch,
+      workflowName: run.name ?? "workflow",
+      htmlUrl: run.html_url ?? "",
+      prNumber: run.pull_requests?.[0]?.number ?? null,
+    },
+    {
+      // Per run *attempt*. Re-running a failed job is a new event with its own
+      // logs, and collapsing attempts together would analyse the stale one.
+      dedupeKey: `ci.analyse_failure:${fullName}:${run.id}:${run.run_attempt ?? 1}`,
+      priority: 6,
     },
   );
 }

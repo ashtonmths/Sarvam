@@ -1368,3 +1368,80 @@ export const emailLog = pgTable(
   },
   (t) => [index("email_log_org_template_idx").on(t.orgId, t.template, t.sentAt)],
 );
+
+/* ------------------------------------------------- post-merge CI (plan 12) */
+
+/**
+ * A CI run that failed after a merge, and what Sadhak worked out about it.
+ *
+ * The row exists from the moment the webhook lands, before any analysis, so a
+ * failure is never lost because the model was down or the logs were slow. The
+ * `state` column is the honest record of how far it got: a `captured` row with
+ * an error is a failure nobody was told about, which is worth being able to
+ * query for.
+ *
+ * Keyed on (runId, runAttempt) rather than runId alone. Re-running a failed
+ * job is the first thing anyone does, and each attempt is a distinct event with
+ * its own logs — deduping them together would silently analyse the first
+ * attempt and ignore the one the developer is actually looking at.
+ */
+export const ciFailures = pgTable(
+  "ci_failures",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    repositoryId: bigint("repository_id", { mode: "number" })
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+
+    /** GitHub's identifiers, so a row can be traced back to the run it describes. */
+    runId: bigint("run_id", { mode: "number" }).notNull(),
+    runAttempt: integer("run_attempt").notNull().default(1),
+    headSha: text("head_sha").notNull(),
+    branch: text("branch").notNull(),
+    workflowName: text("workflow_name").notNull(),
+    htmlUrl: text("html_url").notNull(),
+    /** The merge that caused it, when the run reports one. */
+    prNumber: integer("pr_number"),
+
+    /** Which job and step failed. Null until the logs have been read. */
+    jobName: text("job_name"),
+    stepName: text("step_name"),
+
+    /**
+     * The part of the log worth reading, not the log. Actions logs run to
+     * megabytes and almost all of it is setup noise; storing the whole thing
+     * would cost more than it explains and would not fit a model's context.
+     */
+    failureExcerpt: text("failure_excerpt"),
+
+    /**
+     * The excerpt with run-specific noise stripped — paths, hashes, timings —
+     * so two occurrences of the same underlying break compare equal. This is
+     * what "have we seen this before" is asked against.
+     */
+    signature: text("signature"),
+
+    /** The model's reasoning: cause, recommendation, evidence, confidence. */
+    analysis: jsonb("analysis").$type<Record<string, unknown>>(),
+
+    /** captured -> analysed -> alerted. `failed` records why it stopped. */
+    state: text("state").notNull().default("captured"),
+    lastError: text("last_error"),
+
+    slackChannelId: text("slack_channel_id"),
+    slackTs: text("slack_ts"),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    analysedAt: timestamp("analysed_at", { withTimezone: true }),
+    alertedAt: timestamp("alerted_at", { withTimezone: true }),
+  },
+  (t) => [
+    unique("ci_failures_run_attempt_key").on(t.orgId, t.runId, t.runAttempt),
+    index("ci_failures_org_created_idx").on(t.orgId, t.createdAt),
+    // Precedent lookup: "this org, this signature, before now".
+    index("ci_failures_signature_idx").on(t.orgId, t.signature),
+  ],
+);

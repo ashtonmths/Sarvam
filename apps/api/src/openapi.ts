@@ -333,6 +333,88 @@ export function openapiDocument(version = "dev") {
       },
       "/api/audit": { get: listOperation("The audit log", "Org", "audit:read") },
 
+      "/api/ask": {
+        post: {
+          summary: "Answer a question from this organisation's documents",
+          tags: ["Documents"],
+          description: [
+            "Requires `graph:read`. Hybrid retrieval over uploaded documents,",
+            "then a model call constrained to what was retrieved.",
+            "",
+            "The answer cites its sources as `[1]`, `[2]`, matching the `n`",
+            "field in `sources`. Every source carries a permalink to the exact",
+            "chunk, so a claim can be read in context rather than taken on",
+            "trust.",
+            "",
+            "`grounded` is false when nothing matched, or when the model was",
+            "unavailable and only the retrieved passages are returned. Callers",
+            "should show the sources in both cases: the retrieval is useful on",
+            "its own.",
+          ].join("\n"),
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["question"],
+                  properties: {
+                    question: { type: "string", minLength: 3, maxLength: 500 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "An answer, with the passages it was drawn from.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+            "401": problemResponse("No credential, or one that no longer resolves."),
+          },
+        },
+      },
+      "/api/ci": {
+        get: {
+          summary: "Post-merge CI failures, most recent first",
+          tags: ["Documents"],
+          description: "Requires `graph:read`.",
+          responses: {
+            "200": {
+              description: "Failures captured for this organisation.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+            "401": problemResponse("No credential, or one that no longer resolves."),
+          },
+        },
+      },
+      "/api/ci/{id}": {
+        get: {
+          summary: "One CI failure, with the evidence behind its analysis",
+          tags: ["Documents"],
+          description: [
+            "Requires `graph:read`. What the Slack alert links to: the failing",
+            "log, the files the merge changed, the passages the conclusion",
+            "rests on, and any earlier occurrence of the same failure.",
+          ].join("\n"),
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "integer" },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "The failure and its analysis.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+            "401": problemResponse("No credential, or one that no longer resolves."),
+            "404": problemResponse("No such failure in this organisation."),
+          },
+        },
+      },
       "/api/documents": {
         get: {
           summary: "Uploaded documents, with embedding progress",
