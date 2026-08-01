@@ -379,65 +379,67 @@ button {
   position: relative;
   margin-top: 72px;
   animation: rise 0.8s 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-
-.graph__edges {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.graph__edge {
-  fill: none;
-  stroke: var(--ink-faint);
-  stroke-width: 1.5;
-  stroke-dasharray: 5 6;
-  opacity: 0.75;
-}
-
-.graph__edge--draw {
-  animation: dash 1.2s 0.6s ease-out both;
-}
-
-@keyframes dash {
-  from {
-    stroke-dashoffset: 260;
-    opacity: 0;
-  }
-  to {
-    stroke-dashoffset: 0;
-    opacity: 0.75;
-  }
-}
-
-.graph__row {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.15fr);
+  display: flex;
   align-items: center;
-  gap: clamp(24px, 6vw, 90px);
-  max-width: 1060px;
+  max-width: 1160px;
   margin-inline: auto;
+}
+
+.graph__col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.graph__col--card {
+  flex: 0 1 400px;
+}
+
+.graph__cap {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.graph__link {
+  position: relative;
+  flex: 2 1 120px;
+  min-width: 88px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.graph__link::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: calc(50% - 14px);
+  border-top: 1.5px dashed var(--ink-faint);
+  opacity: 0.55;
 }
 
 .graph__node {
   position: relative;
   z-index: 1;
-  justify-self: center;
   display: inline-flex;
   align-items: center;
   gap: 10px;
   background: var(--ink);
   color: var(--panel);
   border-radius: 14px;
-  box-shadow: 0 0 0 3px var(--paper), 0 0 0 4px var(--line);
-  padding: 13px 24px;
+  padding: 15px 26px;
   font-family: var(--font-mono);
   font-size: 13px;
   letter-spacing: 0.12em;
-  box-shadow: 0 10px 26px -10px rgba(23, 25, 30, 0.5);
+  box-shadow: 0 0 0 3px var(--panel), 0 0 0 4px var(--line), 0 10px 26px -10px rgba(23, 25, 30, 0.5);
 }
 
 .graph__node-dot {
@@ -446,6 +448,35 @@ button {
   border-radius: 50%;
   background: var(--thread);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--thread) 28%, transparent);
+}
+
+/* small connector chip riding a link line */
+.chip--inline {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  background: var(--card);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  box-shadow: var(--shadow-chip);
+  margin-bottom: 28px;
+}
+
+/* mini window chrome for app-like cards */
+.pcard__chrome {
+  display: flex;
+  gap: 5px;
+  margin: -4px 0 12px;
+}
+
+.pcard__chrome i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line);
 }
 
 /* product cards used in hero + section illustrations */
@@ -563,16 +594,59 @@ button {
   background: var(--ink-faint);
 }
 
-.rationale-quote {
-  border-left: 2px solid var(--thread);
-  padding: 2px 0 2px 12px;
-  font-size: 12.5px;
-  color: var(--ink-soft);
+.msg {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--card);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  font-size: 13px;
+  text-align: left;
 }
 
-.rationale-quote strong {
-  color: var(--ink);
+.msg--bare {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.msg__avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--thread-soft);
+  color: var(--thread);
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.msg__avatar--src {
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+}
+
+.msg__meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  margin-bottom: 3px;
+}
+
+.msg__meta strong {
+  color: var(--ink-soft);
   font-weight: 500;
+}
+
+.msg__text {
+  color: var(--ink-soft);
+  line-height: 1.5;
 }
 
 /* ------------------------------------------------------------- proof bar */
@@ -1026,9 +1100,9 @@ button {
 
 .fnote {
   background: var(--panel);
-  border-left: 2px solid var(--thread);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  padding: 18px 22px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  padding: 20px 24px;
   font-size: 14.5px;
   color: var(--ink-soft);
 }
@@ -1346,16 +1420,32 @@ button {
     margin-top: 14px;
   }
 
-  .graph__edges {
-    display: none;
+  .graph {
+    flex-direction: column;
   }
-  .graph__row {
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: center;
-    gap: 18px;
-  }
-  .graph__row .pcard {
+  .graph__col--card {
+    flex-basis: auto;
     width: min(420px, 100%);
+  }
+  .graph__col--card .pcard {
+    width: 100%;
+  }
+  .graph__link {
+    flex: none;
+    min-height: 48px;
+    width: 100%;
+    align-self: center;
+  }
+  .graph__link::before {
+    left: calc(50% - 1px);
+    right: auto;
+    top: -6px;
+    bottom: -6px;
+    border-top: none;
+    border-left: 1.5px dashed var(--ink-faint);
+  }
+  .chip--inline {
+    margin-bottom: 0;
   }
   .chip {
     display: none;

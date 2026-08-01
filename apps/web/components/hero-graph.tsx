@@ -1,39 +1,43 @@
+import { GlyphChat, GlyphGrid } from "./marks";
 import { ChangeCard, VerdictCard } from "./product-cards";
 
 /**
- * The hero tableau: a change on the left, Ariadne in the middle, the verdict
- * on the right, joined by dashed edges that draw themselves on load. Below
- * 920px the edges hide and the cards stack.
+ * The hero tableau: change, gate, verdict, joined by dashed link elements
+ * that physically connect what they join. No coordinate math: the links are
+ * flex children, so they meet the cards at any width. Below 920px the row
+ * becomes a column and the links turn vertical.
  */
 export function HeroGraph() {
   return (
     <div className="graph">
-      <svg
-        className="graph__edges"
-        viewBox="0 0 1000 300"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-      >
-        <path
-          className="graph__edge graph__edge--draw"
-          vectorEffect="non-scaling-stroke"
-          d="M 330 150 C 380 150 390 138 445 140"
-        />
-        <path
-          className="graph__edge graph__edge--draw"
-          vectorEffect="non-scaling-stroke"
-          d="M 555 140 C 600 138 605 150 648 150"
-          style={{ animationDelay: "0.85s" }}
-        />
-      </svg>
-
-      <div className="graph__row">
+      <div className="graph__col graph__col--card">
         <ChangeCard />
+        <span className="graph__cap">The change</span>
+      </div>
+
+      <div className="graph__link" aria-hidden="true">
+        <span className="chip--inline">
+          <GlyphGrid size={20} />
+        </span>
+      </div>
+
+      <div className="graph__col">
         <div className="graph__node">
           <span className="graph__node-dot" />
           ariadne
         </div>
+        <span className="graph__cap">The gate</span>
+      </div>
+
+      <div className="graph__link" aria-hidden="true">
+        <span className="chip--inline">
+          <GlyphChat size={20} />
+        </span>
+      </div>
+
+      <div className="graph__col graph__col--card">
         <VerdictCard />
+        <span className="graph__cap">The verdict</span>
       </div>
     </div>
   );
@@ -53,7 +57,6 @@ export function HeroBackdrop() {
         stroke="currentColor"
         strokeWidth="1"
         strokeDasharray="4 7"
-        vectorEffect="non-scaling-stroke"
       >
         <path d="M 240 0 V 180 Q 240 210 210 210 H 0" vectorEffect="non-scaling-stroke" />
         <path d="M 960 0 V 150 Q 960 180 990 180 H 1200" vectorEffect="non-scaling-stroke" />
