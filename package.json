@@ -33,7 +33,8 @@
     "eval:historian": "SLACK_API_BASE_URL=http://127.0.0.1:39517 pnpm --filter @sadhak/api exec tsx src/historian/evals/run.ts",
     "check:claims": "tsx scripts/check-docs-claims.ts",
     "openapi:emit": "pnpm --filter @sadhak/api exec tsx scripts/emit-openapi.ts",
-    "check:openapi": "pnpm --filter @sadhak/api exec tsx scripts/emit-openapi.ts --check"
+    "check:openapi": "pnpm --filter @sadhak/api exec tsx scripts/emit-openapi.ts --check",
+    "seed:demo": "pnpm --filter @sadhak/api seed:demo"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
