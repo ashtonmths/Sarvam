@@ -1,28 +1,26 @@
 "use client";
 
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import {
+  BarChart3,
+  Check,
+  ChevronsUpDown,
+  Inbox,
+  LayoutDashboard,
+  PanelLeft,
+  Play,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  SquareTerminal,
+  Waypoints,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { CORRECTIONS, EDGES, RATIONALE } from "../../lib/mock/data";
 import { signOut, switchOrg, useSession } from "../../lib/session";
 import { LogoMark } from "../marks";
-
-const glyph = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 1.6,
-  strokeLinecap: "round",
-  strokeLinejoin: "round",
-} as const;
-
-function I({ d, extra }: { d: string; extra?: React.ReactNode }) {
-  return (
-    <svg width={17} height={17} viewBox="0 0 24 24" aria-hidden="true" {...glyph}>
-      <path d={d} />
-      {extra}
-    </svg>
-  );
-}
 
 type NavItem = {
   href: string;
@@ -31,58 +29,27 @@ type NavItem = {
   badged?: boolean;
 };
 
+const ICON = { size: 17, strokeWidth: 1.6 } as const;
+
 // Two groups that mirror how the product is used: the map you look at, and
 // the work the gate generates for you.
 const MAP: NavItem[] = [
-  {
-    href: "/app",
-    label: "Overview",
-    icon: (
-      <I d="M4 13 L10 13 L10 4 L4 4 Z M4 20 L10 20 L10 17 L4 17 Z M14 20 L20 20 L20 11 L14 11 Z M14 7 L20 7 L20 4 L14 4 Z" />
-    ),
-  },
-  {
-    href: "/app/graph",
-    label: "Graph",
-    icon: (
-      <I d="M6 6 m-2.4 0 a2.4 2.4 0 1 0 4.8 0 a2.4 2.4 0 1 0 -4.8 0 M18 9 m-2.4 0 a2.4 2.4 0 1 0 4.8 0 a2.4 2.4 0 1 0 -4.8 0 M10 18 m-2.4 0 a2.4 2.4 0 1 0 4.8 0 a2.4 2.4 0 1 0 -4.8 0 M8.2 7.4 L15.7 8.6 M9 15.8 L7 8.3 M11.9 16.5 L16.5 11" />
-    ),
-  },
-  { href: "/app/simulate", label: "Simulate", icon: <I d="M5 4 L19 12 L5 20 Z" /> },
+  { href: "/app", label: "Overview", icon: <LayoutDashboard {...ICON} /> },
+  { href: "/app/graph", label: "Graph", icon: <Waypoints {...ICON} /> },
+  { href: "/app/simulate", label: "Simulate", icon: <Play {...ICON} /> },
 ];
 
 const OPERATE: NavItem[] = [
-  {
-    href: "/app/queue",
-    label: "Queue",
-    icon: <I d="M4 6 H20 M4 12 H20 M4 18 H13" />,
-    badged: true,
-  },
-  {
-    href: "/app/agents",
-    label: "Agents",
-    icon: <I d="M3.5 5 H20.5 V19 H3.5 Z M7.5 10 L10.5 12.5 L7.5 15 M12.5 15.5 H16.5" />,
-  },
-  {
-    href: "/app/decisions",
-    label: "Decisions",
-    icon: (
-      <I d="M12 3 L20 7 V12 C20 17 16.5 20 12 21.5 C7.5 20 4 17 4 12 V7 Z M8.8 12 L11 14.2 L15.4 9.8" />
-    ),
-  },
-  {
-    href: "/app/metrics",
-    label: "Metrics",
-    icon: <I d="M4 20 L4 14 M9.3 20 L9.3 9 M14.6 20 L14.6 12 M20 20 L20 5" />,
-  },
+  { href: "/app/queue", label: "Queue", icon: <Inbox {...ICON} />, badged: true },
+  { href: "/app/agents", label: "Agents", icon: <SquareTerminal {...ICON} /> },
+  { href: "/app/decisions", label: "Decisions", icon: <ShieldCheck {...ICON} /> },
+  { href: "/app/metrics", label: "Metrics", icon: <BarChart3 {...ICON} /> },
 ];
 
 const SETTINGS: NavItem = {
   href: "/app/settings",
   label: "Settings",
-  icon: (
-    <I d="M12 9 m-3 0 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 M12 2.8 L13.2 5.6 L16.2 5 L16 8 L18.8 9.4 L17 12 L18.8 14.6 L16 16 L16.2 19 L13.2 18.4 L12 21.2 L10.8 18.4 L7.8 19 L8 16 L5.2 14.6 L7 12 L5.2 9.4 L8 8 L7.8 5 L10.8 5.6 Z" />
-  ),
+  icon: <Settings {...ICON} />,
 };
 
 const RAIL_PREF = "sadhak.rail";
@@ -115,9 +82,7 @@ function RailLink({
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { ready, user, org, orgs } = useSession();
-  const [orgMenu, setOrgMenu] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const orgRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -139,15 +104,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (ready && !user) router.replace(`/signin?next=${encodeURIComponent(pathname)}`);
   }, [ready, user, pathname, router]);
-
-  useEffect(() => {
-    if (!orgMenu) return;
-    const close = (e: MouseEvent) => {
-      if (!orgRef.current?.contains(e.target as Node)) setOrgMenu(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [orgMenu]);
 
   if (!ready || !user) return null;
 
@@ -182,43 +138,52 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             aria-expanded={!collapsed}
             onClick={toggleRail}
           >
-            <svg width={15} height={15} viewBox="0 0 24 24" aria-hidden="true" {...glyph}>
-              <path d="M4 4.5 H20 V19.5 H4 Z M9.5 4.5 V19.5" />
-            </svg>
+            <PanelLeft size={15} strokeWidth={1.6} aria-hidden="true" />
           </button>
         </div>
 
-        <div ref={orgRef} className="rail__org-wrap">
-          <button
-            type="button"
-            className="rail__org"
-            aria-haspopup="menu"
-            aria-expanded={orgMenu}
-            onClick={() => setOrgMenu((v) => !v)}
-            data-testid="shell-org-switcher"
-          >
-            {org?.name ?? "No organization"}
-            <span className="rail__org-caret">{orgMenu ? "▴" : "▾"}</span>
-          </button>
-          {orgMenu && (
-            <div className="rail__org-menu" role="menu">
-              {orgs.map((o) => (
-                <button
-                  key={o.id}
-                  type="button"
-                  role="menuitem"
-                  onClick={async () => {
-                    setOrgMenu(false);
-                    await switchOrg(o.id);
-                    router.refresh();
-                  }}
-                >
-                  {o.name}
-                  {o.id === org?.id && <span className="mono dim">✓</span>}
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="rail__org-wrap">
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button
+                type="button"
+                className="rail__org"
+                data-testid="shell-org-switcher"
+              >
+                <span className="rail__org-name">{org?.name ?? "No organization"}</span>
+                <ChevronsUpDown
+                  size={14}
+                  strokeWidth={1.6}
+                  className="rail__org-caret"
+                  aria-hidden="true"
+                />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                className="dropdown"
+                align="start"
+                sideOffset={6}
+                collisionPadding={12}
+              >
+                {orgs.map((o) => (
+                  <DropdownMenu.Item
+                    key={o.id}
+                    className="dropdown__item"
+                    onSelect={async () => {
+                      await switchOrg(o.id);
+                      router.refresh();
+                    }}
+                  >
+                    {o.name}
+                    {o.id === org?.id && (
+                      <Check size={14} strokeWidth={1.8} aria-hidden="true" />
+                    )}
+                  </DropdownMenu.Item>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
 
         <nav className="rail__nav" aria-label="App">
@@ -258,9 +223,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           title={`Coverage ${coveragePct}% — run the historians`}
           aria-label={`Coverage ${coveragePct} percent. Open agents.`}
         >
-          <svg width={16} height={16} viewBox="0 0 24 24" aria-hidden="true" {...glyph}>
-            <path d="M12 3 L13.8 10.2 L21 12 L13.8 13.8 L12 21 L10.2 13.8 L3 12 L10.2 10.2 Z" />
-          </svg>
+          <Sparkles size={16} strokeWidth={1.6} aria-hidden="true" />
         </Link>
 
         <div className="rail__foot">
