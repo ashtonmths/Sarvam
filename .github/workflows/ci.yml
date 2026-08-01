@@ -387,11 +387,18 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      # Images publish to ghcr.io/ashtonmths, which is not necessarily the org
+      # running this workflow. GITHUB_TOKEN is scoped to this repository and can
+      # only write packages owned by its own org, so pushing across orgs needs a
+      # PAT with write:packages on ashtonmths, stored as GHCR_TOKEN.
+      #
+      # The fallback keeps the workflow working unchanged once it runs from the
+      # ashtonmths repo itself, where GITHUB_TOKEN is already sufficient.
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.GHCR_USERNAME || github.actor }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: docker/metadata-action@v5
         id: meta
@@ -400,7 +407,7 @@ jobs:
           # running this workflow, so it can only push packages owned by that
           # repo's owner — a literal org here breaks the push the moment the
           # code lives somewhere else. metadata-action lowercases it for us.
-          images: ghcr.io/${{ github.repository_owner }}/sadhak-${{ matrix.app }}
+          images: ghcr.io/ashtonmths/sadhak-${{ matrix.app }}
           tags: |
             type=raw,value=latest
             type=sha
