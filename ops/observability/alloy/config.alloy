@@ -68,10 +68,18 @@ discovery.relabel "containers" {
   // exactly what it was told.
   //
   // Matches `sadhak` and `sadhak-observability`, so the monitoring stack
-  // watches itself.
+  // watches itself, and `sarvam-sadhak-jbqjkw`, which is what actually runs.
+  //
+  // The leading group is not decoration. docker-compose.dokploy.yml pins
+  // `name: sadhak` precisely so this rule can match, but Dokploy passes its own
+  // `-p <repo>-<app>-<hash>` and that wins over the name in the file. So the
+  // project on the VPS is `sarvam-sadhak-jbqjkw`, these regexes are fully
+  // anchored, and a rule written to keep the product's logs was dropping every
+  // one of them. Nothing failed — Loki was simply empty, which looks the same
+  // as a quiet system.
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
-    regex         = "sadhak(-.*)?"
+    regex         = "(.*-)?sadhak(-.*)?"
     action        = "keep"
   }
 }

@@ -17,9 +17,13 @@
 # Connector tokens are no longer passed through: credentials are stored per org
 # in the encrypted vault (docs/connectors/README.md).
 
-# Fixed so the Alloy log collector can filter on it: it keeps only
-# containers whose compose project matches `sadhak`, and a project name that
-# varies by deployment directory would silently collect nothing.
+# Pinned so the Alloy log collector has something stable to filter on, and so
+# a plain `docker compose up` from any directory lands in one project.
+#
+# Dokploy ignores this. It passes its own `-p <repo>-<app>-<hash>`, and the CLI
+# flag beats the file, so the project on the VPS is `sarvam-sadhak-jbqjkw`.
+# Alloy's keep rule allows that shape too — do not narrow it back to a literal
+# `sadhak` on the strength of this line.
 name: sadhak
 
 # Container logs are rotated, on every service.
