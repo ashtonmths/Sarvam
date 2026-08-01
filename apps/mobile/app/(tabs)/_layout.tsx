@@ -4,7 +4,7 @@ import { useSession } from "../../lib/session";
 import { T } from "../../lib/theme";
 import { Loading } from "../../lib/ui";
 
-/** A glyph-free tab bar: three tabs, so the labels carry it. */
+/** A glyph-free tab bar: four short labels carry it, no icon set to maintain. */
 function Dot({ focused }: { focused: boolean }) {
   return (
     <View
@@ -44,6 +44,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: "Overview" }} />
       <Tabs.Screen name="decisions" options={{ title: "Decisions" }} />
       <Tabs.Screen name="alerts" options={{ title: "Alerts" }} />
+      <Tabs.Screen name="account" options={{ title: "Account" }} />
     </Tabs>
   );
 }

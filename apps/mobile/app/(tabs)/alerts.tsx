@@ -1,13 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   type Alert,
@@ -17,8 +9,6 @@ import {
   POLL_MS,
   ping,
 } from "../../lib/alerts";
-import { API_URL } from "../../lib/api";
-import { useSession } from "../../lib/session";
 import { T, timeAgo } from "../../lib/theme";
 import { Card, Empty, ErrorNote, Loading } from "../../lib/ui";
 
@@ -32,7 +22,6 @@ import { Card, Empty, ErrorNote, Loading } from "../../lib/ui";
  */
 export default function Alerts() {
   const insets = useSafeAreaInsets();
-  const { user, signOut } = useSession();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -151,18 +140,6 @@ export default function Alerts() {
           )}
         </Card>
       )}
-
-      <Card title="Session">
-        <Text style={s.acct}>{user?.email ?? ""}</Text>
-        <Text style={s.host}>{API_URL.replace(/^https?:\/\//, "")}</Text>
-        <Pressable
-          style={s.signout}
-          onPress={() => void signOut()}
-          accessibilityRole="button"
-        >
-          <Text style={s.signoutText}>Sign out</Text>
-        </Pressable>
-      </Card>
     </ScrollView>
   );
 }
@@ -189,15 +166,4 @@ const s = StyleSheet.create({
   rowBody: { flex: 1, minWidth: 0 },
   rowTitle: { fontSize: 13.5, fontWeight: "600", color: T.ink },
   rowMeta: { fontSize: 11.5, color: T.inkFaint, marginTop: 2, lineHeight: 16 },
-  acct: { fontSize: 13.5, color: T.ink, fontWeight: "600" },
-  host: { fontSize: 11.5, color: T.inkFaint, marginTop: 3 },
-  signout: {
-    marginTop: 14,
-    borderWidth: 1,
-    borderColor: T.line,
-    borderRadius: 99,
-    paddingVertical: 11,
-    alignItems: "center",
-  },
-  signoutText: { fontSize: 13.5, fontWeight: "600", color: T.blockInk },
 });

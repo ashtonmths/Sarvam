@@ -65,8 +65,11 @@ interface SessionValue {
   ready: boolean;
   user: Me["user"] | null;
   org: Me["orgs"][number] | null;
+  /** Every membership, so the account screen can offer a switch. */
+  orgs: Me["orgs"];
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  switchOrg: (orgId: number) => Promise<void>;
 }
 
 const Ctx = createContext<SessionValue | null>(null);
@@ -107,6 +110,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setMe(await api.get<Me>("/api/auth/me"));
   }, []);
 
+  /**
+   * The active org lives on the session row server-side, so this re-reads `me`
+   * rather than patching local state — the server is what every subsequent
+   * request will be scoped by, and guessing here would let the two disagree.
+   */
+  const switchOrg = useCallback(async (orgId: number) => {
+    await api.post("/api/auth/orgs/switch", { orgId });
+    setMe(await api.get<Me>("/api/auth/me"));
+  }, []);
+
   const signOut = useCallback(async () => {
     try {
       await api.post("/api/auth/signout");
@@ -125,10 +138,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       org: me
         ? (me.orgs.find((o) => o.orgId === me.activeOrgId) ?? me.orgs[0] ?? null)
         : null,
+      orgs: me?.orgs ?? [],
       signIn,
       signOut,
+      switchOrg,
     }),
-    [ready, me, signIn, signOut],
+    [ready, me, signIn, signOut, switchOrg],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
