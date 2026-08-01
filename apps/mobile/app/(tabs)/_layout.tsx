@@ -38,7 +38,7 @@ export default function TabsLayout() {
           paddingTop: 8,
         },
         tabBarLabelStyle: { fontSize: 12, fontWeight: "600" },
-        tabBarIcon: ({ focused }) => <Dot focused={focused} />,
+        tabBarIcon: ({ focused }: { focused: boolean }) => <Dot focused={focused} />,
       }}
     >
       <Tabs.Screen name="index" options={{ title: "Overview" }} />
