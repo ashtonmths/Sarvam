@@ -23,6 +23,7 @@ import { mcpRoutes } from "./routes/mcp.js";
 import { orgRoutes } from "./routes/org.js";
 import { rationaleRoutes } from "./routes/rationale.js";
 import { reflexRoutes } from "./routes/reflex.js";
+import { reviewerRoutes } from "./routes/reviewer.js";
 import { verdictRoutes } from "./routes/verdict.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 
@@ -103,6 +104,7 @@ api.route("/", verdictRoutes);
 api.route("/", gateRoutes);
 api.route("/", githubRoutes);
 api.route("/", reflexRoutes);
+api.route("/", reviewerRoutes);
 api.route("/", rationaleRoutes);
 api.route("/", historianRoutes);
 api.get("/jobs/stats", async (c) => c.json(await queueStats()));

@@ -7,8 +7,11 @@ import { db } from "../db.js";
 import { embedAll } from "../embed.js";
 import { executeRun } from "../historian/runs.js";
 import { purgeStaleCounters } from "../http/rate-limit.js";
+import { log } from "../log.js";
 import { pollN8nWorkflows } from "../reflex/detect-n8n.js";
 import { getIncident, recordVerdict } from "../reflex/incidents.js";
+import { runDriftTick } from "../reviewer/run-tick.js";
+import { triageFinding } from "../reviewer/triage.js";
 import {
   renderUnmappedWarn,
   renderVerdict,
@@ -23,6 +26,12 @@ import { registerHandler } from "./registry.js";
  * webhook is not a request: they are slow, rate-limited, and failure-prone in
  * someone else's infrastructure.
  */
+
+/**
+ * How many findings one tick may hand to the model. Sized for the free tier,
+ * where requests are the metered unit and a call can take tens of seconds.
+ */
+const TRIAGE_PER_TICK = 5;
 
 export function registerJobHandlers(): void {
   /** Self-rescheduling crawl. Backs off on failure rather than hammering. */
@@ -308,6 +317,85 @@ export function registerJobHandlers(): void {
       await enqueue("rationale.embed", {}, { dedupeKey: "rationale.embed" });
     }
   });
+
+  /**
+   * The drift gate, self-rescheduling like the other pollers. Runs whether or
+   * not the model quota is spent: detection is deterministic, and a drift
+   * detector that goes blind when the quota runs out goes blind exactly when a
+   * busy day made it matter.
+   */
+  registerHandler(
+    "reviewer.tick",
+    async (payload, ctx) => {
+      const instanceId = Number(payload.instanceId);
+      if (!ctx.orgId || !Number.isInteger(instanceId)) return;
+
+      try {
+        const outcome = await runDriftTick(ctx.orgId, instanceId, ctx.signal);
+        /**
+         * Triage is queued per finding rather than run inline: it is the only
+         * part of this loop that spends model requests, and it must not be
+         * able to make a detection tick fail or run long.
+         *
+         * Capped, because a single migration can rename thirty columns at
+         * once and queueing thirty model calls would spend a free-tier day on
+         * one deploy. The rest stay open for a human, which is the same place
+         * an exhausted quota leaves them — there is no state where a finding
+         * is silently dropped for want of triage.
+         */
+        const queued = outcome.openedIds.slice(0, TRIAGE_PER_TICK);
+        if (outcome.openedIds.length > queued.length) {
+          log().info({
+            event: "triage_capped",
+            connectorInstanceId: instanceId,
+            opened: outcome.openedIds.length,
+            queued: queued.length,
+          });
+        }
+        for (const findingId of queued) {
+          await enqueue(
+            "reviewer.triage",
+            { findingId },
+            {
+              orgId: ctx.orgId,
+              dedupeKey: `reviewer.triage:${findingId}`,
+              priority: -5,
+            },
+          );
+        }
+      } finally {
+        // Rescheduled in a finally: a tick that failed against a flaky
+        // provider must not silently stop watching that instance forever.
+        await enqueue(
+          "reviewer.tick",
+          { instanceId },
+          {
+            orgId: ctx.orgId,
+            runAfter: new Date(Date.now() + 10 * 60_000),
+            dedupeKey: `reviewer.tick:${instanceId}`,
+            excludeJobId: ctx.jobId,
+          },
+        );
+      }
+    },
+    { timeoutMs: 5 * 60_000, maxAttempts: 2 },
+  );
+
+  /**
+   * Triage one finding. Deliberately not retried: the failure modes are an
+   * exhausted quota and a model that will not produce a parseable judgment,
+   * and neither is fixed by trying twice. Both leave the finding open with
+   * budget_exhausted_at stamped, which is a human's cue rather than a mute.
+   */
+  registerHandler(
+    "reviewer.triage",
+    async (payload, ctx) => {
+      const findingId = Number(payload.findingId);
+      if (!ctx.orgId || !Number.isInteger(findingId)) return;
+      await triageFinding(ctx.orgId, findingId);
+    },
+    { timeoutMs: 120_000, maxAttempts: 1 },
+  );
 
   /** Exhaust, pruned on a schedule. Rationale is never touched by retention. */
   registerHandler("retention.prune_sessions", async () => {

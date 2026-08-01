@@ -929,6 +929,18 @@ export const driftFindings = pgTable(
     /** Judgment only. A resource limit is never a reason to dismiss. */
     dismissReason: text("dismiss_reason"),
     /**
+     * Who judged it: a user identifier, or `reviewer` for the triage agent.
+     *
+     * Load-bearing, not provenance decoration. Only a *human* dismissal earns
+     * suppression. The triage agent reads table and column names that come
+     * from a customer's systems, so its prompt carries attacker-influenceable
+     * text; if an agent dismissal could mute a signature, a hostile field name
+     * would be a way to silence a real breakage for 30 days. The mute is
+     * therefore gated on this column rather than on the model resisting
+     * injection.
+     */
+    dismissedBy: text("dismissed_by"),
+    /**
      * Stamped when a run ended on a step or token limit rather than on a
      * judgment. The state stays `open`, so an investigation that never
      * finished cannot mute the signature it failed to reach a verdict on.

@@ -15,6 +15,12 @@ const SNIPPET_CAP = 500;
 interface TraceCtx {
   orgId: number;
   runId: string;
+  /**
+   * Which agent produced this step. Reviewer writes through the same runner
+   * and the same table, so a trace can be read the same way whichever loop
+   * produced it. Defaults to historian, which was the only writer first.
+   */
+  agent?: "historian" | "reviewer";
 }
 
 function cap(value: unknown): unknown {
@@ -38,7 +44,7 @@ export async function trace(
   await db.insert(agentTraces).values({
     orgId: ctx.orgId,
     runId: ctx.runId,
-    agent: "historian",
+    agent: ctx.agent ?? "historian",
     step,
     tool,
     input: cap(input) as Record<string, unknown>,
@@ -58,7 +64,7 @@ export async function traceParseFailure(
   await db.insert(agentTraces).values({
     orgId: ctx.orgId,
     runId: ctx.runId,
-    agent: "historian",
+    agent: ctx.agent ?? "historian",
     step,
     tool: "parse_failure",
     input: {},

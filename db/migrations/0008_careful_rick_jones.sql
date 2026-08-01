@@ -1,0 +1,1 @@
+ALTER TABLE "drift_findings" ADD COLUMN "dismissed_by" text;

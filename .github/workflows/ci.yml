@@ -40,6 +40,40 @@ jobs:
       - name: Docs make no claim this product cannot support
         run: pnpm check:docs
 
+  # Supply chain. This repository holds read credentials to other people's
+  # production systems, so a leaked key here is not a repository problem.
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # TruffleHog diffs commits, so it needs more than the tip.
+          fetch-depth: 0
+
+      # --only-verified: an unverified match is a string that merely looks like
+      # a key. A scanner that cries wolf is one people stop reading, and this
+      # gate is only worth having if a red build here means something.
+      - name: Scan for committed secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified
+
+      # Trivy reads pnpm-lock.yaml directly, so this covers dependency
+      # vulnerabilities as well as the filesystem. `pnpm audit` is deliberately
+      # not used: on pnpm 9.15 it fails parsing the registry response, so it
+      # would redden the build without ever having found anything.
+      #
+      # ignore-unfixed, because a gate that cannot be satisfied gets bypassed.
+      - name: Scan dependencies and filesystem
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -159,7 +193,7 @@ jobs:
   images:
     # Build once, on main only. Pull requests are covered by check and docker.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [check, lint, migrate-check, integration]
+    needs: [check, lint, security, migrate-check, integration]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

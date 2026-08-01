@@ -262,6 +262,46 @@ export interface Incident {
 
 /* ---------------------------------------------------------- historian */
 
+export type FindingState =
+  | "open"
+  | "investigating"
+  | "corrected"
+  | "dismissed"
+  | "auto_dismissed";
+
+export interface DriftFinding {
+  id: number;
+  kind: "hash_change" | "staleness" | "unresolved_ref";
+  scope: string;
+  state: FindingState;
+  signature: string;
+  documentedState: { hash: string | null } | null;
+  liveState: {
+    hash: string | null;
+    name?: string;
+    kind?: string;
+    edgeCount?: number;
+  } | null;
+  dismissReason: string | null;
+  budgetExhaustedAt: string | null;
+  runId: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  connectorInstanceId: number;
+  connector: string;
+  instanceName: string;
+}
+
+export interface DriftSummary {
+  open: number;
+  investigating: number;
+  corrected: number;
+  dismissed: number;
+  autoDismissed: number;
+  instancesWatched: number;
+  lastCheckedAt: string | null;
+}
+
 export interface HistorianRun {
   id: string;
   kind: string;

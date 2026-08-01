@@ -157,7 +157,43 @@ export const jobsProcessed = new Counter(
   "Background jobs by kind and outcome.",
 );
 
-const ALL = [httpRequests, httpDuration, rateLimitDecisions, llmCalls, jobsProcessed];
+/**
+ * The short-circuit ratio is a product claim (~99% of ticks cost nothing) and
+ * a quota-feasibility claim. Measured rather than asserted: if it falls below
+ * ~95%, the drift loop is over budget in model requests before it is over
+ * budget in dollars.
+ */
+export const driftTicks = new Counter(
+  "sadhak_drift_ticks_total",
+  "Drift gate ticks by outcome — started vs short_circuited.",
+);
+
+export const driftFindingsOpened = new Counter(
+  "sadhak_drift_findings_total",
+  "Drift findings by outcome — open vs auto_dismissed by a prior judgment.",
+);
+
+/**
+ * Triage outcomes. `unsure` and `unavailable` are counted separately on
+ * purpose: the first is the agent doing its job, the second is the agent not
+ * getting to do it, and conflating them would hide a broken model path behind
+ * a healthy-looking rate of honest uncertainty.
+ */
+export const driftTriage = new Counter(
+  "sadhak_drift_triage_total",
+  "Drift triage outcomes — benign, real, unsure, unavailable.",
+);
+
+const ALL = [
+  httpRequests,
+  httpDuration,
+  rateLimitDecisions,
+  llmCalls,
+  jobsProcessed,
+  driftTicks,
+  driftFindingsOpened,
+  driftTriage,
+];
 
 /** The full exposition, in Prometheus text format. */
 export function render(): string {
