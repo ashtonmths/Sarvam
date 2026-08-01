@@ -18,7 +18,7 @@ export default function Home() {
       <main>
         {/* ------------------------------------------------------- hero */}
         <section className="hero">
-          <div className="container">
+          <div className="hero__wrap">
             <div className="hero__panel">
               <HeroBackdrop />
 

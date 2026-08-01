@@ -126,7 +126,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  border-radius: 999px;
+  border-radius: 12px;
   border: 1px solid transparent;
   padding: 14px 26px;
   font-family: var(--font-body);
@@ -243,12 +243,17 @@ button {
   padding: 10px 0 26px;
 }
 
+.hero__wrap {
+  width: calc(100% - 44px);
+  margin-inline: auto;
+}
+
 .hero__panel {
   position: relative;
   background: var(--panel);
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius-lg);
-  padding: 92px 32px 72px;
+  border-radius: clamp(32px, 4.5vw, 60px);
+  padding: 96px 32px 76px;
   overflow: hidden;
 }
 
@@ -413,7 +418,7 @@ button {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.15fr);
   align-items: center;
   gap: clamp(24px, 6vw, 90px);
-  max-width: 980px;
+  max-width: 1060px;
   margin-inline: auto;
 }
 
@@ -426,7 +431,8 @@ button {
   gap: 10px;
   background: var(--ink);
   color: var(--panel);
-  border-radius: 999px;
+  border-radius: 14px;
+  box-shadow: 0 0 0 3px var(--paper), 0 0 0 4px var(--line);
   padding: 13px 24px;
   font-family: var(--font-mono);
   font-size: 13px;
@@ -458,13 +464,17 @@ button {
 .pcard__eyebrow {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-faint);
   display: flex;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.pcard__eyebrow span {
+  white-space: nowrap;
 }
 
 .pcard__title {
@@ -1372,9 +1382,12 @@ button {
   .container {
     width: calc(100% - 32px);
   }
+  .hero__wrap {
+    width: calc(100% - 20px);
+  }
   .hero__panel {
     padding: 64px 20px 48px;
-    border-radius: 20px;
+    border-radius: 28px;
   }
   .section {
     padding-top: 72px;
