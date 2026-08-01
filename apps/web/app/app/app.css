@@ -5342,3 +5342,24 @@
     width: 100%;
   }
 }
+
+/* ------------------------------------------------------ slack alerting */
+
+.alertch {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Bounded, because a workspace with two hundred channels would otherwise
+   stretch this select across the card and push the threshold out of view. */
+.alertch .field select {
+  max-width: 420px;
+}
+
+.alertch__saved {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--approve);
+}

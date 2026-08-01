@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AddConnector } from "../../../../components/app/add-connector";
+import { AlertChannel } from "../../../../components/app/alert-channel";
 import { SlackChannels } from "../../../../components/app/slack-channels";
 import { EmptyState } from "../../../../components/app/ui";
 import {
@@ -248,10 +249,19 @@ export default function ConnectorsPane() {
                   )}
 
                   {instance.connector === "slack" && (
-                    <div className="ccard__extra">
-                      <h4 className="ccard__sub">Channels the Historian may read</h4>
-                      <SlackChannels />
-                    </div>
+                    <>
+                      <div className="ccard__extra">
+                        <h4 className="ccard__sub">Channels the Historian may read</h4>
+                        <SlackChannels />
+                      </div>
+                      {/* Reading and writing are separate grants, and the
+                          write one had no interface at all — so alerting was
+                          off for every org that never called the API by hand. */}
+                      <div className="ccard__extra">
+                        <h4 className="ccard__sub">Where Sadhak posts alerts</h4>
+                        <AlertChannel />
+                      </div>
+                    </>
                   )}
 
                   {/* The invite, on the card that is blocked by it.

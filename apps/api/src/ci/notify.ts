@@ -53,6 +53,16 @@ async function botToken(orgId: number): Promise<string | null> {
   return secret?.reveal() ?? null;
 }
 
+/**
+ * Calls Slack, and says why when Slack says no.
+ *
+ * Slack answers HTTP 200 with `{ok:false, error:"..."}` for everything that
+ * matters here — `missing_scope` when the token predates a scope,
+ * `not_in_channel` when nobody invited the bot, `invalid_blocks` when a message
+ * is too long. Returning a bare null for all of them made alerting fail in a
+ * way that produced no error, no log line and no status change: the feature was
+ * simply quiet, and quiet is indistinguishable from nothing having happened.
+ */
 async function call<T>(
   token: string,
   method: string,
@@ -66,9 +76,27 @@ async function call<T>(
     },
     body: JSON.stringify(body),
   });
-  if (!res.ok) return null;
-  const payload = (await res.json()) as { ok?: boolean } & Record<string, unknown>;
-  return payload.ok ? (payload as T) : null;
+
+  if (!res.ok) {
+    log().warn(
+      { event: "slack_http_error", method, status: res.status },
+      "slack: http error",
+    );
+    return null;
+  }
+
+  const payload = (await res.json()) as { ok?: boolean; error?: string } & Record<
+    string,
+    unknown
+  >;
+  if (!payload.ok) {
+    log().warn(
+      { event: "slack_refused", method, slackError: payload.error ?? "unknown" },
+      `slack: ${method} refused (${payload.error ?? "unknown"})`,
+    );
+    return null;
+  }
+  return payload as T;
 }
 
 /** Below this the finding is offered as a lead, not stated as a cause. */
