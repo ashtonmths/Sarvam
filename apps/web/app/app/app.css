@@ -108,44 +108,131 @@
   font-size: 14px;
   font-weight: 500;
   text-align: left;
+  transition: border-color 0.15s ease;
+}
+
+.rail__org:hover,
+.rail__org[data-state="open"] {
+  border-color: var(--ink-faint);
+}
+
+.rail__org-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rail__org-caret {
-  font-family: var(--font-mono);
-  font-size: 11px;
+  flex: none;
   color: var(--ink-faint);
 }
 
-.rail__org-menu {
-  position: absolute;
-  z-index: 60;
-  margin-top: 6px;
-  width: 204px;
+/* ------------------------------------------- dropdowns (Radix, our skin) */
+
+.dropdown,
+.select__menu {
+  z-index: 70;
+  min-width: var(--radix-dropdown-menu-trigger-width, var(--radix-select-trigger-width));
+  max-height: var(
+    --radix-dropdown-menu-content-available-height,
+    var(--radix-select-content-available-height)
+  );
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--card);
   box-shadow: var(--shadow-chip);
+  overflow: hidden;
+  animation: dropdown-in 0.14s ease;
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.select__viewport {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.rail__org-menu button {
+.dropdown__item,
+.select__opt {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-  border: 0;
-  background: none;
+  gap: 12px;
+  padding: 7px 10px;
   border-radius: 8px;
-  padding: 8px 10px;
   font-size: 13.5px;
-  text-align: left;
+  color: var(--ink-soft);
+  cursor: default;
+  user-select: none;
+  outline: none;
+  white-space: nowrap;
 }
 
-.rail__org-menu button:hover {
+.dropdown__item {
+  margin-bottom: 2px;
+}
+
+.dropdown__item:last-child {
+  margin-bottom: 0;
+}
+
+.dropdown__item[data-highlighted],
+.select__opt[data-highlighted] {
   background: var(--thread-soft);
+  color: var(--ink);
+}
+
+.select__opt[data-state="checked"] {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.dropdown__item svg,
+.select__check {
+  color: var(--thread);
+  flex: none;
+}
+
+.select__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  transition: border-color 0.15s ease;
+}
+
+.select__btn:hover,
+.select__btn[data-state="open"] {
+  border-color: var(--ink-faint);
+}
+
+.select__chevron {
+  display: inline-flex;
+  color: var(--ink-faint);
+}
+
+.select__btn--small {
+  padding: 5px 10px;
+  font-size: 13px;
+  border-radius: 8px;
 }
 
 .rail__nav {
