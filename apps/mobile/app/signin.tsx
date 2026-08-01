@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from "react-native";
 import { API_URL } from "../lib/api";
 import { useSession } from "../lib/session";

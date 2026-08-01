@@ -1,5 +1,5 @@
 import { Redirect, Tabs } from "expo-router";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import { useSession } from "../../lib/session";
 import { T } from "../../lib/theme";
 import { Loading } from "../../lib/ui";

@@ -17,8 +17,8 @@ export function LogoMark({
   // Deliberately not next/image: the optimizer needs sharp at runtime, which
   // the standalone output does not trace into the container, and there is
   // nothing to optimize about a 192px mark drawn at 26.
-  // biome-ignore lint/performance/noImgElement: a 26px static mark, no optimizer worth its runtime dependency
   return (
+    // biome-ignore lint/performance/noImgElement: a 26px static mark, no optimizer worth its runtime dependency
     <img
       src="/logo.png"
       alt=""
