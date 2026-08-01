@@ -1,5 +1,5 @@
 {
-  "name": "@ariadne/web",
+  "name": "@sadhak/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ariadne/shared": "workspace:*",
+    "@sadhak/shared": "workspace:*",
     "@xyflow/react": "^12.4.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
