@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Select } from "../../../../components/app/select";
 import { EmptyState, Kbd, PageHead } from "../../../../components/app/ui";
 import { DEPARTURE_EDGES } from "../../../../lib/mock/data";
 import { useHasGraph } from "../../../../lib/queries";
@@ -158,20 +159,16 @@ export default function DeparturePage() {
           >
             <div className="field-inline">
               <label htmlFor="dep-person">Departing person</label>
-              <select
+              <Select
                 id="dep-person"
                 value={person.id}
-                onChange={(e) =>
-                  setPerson(PEOPLE.find((p) => p.id === e.target.value) ?? PEOPLE[0]!)
-                }
-                data-testid="departure-person-picker"
-              >
-                {PEOPLE.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} · {p.note}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setPerson(PEOPLE.find((p) => p.id === v) ?? PEOPLE[0]!)}
+                testid="departure-person-picker"
+                options={PEOPLE.map((p) => ({
+                  value: p.id,
+                  label: `${p.name} · ${p.note}`,
+                }))}
+              />
             </div>
             <p className="panel__caption" style={{ margin: 0 }}>
               {person.soleSource} sole-source edges · fan-out runs ~5 loops concurrently,

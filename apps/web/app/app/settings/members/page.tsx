@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { Select } from "../../../../components/app/select";
 import { MEMBERS, PENDING_INVITES, timeAgo } from "../../../../lib/mock/data";
+
+const ROLES = [
+  { value: "admin", label: "admin" },
+  { value: "member", label: "member" },
+  { value: "viewer", label: "viewer" },
+];
 
 export default function MembersPane() {
   const [invited, setInvited] = useState(false);
@@ -36,21 +43,12 @@ export default function MembersPane() {
                   {m.role === "owner" ? (
                     <span className="tag tag--thread">owner</span>
                   ) : (
-                    <select
+                    <Select
                       defaultValue={m.role}
-                      aria-label={`Role for ${m.name}`}
-                      style={{
-                        border: "1px solid var(--line)",
-                        borderRadius: 8,
-                        padding: "5px 8px",
-                        font: "inherit",
-                        fontSize: 13,
-                      }}
-                    >
-                      <option value="admin">admin</option>
-                      <option value="member">member</option>
-                      <option value="viewer">viewer</option>
-                    </select>
+                      label={`Role for ${m.name}`}
+                      options={ROLES}
+                      small
+                    />
                   )}
                 </td>
                 <td className="dim">{timeAgo(m.joinedAt)}</td>
@@ -88,11 +86,7 @@ export default function MembersPane() {
           </div>
           <div className="field-inline">
             <label htmlFor="inv-role">Role</label>
-            <select id="inv-role" defaultValue="member">
-              <option value="admin">admin</option>
-              <option value="member">member</option>
-              <option value="viewer">viewer</option>
-            </select>
+            <Select id="inv-role" defaultValue="member" options={ROLES} />
           </div>
           <button
             type="submit"

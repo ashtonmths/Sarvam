@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Select } from "../../../components/app/select";
 import { EmptyState, PageHead } from "../../../components/app/ui";
 import { AGENT_RUNS, timeAgo } from "../../../lib/mock/data";
 import { useHasGraph } from "../../../lib/queries";
@@ -61,26 +62,28 @@ export default function AgentsPage() {
       </PageHead>
 
       <div className="filters">
-        <select
+        <Select
           value={agent}
-          onChange={(e) => setAgent(e.target.value)}
-          aria-label="Filter by agent"
-        >
-          <option value="all">Historian + Reviewer</option>
-          <option value="historian">Historian</option>
-          <option value="reviewer">Reviewer</option>
-        </select>
-        <select
+          onChange={setAgent}
+          label="Filter by agent"
+          options={[
+            { value: "all", label: "Historian + Reviewer" },
+            { value: "historian", label: "Historian" },
+            { value: "reviewer", label: "Reviewer" },
+          ]}
+        />
+        <Select
           value={outcome}
-          onChange={(e) => setOutcome(e.target.value)}
-          aria-label="Filter by outcome"
-        >
-          <option value="all">All outcomes</option>
-          <option value="propose_rationale">proposed rationale</option>
-          <option value="draft_correction">drafted correction</option>
-          <option value="give_up">gave up</option>
-          <option value="dismiss">dismissed</option>
-        </select>
+          onChange={setOutcome}
+          label="Filter by outcome"
+          options={[
+            { value: "all", label: "All outcomes" },
+            { value: "propose_rationale", label: "proposed rationale" },
+            { value: "draft_correction", label: "drafted correction" },
+            { value: "give_up", label: "gave up" },
+            { value: "dismiss", label: "dismissed" },
+          ]}
+        />
       </div>
 
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>

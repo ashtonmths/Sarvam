@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
+import { Select } from "../../../components/app/select";
 import { EmptyState, PageHead, VerdictBadge } from "../../../components/app/ui";
 import { nodeById } from "../../../lib/mock/data";
 import {
@@ -120,46 +121,40 @@ function SimulateInner() {
         >
           <div className="field-inline">
             <label htmlFor="sim-node">Target</label>
-            <select
+            <Select
               id="sim-node"
-              value={nodeId}
-              onChange={(e) => setNodeId(Number(e.target.value))}
-              data-testid="simulate-node-picker"
-            >
-              {SIMULATABLE_NODES.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.name} · {n.kind} · {n.connector}
-                </option>
-              ))}
-            </select>
+              value={String(nodeId)}
+              onChange={(v) => setNodeId(Number(v))}
+              testid="simulate-node-picker"
+              options={SIMULATABLE_NODES.map((n) => ({
+                value: String(n.id),
+                label: `${n.name} · ${n.kind} · ${n.connector}`,
+              }))}
+            />
           </div>
           <div className="field-inline">
             <label htmlFor="sim-op">Operation</label>
-            <select
+            <Select
               id="sim-op"
               value={operation}
-              onChange={(e) => setOperation(e.target.value)}
-              data-testid="simulate-operation-picker"
-            >
-              {operations.map((op) => (
-                <option key={op} value={op}>
-                  {op}
-                </option>
-              ))}
-            </select>
+              onChange={setOperation}
+              testid="simulate-operation-picker"
+              options={operations.map((op) => ({ value: op, label: op }))}
+            />
           </div>
           <div className="field-inline">
             <label htmlFor="sim-drill">Explainer drill (mock only)</label>
-            <select
+            <Select
               id="sim-drill"
               value={drill}
-              onChange={(e) => setDrill(e.target.value as ExplanationState)}
-            >
-              <option value="streamed">streamed (normal)</option>
-              <option value="failed">failed</option>
-              <option value="disabled">disabled</option>
-              <option value="quota_exhausted">quota_exhausted</option>
-            </select>
+              onChange={(v) => setDrill(v as ExplanationState)}
+              options={[
+                { value: "streamed", label: "streamed (normal)" },
+                { value: "failed", label: "failed" },
+                { value: "disabled", label: "disabled" },
+                { value: "quota_exhausted", label: "quota_exhausted" },
+              ]}
+            />
           </div>
           <button
             type="button"

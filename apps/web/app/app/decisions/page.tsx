@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { Select } from "../../../components/app/select";
 import { EmptyState, PageHead, VerdictBadge } from "../../../components/app/ui";
 import { DECISIONS, fmtDate, nodeById } from "../../../lib/mock/data";
 import { verdict as computeVerdict, traverse } from "../../../lib/mock/verdict";
@@ -57,37 +58,40 @@ export default function DecisionsPage() {
       />
 
       <div className="filters">
-        <select
+        <Select
           value={mode}
-          onChange={(e) => setMode(e.target.value)}
-          aria-label="Filter by mode"
-        >
-          <option value="all">All modes</option>
-          <option value="hard-gate">Hard gate (GitHub)</option>
-          <option value="proxy-gate">Proxy gate (REST)</option>
-          <option value="mcp">MCP (AI agents)</option>
-          <option value="reflex">Reflex (post-change)</option>
-          <option value="simulation">Simulation</option>
-        </select>
-        <select
+          onChange={setMode}
+          label="Filter by mode"
+          options={[
+            { value: "all", label: "All modes" },
+            { value: "hard-gate", label: "Hard gate (GitHub)" },
+            { value: "proxy-gate", label: "Proxy gate (REST)" },
+            { value: "mcp", label: "MCP (AI agents)" },
+            { value: "reflex", label: "Reflex (post-change)" },
+            { value: "simulation", label: "Simulation" },
+          ]}
+        />
+        <Select
           value={v}
-          onChange={(e) => setV(e.target.value)}
-          aria-label="Filter by verdict"
-        >
-          <option value="all">All verdicts</option>
-          <option value="BLOCK">BLOCK</option>
-          <option value="WARN">WARN</option>
-          <option value="APPROVE">APPROVE</option>
-        </select>
-        <select
+          onChange={setV}
+          label="Filter by verdict"
+          options={[
+            { value: "all", label: "All verdicts" },
+            { value: "BLOCK", label: "BLOCK" },
+            { value: "WARN", label: "WARN" },
+            { value: "APPROVE", label: "APPROVE" },
+          ]}
+        />
+        <Select
           value={dry}
-          onChange={(e) => setDry(e.target.value)}
-          aria-label="Filter dry-run"
-        >
-          <option value="all">Live + dry-run</option>
-          <option value="live">Enforced only</option>
-          <option value="dry">Dry-runs only</option>
-        </select>
+          onChange={setDry}
+          label="Filter dry-run"
+          options={[
+            { value: "all", label: "Live + dry-run" },
+            { value: "live", label: "Enforced only" },
+            { value: "dry", label: "Dry-runs only" },
+          ]}
+        />
       </div>
 
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>

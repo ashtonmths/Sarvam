@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ApiError, api, type GraphEdge, type GraphNode, type Page } from "../../lib/api";
 import { useQuery } from "../../lib/queries";
+import { Select } from "./select";
 import { ProvenanceTag } from "./ui";
 
 /**
@@ -178,18 +179,15 @@ export function LiveGraph() {
           aria-label="Search nodes"
           data-testid="graph-search"
         />
-        <select
+        <Select
           value={kind}
-          onChange={(e) => setKind(e.target.value)}
-          aria-label="Filter by kind"
-        >
-          <option value="all">All kinds</option>
-          {kinds.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
-          ))}
-        </select>
+          onChange={setKind}
+          label="Filter by kind"
+          options={[
+            { value: "all", label: "All kinds" },
+            ...kinds.map((k) => ({ value: k, label: k })),
+          ]}
+        />
         <span className="dim" style={{ fontSize: 12.5 }}>
           {visible.length} of {nodes.length} nodes
         </span>
