@@ -31,6 +31,11 @@ export default defineConfig({
       NODE_ENV: "test",
       DATABASE_URL: databaseUrl,
       LOG_LEVEL: "silent",
+      // A throwaway vault key. Set explicitly rather than inherited from a
+      // developer's .env, so the vault suites run identically in CI — where
+      // there is no .env at all — and a missing key fails as a missing key
+      // rather than as a mysterious decrypt error.
+      CREDENTIAL_MASTER_KEY: "v1:dGVzdC1vbmx5LWtleS1ub3QtYS1yZWFsLXNlY3JldC0=",
       JOBS_ENABLED: "false",
       RATE_LIMIT_ENABLED: "true",
     },

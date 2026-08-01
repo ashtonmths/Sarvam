@@ -1,0 +1,12 @@
+{
+  "pins": "LOCKED: an llm_inferred edge (confidence 0.5) can never on its own BLOCK, however high the impact. Blocking someone's Friday on a model's hunch is how the gate loses trust permanently.",
+  "verdict": "WARN",
+  "evidence": [
+    {
+      "rule": "total impact 1.00 >= 0.3",
+      "nodeId": -1,
+      "name": "1 downstream nodes",
+      "impact": 1
+    }
+  ]
+}

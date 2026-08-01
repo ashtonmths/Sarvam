@@ -1,0 +1,18 @@
+{
+  "pins": "Every blocking node appears in the evidence, not just the first.",
+  "verdict": "BLOCK",
+  "evidence": [
+    {
+      "rule": "impact 0.90 >= 0.8 over trusted edges",
+      "nodeId": 1,
+      "name": "node-1",
+      "impact": 0.9
+    },
+    {
+      "rule": "impact 0.85 >= 0.8 over trusted edges",
+      "nodeId": 2,
+      "name": "node-2",
+      "impact": 0.85
+    }
+  ]
+}

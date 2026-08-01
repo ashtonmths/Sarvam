@@ -27,4 +27,15 @@ psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d demo_billing <<-'SQL'
       FROM invoices i
       JOIN customers c ON c.id = i.customer_id
      GROUP BY 1, 2;
+
+  -- Canary rows. These exist so a test can prove "structure, never payloads"
+  -- rather than assert it: the crawler reads this database in full, and these
+  -- distinctive strings must appear nowhere in Sadhak's own tables afterwards.
+  -- If a connector ever starts shipping cell values, this is what catches it.
+  INSERT INTO customers (name, country) VALUES
+    ('CANARY-CUSTOMER-7f3a', 'canary-7f3a@example.com');
+
+  INSERT INTO invoices (customer_id, amount_cents, currency, vat_rate)
+    SELECT id, 133742, 'CANARY-PAYLOAD-7f3a', 0.21 FROM customers
+     WHERE name = 'CANARY-CUSTOMER-7f3a';
 SQL

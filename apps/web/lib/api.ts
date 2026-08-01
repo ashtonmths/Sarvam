@@ -314,6 +314,7 @@ export interface MetricsSummary {
   coveragePending: number;
   totalEdges: number;
   correctionsCaptured: number;
+  knowledgeConcentration: { atRiskNodes: number; unknownNodes: number };
   incidentsAvoidedModelled: { value: number; modelled: true } | null;
 }
 

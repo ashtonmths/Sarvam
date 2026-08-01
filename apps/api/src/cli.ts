@@ -9,6 +9,7 @@ import {
 import { and, desc, eq, sql } from "drizzle-orm";
 import { runCrawl } from "./cartographer/index.js";
 import { closePools, db } from "./db.js";
+import { keyStatus, rotateCredentials } from "./vault/rotate.js";
 
 /**
  * Thin wrappers over the same functions the routes call, so dev and ops see
@@ -158,6 +159,35 @@ async function main(): Promise<void> {
     case "graph-stats":
       await graphStatsCommand();
       break;
+    case "key-status": {
+      const status = await keyStatus();
+      log(`current key: ${status.currentKeyId}`);
+      for (const [keyId, n] of Object.entries(status.byKeyId)) {
+        const mark = keyId === status.currentKeyId ? "current" : "NEEDS ROTATION";
+        log(`  ${keyId}: ${n} credential(s) — ${mark}`);
+      }
+      log(
+        status.complete
+          ? "every credential is sealed under the current key; CREDENTIAL_MASTER_KEY_PREVIOUS can be removed"
+          : "rotation incomplete — do NOT remove CREDENTIAL_MASTER_KEY_PREVIOUS yet",
+      );
+      break;
+    }
+    case "rotate-credentials": {
+      const result = await rotateCredentials();
+      log(
+        `re-sealed ${result.resealed}, already current ${result.alreadyCurrent}, failed ${result.failed.length}`,
+      );
+      for (const failure of result.failed) {
+        log(`  credential ${failure.id}: ${failure.reason}`);
+      }
+      if (result.failed.length > 0) {
+        log(
+          "failed rows are sealed under a key this process cannot open — reconnect those connectors",
+        );
+      }
+      break;
+    }
     default:
       log(
         [
@@ -165,6 +195,9 @@ async function main(): Promise<void> {
           "",
           "  crawl        run a full crawl for every connector instance in the org",
           "  graph-stats  node/edge counts by kind, connector, provenance and state",
+          "  key-status   which master key each stored credential is sealed under",
+          "  rotate-credentials",
+          "               re-seal every credential under the current master key",
         ].join("\n"),
       );
   }

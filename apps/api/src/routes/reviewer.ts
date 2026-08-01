@@ -11,6 +11,7 @@ import { db } from "../db.js";
 import { ConflictError, NotFoundError } from "../errors.js";
 import { parsePagination } from "../http/pagination.js";
 import { requireCapability } from "../middleware/auth.js";
+import { backtest } from "../reviewer/backtest.js";
 import { computeMetrics } from "../reviewer/metrics.js";
 
 export const reviewerRoutes = new Hono();
@@ -116,6 +117,14 @@ reviewerRoutes.get("/drift/summary", requireCapability("graph:read"), async (c) 
  */
 reviewerRoutes.get("/metrics/summary", requireCapability("graph:read"), async (c) => {
   return c.json(await computeMetrics(c.get("orgId")));
+});
+
+/**
+ * Replays stored decisions through today's kernel. Read-only, and reports no
+ * rate below its sample floor rather than a flattering one.
+ */
+reviewerRoutes.get("/metrics/backtest", requireCapability("graph:read"), async (c) => {
+  return c.json(await backtest(c.get("orgId")));
 });
 
 const resolvable = ["open", "investigating"] as const;

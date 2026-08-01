@@ -1,0 +1,12 @@
+{
+  "pins": "BLOCK short-circuits; it never degrades to WARN because of bus factor.",
+  "verdict": "BLOCK",
+  "evidence": [
+    {
+      "rule": "impact 0.95 >= 0.8 over trusted edges",
+      "nodeId": 1,
+      "name": "node-1",
+      "impact": 0.95
+    }
+  ]
+}

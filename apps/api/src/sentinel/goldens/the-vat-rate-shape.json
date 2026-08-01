@@ -1,0 +1,12 @@
+{
+  "pins": "The demo's signature case: one critical report one hop away over a statically parsed edge. This is the verdict the pitch describes.",
+  "verdict": "BLOCK",
+  "evidence": [
+    {
+      "rule": "impact 1.00 >= 0.8 over trusted edges",
+      "nodeId": 3,
+      "name": "public.eu_vat_report",
+      "impact": 1
+    }
+  ]
+}

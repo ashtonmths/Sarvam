@@ -1,0 +1,12 @@
+{
+  "pins": "A trivial impact still warns when one person is the only one who can explain it — that is the knowledge risk, not the blast radius.",
+  "verdict": "WARN",
+  "evidence": [
+    {
+      "rule": "only one person can explain this dependency",
+      "nodeId": 1,
+      "name": "node-1",
+      "impact": 0.01
+    }
+  ]
+}

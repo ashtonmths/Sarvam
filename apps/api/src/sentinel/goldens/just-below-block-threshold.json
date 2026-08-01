@@ -1,0 +1,12 @@
+{
+  "pins": "impact 0.79 does not block. The boundary is inclusive on one side only.",
+  "verdict": "WARN",
+  "evidence": [
+    {
+      "rule": "total impact 0.79 >= 0.3",
+      "nodeId": -1,
+      "name": "1 downstream nodes",
+      "impact": 0.79
+    }
+  ]
+}

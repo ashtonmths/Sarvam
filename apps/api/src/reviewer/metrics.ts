@@ -139,6 +139,28 @@ export async function computeMetrics(orgId: number): Promise<Metrics> {
       AND dismissed_by IS DISTINCT FROM 'reviewer'
   `;
 
+  /**
+   * Concentration, banded. A node whose confirmed rationale names exactly one
+   * author is a *lead*, so it is counted at risk; a node nothing has been
+   * mined for is `unknown` and deliberately not, because reporting "we have
+   * not looked" as a risk is how the list gets ignored.
+   */
+  const [concentrated] = await sql<{ at_risk: number; unknown: number }[]>`
+    WITH per_node AS (
+      SELECT n.id,
+             count(DISTINCT r.author) FILTER (WHERE r.state = 'confirmed') AS authors
+      FROM nodes n
+      LEFT JOIN edges e ON e.src_id = n.id OR e.dst_id = n.id
+      LEFT JOIN rationale_links rl ON rl.edge_id = e.id
+      LEFT JOIN rationale r ON r.id = rl.rationale_id
+      WHERE n.org_id = ${orgId} AND n.state = 'active'
+      GROUP BY n.id
+    )
+    SELECT count(*) FILTER (WHERE authors = 1)::int AS at_risk,
+           count(*) FILTER (WHERE authors = 0)::int AS unknown
+    FROM per_node
+  `;
+
   const total = edges?.n ?? 0;
 
   return {
@@ -154,6 +176,10 @@ export async function computeMetrics(orgId: number): Promise<Metrics> {
     coveragePending: total === 0 ? 0 : (pending?.n ?? 0) / total,
     totalEdges: total,
     correctionsCaptured: corrections?.n ?? 0,
+    knowledgeConcentration: {
+      atRiskNodes: concentrated?.at_risk ?? 0,
+      unknownNodes: concentrated?.unknown ?? 0,
+    },
     /**
      * Null until 11.6's backtest harness exists to ground it. The type permits
      * a value only alongside `modelled: true`, so whenever this is filled in

@@ -1,0 +1,12 @@
+{
+  "pins": "minEdgeConfidence exactly 0.7 is trusted enough to block.",
+  "verdict": "BLOCK",
+  "evidence": [
+    {
+      "rule": "impact 0.90 >= 0.8 over trusted edges",
+      "nodeId": 1,
+      "name": "node-1",
+      "impact": 0.9
+    }
+  ]
+}

@@ -94,6 +94,11 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # Called out separately from the unit run so a determinism failure reads
+      # as "the verdict changed" rather than as one more red test.
+      - name: Verdict goldens
+        run: pnpm test:goldens
+
       - name: Build web
         run: pnpm --filter @sadhak/web build
 

@@ -1,0 +1,12 @@
+{
+  "pins": "0.69 is not, so a runtime-observed edge that decayed cannot block alone.",
+  "verdict": "WARN",
+  "evidence": [
+    {
+      "rule": "total impact 0.90 >= 0.3",
+      "nodeId": -1,
+      "name": "1 downstream nodes",
+      "impact": 0.9
+    }
+  ]
+}

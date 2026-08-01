@@ -148,9 +148,13 @@ export default function MetricsPage() {
           <em>human judgments a rival cannot crawl</em>
         </div>
         <div className="ostats__cell">
-          <strong>{m?.totalEdges ?? 0}</strong>
-          <span>Dependencies mapped</span>
-          <em>active edges across every connector</em>
+          <strong>{m?.knowledgeConcentration.atRiskNodes ?? 0}</strong>
+          <span>Knowledge at risk</span>
+          <em>
+            one author in the evidence
+            {(m?.knowledgeConcentration.unknownNodes ?? 0) > 0 &&
+              ` · ${m?.knowledgeConcentration.unknownNodes} unmined, not counted`}
+          </em>
         </div>
       </div>
 

@@ -13,6 +13,8 @@
     "test:watch": "vitest",
     "test:int": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
+    "test:goldens": "vitest run apps/api/src/sentinel/score.goldens.test.ts",
+    "test:load": "node tests/load/gate.mjs",
     "lint": "biome ci .",
     "lint:fix": "biome check --write .",
     "seed": "pnpm --filter @sadhak/api seed",

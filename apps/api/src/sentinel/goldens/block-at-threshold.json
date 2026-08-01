@@ -1,0 +1,12 @@
+{
+  "pins": "impact exactly at BLOCK_IMPACT (0.8) over a trusted edge blocks.",
+  "verdict": "BLOCK",
+  "evidence": [
+    {
+      "rule": "impact 0.80 >= 0.8 over trusted edges",
+      "nodeId": 1,
+      "name": "node-1",
+      "impact": 0.8
+    }
+  ]
+}

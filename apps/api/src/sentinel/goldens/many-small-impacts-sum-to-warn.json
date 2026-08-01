@@ -1,0 +1,12 @@
+{
+  "pins": "No single node is alarming, but the total crosses WARN_TOTAL_IMPACT.",
+  "verdict": "WARN",
+  "evidence": [
+    {
+      "rule": "total impact 0.33 >= 0.3",
+      "nodeId": -1,
+      "name": "3 downstream nodes",
+      "impact": 0.33
+    }
+  ]
+}

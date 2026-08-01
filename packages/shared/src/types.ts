@@ -195,6 +195,16 @@ export interface Metrics {
   /** Approved drift corrections and criticality overrides — the compounding asset. */
   correctionsCaptured: number;
   /**
+   * Nodes where knowledge looks concentrated, as a **band** rather than a
+   * count. "Bus factor: 1" is a claim the evidence cannot support; "high risk,
+   * from one kind of evidence" is. See reviewer/concentration.ts.
+   */
+  knowledgeConcentration: {
+    atRiskNodes: number;
+    /** Nodes with no evidence either way — never counted as at risk. */
+    unknownNodes: number;
+  };
+  /**
    * The only modelled number. Null until a backtest harness exists to ground
    * it — an unbacked estimate is worse than an absent one.
    */
