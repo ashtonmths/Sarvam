@@ -1,5 +1,5 @@
 {
-  "name": "@ariadne/api",
+  "name": "@sadhak/api",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,11 +8,12 @@
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@ariadne/shared": "workspace:*",
+    "@sadhak/shared": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "@huggingface/transformers": "^3.3.0",
     "@modelcontextprotocol/sdk": "^1.0.0",

@@ -11,7 +11,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter @ariadne/api...
+    pnpm install --frozen-lockfile --filter @sadhak/api...
 
 FROM base AS runtime
 WORKDIR /app
@@ -26,8 +26,9 @@ COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY pnpm-workspace.yaml package.json ./
 COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
+COPY db ./db
 
 RUN mkdir -p /models && chown -R node:node /models
 USER node
 EXPOSE 3001
-CMD ["pnpm", "--filter", "@ariadne/api", "start"]
+CMD ["pnpm", "--filter", "@sadhak/api", "start"]
