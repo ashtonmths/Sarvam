@@ -263,6 +263,16 @@ const Env = z.object({
   // dev-seed connector credentials only — real orgs use the vault
   N8N_BASE_URL: z.string().url().optional(),
   N8N_API_KEY: z.string().min(1).optional(),
+  /**
+   * Where a *browser* reaches n8n, which is not where the API reaches it.
+   *
+   * N8N_BASE_URL is `http://n8n:5678` — a compose service name that resolves
+   * inside the network and nowhere else. Linking a user to it produces a dead
+   * link on every deployment, so the public address is its own variable:
+   * `http://localhost:5678` locally, `https://n8n.sadhak.online` in
+   * production, where Traefik terminates it.
+   */
+  N8N_PUBLIC_URL: z.string().url().optional(),
   AIRTABLE_TOKEN: z.string().min(1).optional(),
   GITHUB_TOKEN: z.string().min(1).optional(),
   SLACK_BOT_TOKEN: z.string().min(1).optional(),

@@ -150,6 +150,16 @@ services:
       # Connector credentials live in the per-org vault, not here. N8N_BASE_URL
       # stays as the default base for instances that do not override it.
       N8N_BASE_URL: http://n8n:5678
+      # The instance *owner* key, which is a different thing from the per-org
+      # connector credentials above: it is what creates an n8n account for a
+      # new signup, and it is unscoped, so it is operator-set and never
+      # reachable from org config. Optional — without it the API still boots,
+      # account provisioning reports itself skipped rather than failing, and
+      # execution-failure polling no-ops.
+      N8N_API_KEY: ${N8N_API_KEY:-}
+      # Where a browser reaches n8n: the Traefik-terminated host, matching
+      # N8N_HOST on the n8n service. Not the compose address above.
+      N8N_PUBLIC_URL: https://n8n.sadhak.online
       PORT: "3001"
 
       # Where vendors redirect back to. Slack sends the browser here after a

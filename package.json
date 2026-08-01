@@ -24,6 +24,7 @@
     "db:push": "pnpm --filter @sadhak/api db:push",
     "db:migrate": "pnpm --filter @sadhak/api db:migrate",
     "db:studio": "pnpm --filter @sadhak/api db:studio",
+    "n8n:bootstrap": "tsx scripts/n8n-bootstrap.ts",
     "check:env": "tsx scripts/check-env-example.ts",
     "check:obs": "tsx scripts/check-observability.ts",
     "obs:up": "bash scripts/obs-local.sh up",

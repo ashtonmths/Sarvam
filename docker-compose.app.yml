@@ -54,6 +54,13 @@ services:
       # guard treats as private and refuses without this.
       EGRESS_ALLOW_PRIVATE_HOSTS: n8n,db
       N8N_BASE_URL: http://n8n:5678
+      # The instance owner key, minted by `pnpm n8n:bootstrap`. Without it the
+      # api still serves: account provisioning reports itself skipped rather
+      # than failing, and execution polling no-ops.
+      N8N_API_KEY: ${N8N_API_KEY:-}
+      # Browser-facing, so localhost and the published port — not the compose
+      # service name above, which resolves only between containers.
+      N8N_PUBLIC_URL: http://localhost:5678
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL_STRONG: ${OPENROUTER_MODEL_STRONG:-}
       OPENROUTER_MODEL_BULK: ${OPENROUTER_MODEL_BULK:-}
