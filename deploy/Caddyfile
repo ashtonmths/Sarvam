@@ -1,0 +1,20 @@
+{$DOMAIN} {
+	encode zstd gzip
+
+	# The gate, the webhooks, and the MCP endpoint.
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy api:3001
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}
+
+# The demo company's n8n. Kept on its own subdomain so the crawl and the
+# revert path use a real external host rather than a container alias.
+n8n.{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy n8n:5678
+}
