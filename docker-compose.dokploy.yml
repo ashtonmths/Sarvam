@@ -87,6 +87,17 @@ services:
 
   api:
     image: ghcr.io/${GHCR_OWNER:-ashtonmths}/sadhak-api:latest
+    # `latest` is a moving tag, and `docker compose up -d` does not chase it:
+    # finding an image of that name already on the host, it reuses it and
+    # reports the service up to date. CI can publish a new `latest` on every
+    # push to main and the VPS will keep restarting the build it first pulled —
+    # a deploy that succeeds loudly and changes nothing.
+    #
+    # `always` is what makes a redeploy mean the current image. It costs a
+    # registry round trip per deploy, which is a layer digest check when
+    # nothing changed. Only the two moving tags carry it; db and n8n are pinned
+    # to exact versions, where re-pulling buys nothing and adds a way to fail.
+    pull_policy: always
     restart: unless-stopped
     <<: *logging
     depends_on:
@@ -184,6 +195,8 @@ services:
 
   web:
     image: ghcr.io/${GHCR_OWNER:-ashtonmths}/sadhak-web:latest
+    # Same moving tag, same reason as api above.
+    pull_policy: always
     restart: unless-stopped
     <<: *logging
     depends_on:
