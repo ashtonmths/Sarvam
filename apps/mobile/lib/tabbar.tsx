@@ -51,6 +51,7 @@ type IconName = React.ComponentProps<typeof Feather>["name"];
 /** Route name → glyph. Anything unmapped still renders, with a neutral dot. */
 const ICONS: Record<string, IconName> = {
   index: "activity",
+  ask: "compass",
   decisions: "check-square",
   alerts: "bell",
   account: "user",

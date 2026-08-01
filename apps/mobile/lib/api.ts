@@ -164,3 +164,21 @@ export interface Page<T> {
   items: T[];
   nextCursor: string | null;
 }
+
+/** Mirrors `AskAnswer` in the API's documents/ask.ts. */
+export interface AskSource {
+  n: number;
+  title: string;
+  speaker: string | null;
+  permalink: string;
+  occurredAt: string | null;
+  excerpt: string;
+}
+
+export interface AskAnswer {
+  answer: string;
+  sources: AskSource[];
+  grounded: boolean;
+  /** Set when retrieval worked but the model could not be called. */
+  unavailable?: string;
+}

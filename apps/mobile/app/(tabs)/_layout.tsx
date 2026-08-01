@@ -27,6 +27,7 @@ export default function TabsLayout() {
       tabBar={(props: unknown) => <TabBar {...(props as TabBarProps)} />}
     >
       <Tabs.Screen name="index" options={{ title: "Overview" }} />
+      <Tabs.Screen name="ask" options={{ title: "Decide" }} />
       <Tabs.Screen name="decisions" options={{ title: "Decisions" }} />
       <Tabs.Screen name="alerts" options={{ title: "Alerts" }} />
       <Tabs.Screen name="account" options={{ title: "Account" }} />
