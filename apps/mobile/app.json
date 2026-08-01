@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Sadhak",
+    "slug": "sadhak",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "sadhak",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ebe9e2"
+    },
+    "ios": { "supportsTablet": true, "bundleIdentifier": "online.sadhak.app" },
+    "android": {
+      "package": "online.sadhak.app",
+      "adaptiveIcon": { "backgroundColor": "#ebe9e2" }
+    },
+    "web": { "bundler": "metro", "output": "static" },
+    "plugins": ["expo-router", "expo-secure-store"],
+    "extra": {
+      "apiUrl": "https://api.sadhak.online"
+    }
+  }
+}

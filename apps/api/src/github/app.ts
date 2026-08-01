@@ -269,8 +269,21 @@ export async function isCheckRequired(
       ...(body.checks ?? []).map((c) => c.context),
     ];
     return contexts.includes("sadhak/gate");
-  } catch {
-    // 404 means no protection configured at all — a definite "not enforcing".
+  } catch (error) {
+    /**
+     * A 403 is "we were not allowed to look", not "there is no protection".
+     *
+     * Reading branch protection needs the App's `Administration: Read`
+     * permission, which is deliberately not required — it is a broad grant to
+     * ask for just to render a banner. Without it GitHub answers 403, and
+     * treating that as `false` would state that a correctly protected
+     * repository is unprotected. Null means unknown, and the UI says so.
+     *
+     * A 404 genuinely does mean no protection is configured on that branch,
+     * which is a definite "not enforcing".
+     */
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("GitHub 403") || message.includes("GitHub 401")) return null;
     return false;
   }
 }

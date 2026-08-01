@@ -62,10 +62,17 @@ githubRoutes.get("/github/installations", requireCapability("graph:read"), async
               enforcing: await isCheckRequired(token, repo.fullName, repo.defaultBranch),
             })),
           );
-          // Only a true claim across every covered repository clears the
-          // banner, since one unprotected repo is one place a change can land.
-          enforcing =
-            repositories.length > 0 && repositories.every((r) => r.enforcing === true);
+          /**
+           * Only a true claim across every covered repository clears the
+           * banner, since one unprotected repo is one place a change can land.
+           * An unknown anywhere makes the whole answer unknown rather than
+           * false — saying "not enforcing" about a repository we were not
+           * permitted to check is the same false alarm this banner exists to
+           * prevent, pointed the other way.
+           */
+          enforcing = repositories.some((r) => r.enforcing === null)
+            ? null
+            : repositories.length > 0 && repositories.every((r) => r.enforcing === true);
         } catch {
           enforcing = null;
         }
