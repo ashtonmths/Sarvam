@@ -885,11 +885,6 @@
   padding-inline: 0;
 }
 
-.shell__rail--min .rail__user-meta,
-.shell__rail--min .rail__signout {
-  display: none;
-}
-
 .rail__avatar {
   width: 30px;
   height: 30px;
@@ -932,6 +927,14 @@
 
 .rail__signout:hover {
   color: var(--block);
+}
+
+/* Collapsed rail: the modifier sits after the base rules it overrides, so the
+   cascade reads top to bottom instead of relying on specificity to undo
+   something declared later. */
+.shell__rail--min .rail__user-meta,
+.shell__rail--min .rail__signout {
+  display: none;
 }
 
 .shell__main {
@@ -1440,11 +1443,6 @@
   background: #d3e6da;
 }
 
-.btn--approve .kbd {
-  border-color: color-mix(in srgb, var(--approve) 30%, transparent);
-  color: var(--approve);
-}
-
 .btn--danger-ghost {
   border-color: var(--line);
   color: var(--block);
@@ -1474,6 +1472,13 @@
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--ink-soft);
+}
+
+/* Tints the key cap to match the button it sits in. Placed after the base rule
+   so the override reads in cascade order rather than winning on specificity. */
+.btn--approve .kbd {
+  border-color: color-mix(in srgb, var(--approve) 30%, transparent);
+  color: var(--approve);
 }
 
 .undo-toast {
@@ -1831,10 +1836,6 @@
   border-top: 0;
 }
 
-.node-suggest:hover .node-suggest__name {
-  color: var(--thread);
-}
-
 .node-suggest__dot {
   width: 7px;
   height: 7px;
@@ -1851,6 +1852,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* After the base rule so the hover colour reads in cascade order. */
+.node-suggest:hover .node-suggest__name {
+  color: var(--thread);
 }
 
 .node-suggest__crit {

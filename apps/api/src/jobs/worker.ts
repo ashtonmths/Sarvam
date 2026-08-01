@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
 import { sqlJobs } from "../db.js";
+import { log, withLogContext } from "../log.js";
 import { settleAfterFailure } from "./backoff.js";
 import { getHandler, type JobContext } from "./registry.js";
 
@@ -95,7 +96,19 @@ async function reap(): Promise<void> {
 }
 
 async function runOne(job: ClaimedJob): Promise<void> {
-  const registration = getHandler(job.kind);
+  // Same ambient context as a request, so a crawl that fails deep inside a
+  // connector is as traceable as an HTTP 500 — and a job enqueued by a request
+  // is not orphaned from the request that caused it.
+  return withLogContext(
+    { jobId: job.id, ...(job.orgId === null ? {} : { orgId: job.orgId }) },
+    () => runOneInContext(job, getHandler(job.kind)),
+  );
+}
+
+async function runOneInContext(
+  job: ClaimedJob,
+  registration: ReturnType<typeof getHandler>,
+): Promise<void> {
   metrics.claimed += 1;
 
   if (!registration) {
@@ -173,7 +186,7 @@ async function tick(): Promise<void> {
       inFlight.add(promise);
     }
   } catch (error) {
-    console.error("jobs: tick failed", error);
+    log().error({ event: "job_tick_failed", err: error }, "jobs: tick failed");
   }
 }
 
@@ -188,8 +201,13 @@ export function startWorker(): void {
   if (running || !config.JOBS_ENABLED) return;
   running = true;
   stopping = false;
-  console.log(
-    `jobs: worker ${WORKER_ID} started (concurrency ${config.JOBS_CONCURRENCY})`,
+  log().info(
+    {
+      event: "worker_started",
+      workerId: WORKER_ID,
+      concurrency: config.JOBS_CONCURRENCY,
+    },
+    "jobs: worker started",
   );
   void tick().then(schedule);
 }

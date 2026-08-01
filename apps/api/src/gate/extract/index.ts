@@ -60,7 +60,6 @@ async function databaseNameFor(
   instanceId: number,
 ): Promise<string | null> {
   const rows = await db.execute<{ external_id: string }>(
-    // biome-ignore lint/style/noUnusedTemplateLiteral: drizzle raw fragment
     `SELECT external_id FROM nodes
      WHERE org_id = ${orgId} AND connector = 'postgres'
        AND connector_instance_id = ${instanceId}

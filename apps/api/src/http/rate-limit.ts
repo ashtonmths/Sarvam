@@ -34,8 +34,9 @@ export interface LimitDecision {
   retryAfterSeconds: number;
 }
 
-function windowStart(now: number): Date {
-  return new Date(Math.floor(now / WINDOW_MS) * WINDOW_MS);
+/** Start of the window containing `now`, in epoch milliseconds. */
+function windowStartMs(now: number): number {
+  return Math.floor(now / WINDOW_MS) * WINDOW_MS;
 }
 
 function retryAfter(now: number): number {
@@ -68,7 +69,7 @@ export function hitMemory(
   limit: number,
   now = Date.now(),
 ): LimitDecision {
-  const startMs = windowStart(now).getTime();
+  const startMs = windowStartMs(now);
   const existing = memoryBuckets.get(bucket);
 
   if (!existing || existing.windowStartMs !== startMs) {
@@ -98,9 +99,12 @@ export async function hitShared(
   limit: number,
   now = Date.now(),
 ): Promise<LimitDecision> {
+  // Epoch seconds through `to_timestamp` rather than binding a Date: the
+  // window boundary is then computed by Postgres from an unambiguous number,
+  // with no dependence on how the driver infers a JavaScript Date's type.
   const rows = await sql<{ count: number }[]>`
     INSERT INTO rate_counters (bucket, window_start, count)
-    VALUES (${bucket}, ${windowStart(now)}, 1)
+    VALUES (${bucket}, to_timestamp(${windowStartMs(now) / 1000}), 1)
     ON CONFLICT (bucket, window_start)
     DO UPDATE SET count = rate_counters.count + 1
     RETURNING count

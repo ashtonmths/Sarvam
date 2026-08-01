@@ -26,6 +26,7 @@
  */
 
 import { config, requireEnv } from "./config.js";
+import { log } from "./log.js";
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -216,9 +217,10 @@ async function classify429(res: Response): Promise<Error> {
 }
 
 function logCall(fields: Record<string, unknown>): void {
-  // Token counts and costs only — never prompt bodies. Plan 15 lifts these
-  // into metrics; the shape is stable from here.
-  console.log(JSON.stringify({ event: "llm_call", ...fields }));
+  // Token counts and costs only — never prompt bodies. Mined content is
+  // attacker-influenced text, and a log line is a place it would be read back
+  // by a human with more trust than it deserves.
+  log().info({ event: "llm_call", ...fields });
 }
 
 export async function complete(opts: CompleteOptions): Promise<Completion> {

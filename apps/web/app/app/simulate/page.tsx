@@ -68,10 +68,16 @@ function SimulateInner() {
   const selected = items.find((n) => n.id === nodeId) ?? null;
   const operations = selected ? (OPERATIONS[selected.kind] ?? ["delete"]) : ["delete"];
 
-  useEffect(() => {
-    if (!operations.includes(operation)) setOperation(operations[0] ?? "delete");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeId]);
+  /**
+   * Derived, not synced through an effect. `operations` is a fresh array on
+   * every render, so it can never be an honest dependency, and the effect
+   * version rendered one frame with an operation the selected node does not
+   * support before correcting itself. Picking a table after choosing "retype"
+   * now falls back in the same render that changes the node.
+   */
+  const effectiveOperation = operations.includes(operation)
+    ? operation
+    : (operations[0] ?? "delete");
 
   async function run() {
     if (!selected) return;
@@ -85,7 +91,7 @@ function SimulateInner() {
     try {
       const verdict = await api.post<VerdictResult>("/api/verdicts", {
         target: targetFor(selected.kind),
-        operation,
+        operation: effectiveOperation,
         connector: selected.connector,
         externalId: selected.externalId,
       });
@@ -162,7 +168,7 @@ function SimulateInner() {
             }))}
           />
           <Select
-            value={operation}
+            value={effectiveOperation}
             onChange={setOperation}
             label="Operation"
             testid="simulate-operation-picker"
@@ -199,7 +205,7 @@ function SimulateInner() {
               <VerdictBadge verdict={result.verdict} big />
               <div>
                 <strong style={{ fontSize: 16 }}>
-                  {operation} {selected?.name}
+                  {effectiveOperation} {selected?.name}
                 </strong>
                 <div className="dim" style={{ fontSize: 13 }}>
                   {result.impacted.length} downstream node

@@ -2,12 +2,13 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { config } from "./config.js";
 import { closePools, sql } from "./db.js";
-import { notFound, onError, requestId } from "./http/middleware.js";
+import { notFound, onError, requestId, requestLog } from "./http/middleware.js";
 import { identityRateLimit, ipRateLimit, webhookRateLimit } from "./http/rate-limit.js";
 import { bodyGuard, corsMiddleware, securityHeaders } from "./http/security.js";
 import { registerJobHandlers, scheduleDueCrawls } from "./jobs/handlers.js";
 import { queueStats } from "./jobs/queue.js";
 import { startWorker, stopWorker } from "./jobs/worker.js";
+import { log } from "./log.js";
 import { requireAuth, requireOrg } from "./middleware/auth.js";
 import { authRoutes } from "./routes/auth.js";
 import { connectorRoutes } from "./routes/connectors.js";
@@ -29,6 +30,9 @@ const app = new Hono();
 app.use("*", securityHeaders);
 // Request id next, so every error and log line downstream carries it.
 app.use("*", requestId);
+// Then the access log, inside the id context and outside everything that can
+// reject: a 413 or a 429 is exactly the request worth having a line for.
+app.use("*", requestLog);
 app.use("*", corsMiddleware);
 
 // Webhook ingress buffers whole provider deliveries and gets a larger cap;
@@ -92,7 +96,7 @@ registerJobHandlers();
 const isEntrypoint = process.argv[1]?.endsWith("index.ts");
 if (isEntrypoint) {
   const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
-    console.log(`sadhak api listening on :${info.port}`);
+    log().info({ event: "api_started", port: info.port }, "sadhak api listening");
   });
 
   if (config.JOBS_ENABLED) {
@@ -101,7 +105,7 @@ if (isEntrypoint) {
   }
 
   const shutdown = async () => {
-    console.log("shutting down: draining jobs…");
+    log().info({ event: "shutdown_started" }, "shutting down: draining jobs");
     server.close();
     await stopWorker();
     await closePools();

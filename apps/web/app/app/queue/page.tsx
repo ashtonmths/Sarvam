@@ -179,7 +179,7 @@ export default function QueuePage() {
         </div>
       )}
 
-      <div ref={listRef}>
+      <div>
         {drafts.loading ? (
           <div className="panel" style={{ height: 160, opacity: 0.4 }} />
         ) : items.length === 0 ? (
@@ -189,85 +189,117 @@ export default function QueuePage() {
             action={{ href: "/app/agents", label: "See what the agents found →" }}
           />
         ) : (
-          items.map((r, i) => (
-            <article
-              key={r.id}
-              className="queue__row"
-              data-active={i === active}
-              data-idx={i}
-              onClick={() => setCursor(i)}
-              data-testid={`queue-draft-${r.id}`}
-            >
-              <div>
-                <div className="queue__head">
-                  <span className="queue__avatar" aria-hidden="true">
-                    {initials(r.author)}
-                  </span>
-                  <span className="queue__who">
-                    <strong>{r.author ?? "unknown"}</strong>
-                    <span>
-                      mined from {r.sourceKind} · {timeAgo(r.createdAt)}
+          /* tabIndex puts the queue in the tab order at all, and
+             aria-activedescendant is how the cursor is reported without
+             moving DOM focus away from the container the shortcuts listen on. */
+          <div
+            ref={listRef}
+            role="listbox"
+            tabIndex={0}
+            aria-label="Rationale drafts awaiting review"
+            {...(items[active]
+              ? { "aria-activedescendant": `queue-draft-${items[active].id}` }
+              : {})}
+          >
+            {items.map((r, i) => (
+              /* A listbox option rather than a clickable article: j/k already
+               move a cursor over exactly one active row, which is what a
+               listbox is. aria-selected is what tells a screen reader the
+               cursor moved — the border colour only tells sighted users. */
+              /* A div, not an article: article is a non-interactive landmark
+                 and cannot carry an interactive role. */
+              <div
+                key={r.id}
+                role="option"
+                aria-selected={i === active}
+                id={`queue-draft-${r.id}`}
+                className="queue__row"
+                data-active={i === active}
+                data-idx={i}
+                // -1, not 0: the listbox is the single tab stop and the cursor
+                // is reported through aria-activedescendant. Options still
+                // need to be programmatically focusable to be a valid option.
+                tabIndex={-1}
+                onClick={() => setCursor(i)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setCursor(i);
+                  }
+                }}
+                data-testid={`queue-draft-${r.id}`}
+              >
+                <div>
+                  <div className="queue__head">
+                    <span className="queue__avatar" aria-hidden="true">
+                      {initials(r.author)}
                     </span>
-                  </span>
-                  {r.confidence !== null && (
-                    <span className="queue__conf" title="Historian's confidence">
-                      <i>
-                        <b style={{ width: `${r.confidence * 100}%` }} />
-                      </i>
-                      {r.confidence.toFixed(2)}
+                    <span className="queue__who">
+                      <strong>{r.author ?? "unknown"}</strong>
+                      <span>
+                        mined from {r.sourceKind} · {timeAgo(r.createdAt)}
+                      </span>
                     </span>
-                  )}
+                    {r.confidence !== null && (
+                      <span className="queue__conf" title="Historian's confidence">
+                        <i>
+                          <b style={{ width: `${r.confidence * 100}%` }} />
+                        </i>
+                        {r.confidence.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  <blockquote className="queue__quote">&ldquo;{r.body}&rdquo;</blockquote>
+                  <div className="queue__meta">
+                    {r.srcName && r.dstName && (
+                      <span className="tag tag--thread">
+                        {r.srcName} → {r.dstName}
+                      </span>
+                    )}
+                    <Link
+                      href="/app/graph"
+                      className="dim"
+                      style={{ textDecoration: "underline" }}
+                    >
+                      view edge
+                    </Link>
+                  </div>
                 </div>
-                <blockquote className="queue__quote">&ldquo;{r.body}&rdquo;</blockquote>
-                <div className="queue__meta">
-                  {r.srcName && r.dstName && (
-                    <span className="tag tag--thread">
-                      {r.srcName} → {r.dstName}
-                    </span>
-                  )}
-                  <Link
-                    href="/app/graph"
-                    className="dim"
-                    style={{ textDecoration: "underline" }}
-                  >
-                    view edge
-                  </Link>
-                </div>
-              </div>
-              <div className="queue__actions">
-                {/* Verification is one click, always — the source is the
+                <div className="queue__actions">
+                  {/* Verification is one click, always — the source is the
                     primary action, not a footnote. */}
-                <a
-                  className="queue__source"
-                  href={r.sourceUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  data-testid="queue-draft-source"
-                >
-                  Verify source ↗
-                </a>
-                <button
-                  type="button"
-                  className="btn btn--approve btn--tiny"
-                  onClick={() => act("confirm", r.id, `Confirmed draft #${r.id}`)}
-                  data-testid="queue-draft-confirm"
-                >
-                  Confirm <Kbd>a</Kbd>
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--danger-ghost btn--tiny"
-                  onClick={() => {
-                    setRejecting(r.id);
-                    setReason("");
-                  }}
-                  data-testid="queue-draft-reject"
-                >
-                  Reject <Kbd>x</Kbd>
-                </button>
+                  <a
+                    className="queue__source"
+                    href={r.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid="queue-draft-source"
+                  >
+                    Verify source ↗
+                  </a>
+                  <button
+                    type="button"
+                    className="btn btn--approve btn--tiny"
+                    onClick={() => act("confirm", r.id, `Confirmed draft #${r.id}`)}
+                    data-testid="queue-draft-confirm"
+                  >
+                    Confirm <Kbd>a</Kbd>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--danger-ghost btn--tiny"
+                    onClick={() => {
+                      setRejecting(r.id);
+                      setReason("");
+                    }}
+                    data-testid="queue-draft-reject"
+                  >
+                    Reject <Kbd>x</Kbd>
+                  </button>
+                </div>
               </div>
-            </article>
-          ))
+            ))}
+          </div>
         )}
       </div>
 
@@ -284,10 +316,20 @@ export default function QueuePage() {
         <div
           className="help-overlay"
           role="dialog"
+          aria-modal="true"
           aria-label="Reject with reason"
-          onClick={() => setRejecting(null)}
         >
-          <div className="help-overlay__card" onClick={(e) => e.stopPropagation()}>
+          {/* A sibling rather than a parent, so dismissing needs no
+              stopPropagation on the card, and a real button so the scrim is
+              reachable by keyboard and announced instead of being a div that
+              silently eats clicks. Escape closes it too. */}
+          <button
+            type="button"
+            className="help-overlay__scrim"
+            aria-label="Cancel rejection"
+            onClick={() => setRejecting(null)}
+          />
+          <div className="help-overlay__card">
             <h2>Reject</h2>
             <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>
               Rejected drafts are kept, not deleted — the acceptance rate is how we tell
@@ -338,10 +380,16 @@ export default function QueuePage() {
         <div
           className="help-overlay"
           role="dialog"
+          aria-modal="true"
           aria-label="Keyboard shortcuts"
-          onClick={() => setHelp(false)}
         >
-          <div className="help-overlay__card" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            className="help-overlay__scrim"
+            aria-label="Close keyboard shortcuts"
+            onClick={() => setHelp(false)}
+          />
+          <div className="help-overlay__card">
             <h2>Keyboard</h2>
             <dl>
               <dt>

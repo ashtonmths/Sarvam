@@ -33,6 +33,11 @@ export default function TracePage() {
 
   const state = run.data?.run.state;
   const terminal = state === "done" || state === "cancelled";
+  // Stable across renders (useCallback with no deps in useQuery), so it can be
+  // a real dependency instead of a suppressed one — naming it means a future
+  // change that makes it unstable shows up as a resubscribe loop in review
+  // rather than as a silently stale closure.
+  const { reload } = run;
 
   useEffect(() => {
     if (!runId || state === undefined) return;
@@ -45,13 +50,12 @@ export default function TracePage() {
           setEvents((prev) => [...prev, data as unknown as TraceEvent]);
         if (event === "run") {
           setFinished(true);
-          run.reload();
+          reload();
         }
       },
       onError: () => setFinished(true),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId, state, terminal]);
+  }, [runId, state, terminal, reload]);
 
   if (run.loading) {
     return (

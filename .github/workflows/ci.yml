@@ -58,6 +58,38 @@ jobs:
       - name: Build web
         run: pnpm --filter @sadhak/web build
 
+  # The tier that needs a database. Split from `check` rather than folded into
+  # it so a missing service container fails loudly here instead of quietly
+  # skipping the tests that cover tenant isolation and the shared limiter.
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: sadhak
+          POSTGRES_PASSWORD: sadhak
+          POSTGRES_DB: sadhak
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sadhak"
+          --health-interval 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Integration tests
+        run: pnpm test:int
+
   # Every migration, from zero, on real pgvector — so a bad migration is caught
   # on a Tuesday rather than at container boot in production.
   migrate-check:
@@ -122,7 +154,7 @@ jobs:
   images:
     # Build once, on main only. Pull requests are covered by check and docker.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [check, lint, migrate-check]
+    needs: [check, lint, migrate-check, integration]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
