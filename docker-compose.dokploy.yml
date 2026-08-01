@@ -103,9 +103,20 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # Apply pending migrations, then serve. The runner takes an advisory lock,
-    # so two replicas booting together serialize instead of racing DDL.
-    command: sh -c "pnpm --filter @sadhak/api db:migrate && pnpm --filter @sadhak/api start"
+    # Apply pending migrations, seed, then serve. The migration runner takes an
+    # advisory lock, so two replicas booting together serialize instead of
+    # racing DDL.
+    #
+    # Migrations gate the server: serving against a schema that failed to
+    # migrate corrupts data rather than merely erroring. The seed does not gate
+    # it. The seed is idempotent and adopts whatever already exists, so its
+    # realistic failures are a replica losing an insert race or the demo crawl
+    # target being absent — neither is a reason to refuse to serve the API, and
+    # `&&` here would turn a cosmetic failure into an outage.
+    command: >
+      sh -c "pnpm --filter @sadhak/api db:migrate &&
+      { pnpm --filter @sadhak/api seed || echo 'seed failed - serving anyway'; } &&
+      pnpm --filter @sadhak/api start"
     # Docker's default 10s SIGKILL would cut in-flight crawls on every deploy;
     # the worker drains within 45s (JOBS_DRAIN_TIMEOUT_MS).
     stop_grace_period: 60s
