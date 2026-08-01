@@ -1,0 +1,109 @@
+# Production stack for Dokploy.
+#
+# Dokploy runs this as a Compose service and its bundled Traefik terminates
+# TLS, so there is no reverse proxy here and nothing publishes a port. Attach
+# domains in the Dokploy UI:
+#
+#   sadhak.online       -> web  : 3000
+#   api.sadhak.online   -> api  : 3001
+#   n8n.sadhak.online   -> n8n  : 5678
+#
+# Images are prebuilt by CI and pulled from GHCR, so a deploy is a pull and a
+# restart, not a build on the VPS. Set the environment in the Dokploy UI:
+# POSTGRES_PASSWORD, N8N_ENCRYPTION_KEY, OPENROUTER_API_KEY,
+# OPENROUTER_MODEL_STRONG, OPENROUTER_MODEL_BULK, GITHUB_TOKEN,
+# SLACK_BOT_TOKEN, AIRTABLE_TOKEN, N8N_API_KEY.
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sadhak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in Dokploy}
+      POSTGRES_DB: sadhak
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sadhak -d sadhak"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  n8n:
+    image: n8nio/n8n:1.75.2
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: db
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: sadhak
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in Dokploy}
+      N8N_HOST: n8n.sadhak.online
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://n8n.sadhak.online/
+      N8N_PUBLIC_API_DISABLED: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_PROXY_HOPS: "1"
+      GENERIC_TIMEZONE: UTC
+    expose:
+      - "5678"
+    volumes:
+      - n8ndata:/home/node/.n8n
+    networks:
+      - default
+      - dokploy-network
+
+  api:
+    image: ghcr.io/finite-loop-club-nmamit/sadhak-api:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # Apply pending migrations, then serve. Migrations are idempotent, so a
+    # restart with nothing to apply is a no-op.
+    command: sh -c "pnpm --filter @sadhak/api db:migrate && pnpm --filter @sadhak/api start"
+    environment:
+      DATABASE_URL: postgres://sadhak:${POSTGRES_PASSWORD}@db:5432/sadhak
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL_STRONG: ${OPENROUTER_MODEL_STRONG}
+      OPENROUTER_MODEL_BULK: ${OPENROUTER_MODEL_BULK}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+      AIRTABLE_TOKEN: ${AIRTABLE_TOKEN}
+      N8N_BASE_URL: http://n8n:5678
+      N8N_API_KEY: ${N8N_API_KEY}
+      PORT: "3001"
+    expose:
+      - "3001"
+    volumes:
+      - models:/models
+    networks:
+      - default
+      - dokploy-network
+
+  web:
+    image: ghcr.io/finite-loop-club-nmamit/sadhak-web:latest
+    restart: unless-stopped
+    depends_on:
+      - api
+    expose:
+      - "3000"
+    networks:
+      - default
+      - dokploy-network
+
+volumes:
+  pgdata:
+  n8ndata:
+  models:
+
+networks:
+  dokploy-network:
+    external: true
