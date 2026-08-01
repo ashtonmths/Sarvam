@@ -59,6 +59,49 @@ export function PageHead({
   );
 }
 
+/**
+ * The thread motif, drawn rather than illustrated.
+ *
+ * An empty panel used to be a sentence inside a dashed box, which reads as a
+ * missing element rather than a finished state. Concentric rings with one node
+ * on them is the same figure the product uses for a dependency and its blast
+ * radius — so the graphic says "nothing here yet" in the app's own vocabulary
+ * instead of borrowing a generic spot illustration.
+ *
+ * Inline SVG and `currentColor`: no asset to ship, no second network request,
+ * and it inherits the panel's colour in both themes for free.
+ */
+function EmptyMark() {
+  return (
+    <svg
+      className="empty__mark"
+      viewBox="0 0 64 64"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle
+        cx="32"
+        cy="32"
+        r="21"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        opacity="0.35"
+      />
+      <circle
+        cx="32"
+        cy="32"
+        r="13"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeDasharray="3 4"
+        opacity="0.55"
+      />
+      <circle cx="32" cy="11" r="3.25" fill="currentColor" opacity="0.75" />
+    </svg>
+  );
+}
+
 export function EmptyState({
   title,
   body,
@@ -70,6 +113,7 @@ export function EmptyState({
 }) {
   return (
     <div className="empty">
+      <EmptyMark />
       <strong>{title}</strong>
       <p>{body}</p>
       {action && (

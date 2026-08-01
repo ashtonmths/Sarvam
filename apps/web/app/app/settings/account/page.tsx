@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "../../../../components/app/ui";
 import { api } from "../../../../lib/api";
 import { useQuery } from "../../../../lib/queries";
 import { useSession } from "../../../../lib/session";
@@ -69,7 +70,16 @@ export default function AccountPane() {
           recognize.
         </p>
         {sessions.loading ? (
-          <div style={{ height: 60, opacity: 0.4 }} />
+          <div className="skeleton-rows">
+            {[0, 1, 2].map((row) => (
+              <div key={row} className="skeleton" style={{ height: 15 }} />
+            ))}
+          </div>
+        ) : (sessions.data?.items ?? []).length === 0 ? (
+          <EmptyState
+            title="No other sessions"
+            body="Only this device is signed in. Anything you do not recognize would appear here to be revoked."
+          />
         ) : (
           <table className="dtable">
             <thead>

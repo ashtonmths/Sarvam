@@ -3286,6 +3286,56 @@
   background: color-mix(in srgb, var(--panel) 45%, transparent);
 }
 
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 6px 0 2px;
+}
+
+.empty__mark {
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px;
+  color: var(--thread);
+}
+
+/**
+ * Loading placeholders that hold the shape of what is coming.
+ *
+ * The panes used to reserve height with an empty faded div, which is a hole in
+ * the page — indistinguishable from a section that loaded and had nothing in
+ * it. Bars the width of the eventual rows read as "arriving" instead.
+ */
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--line) 45%, transparent) 25%,
+    color-mix(in srgb, var(--line) 80%, transparent) 37%,
+    color-mix(in srgb, var(--line) 45%, transparent) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+  from {
+    background-position: 100% 50%;
+  }
+  to {
+    background-position: 0 50%;
+  }
+}
+
+/* A sweep that never stops is noise to anyone who reads motion as urgency. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
 .empty strong {
   display: block;
   font-family: var(--font-display);
