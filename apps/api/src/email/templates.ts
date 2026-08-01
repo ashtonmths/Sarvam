@@ -1,3 +1,5 @@
+import { appUrl } from "../http/app-url.js";
+
 /**
  * Templates as typed functions returning plain strings.
  *
@@ -22,7 +24,7 @@ const WRAP = (body: string) => `<!doctype html>
 <div style="max-width:520px;margin:0 auto;background:#fdfcfa;border:1px solid #d9d6cc;border-radius:16px;padding:28px">
 ${body}
 <hr style="border:0;border-top:1px solid #e4e1d8;margin:24px 0">
-<p style="font-size:12px;color:#636872;margin:0">Sadhak · <a href="https://sadhak.online/app" style="color:#4053c8">Open the app</a></p>
+<p style="font-size:12px;color:#636872;margin:0">Sadhak · <a href="${appUrl("/app")}" style="color:#4053c8">Open the app</a></p>
 </div></body></html>`;
 
 export function firstCrawlComplete(input: {
@@ -42,7 +44,7 @@ ${top.map((n) => `  - ${n}`).join("\n")}
 
 Your next step is a dry-run: pick a field that looks important and ask the gate what would break. It answers in about forty milliseconds and touches no model.
 
-https://sadhak.online/app/simulate`;
+${appUrl("/app/simulate")}`;
 
   return {
     subject: `Your map of ${input.orgName} is ready`,
@@ -52,7 +54,7 @@ https://sadhak.online/app/simulate`;
 <p style="line-height:1.6;color:#575c66;margin:0 0 6px">The heaviest ones so far:</p>
 <ul style="line-height:1.7;color:#575c66;margin:0 0 18px">${top.map((n) => `<li><code>${n}</code></li>`).join("")}</ul>
 <p style="line-height:1.6;color:#575c66;margin:0 0 18px">Your next step is a dry-run: pick a field that looks important and ask the gate what would break. It answers in about forty milliseconds and touches no model.</p>
-<a href="https://sadhak.online/app/simulate" style="display:inline-block;background:#17191e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Simulate a change</a>`),
+<a href="${appUrl("/app/simulate")}" style="display:inline-block;background:#17191e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Simulate a change</a>`),
   };
 }
 
@@ -124,7 +126,7 @@ export function weeklyDigest(input: {
 
 ${lines.map((l) => `  - ${l}`).join("\n")}
 
-https://sadhak.online/app/metrics
+${appUrl("/app/metrics")}
 
 Coverage counts human-confirmed rationale only. Drafts nobody has reviewed are not in that number.`;
 
@@ -133,7 +135,7 @@ Coverage counts human-confirmed rationale only. Drafts nobody has reviewed are n
     text,
     html: WRAP(`<h1 style="font-size:20px;margin:0 0 14px">Last week at ${input.orgName}</h1>
 <ul style="line-height:1.8;color:#575c66;margin:0 0 18px;padding-left:20px">${lines.map((l) => `<li>${l}</li>`).join("")}</ul>
-<a href="https://sadhak.online/app/metrics" style="display:inline-block;background:#17191e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Open metrics</a>
+<a href="${appUrl("/app/metrics")}" style="display:inline-block;background:#17191e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Open metrics</a>
 <p style="line-height:1.6;color:#636872;font-size:12px;margin:18px 0 0">Coverage counts human-confirmed rationale only. Drafts nobody has reviewed are not in that number.</p>`),
   };
 }

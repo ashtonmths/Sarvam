@@ -6,6 +6,7 @@ import {
 } from "@sadhak/shared/schema";
 import { and, eq } from "drizzle-orm";
 import { db, sql as raw } from "../db.js";
+import { appUrl } from "../http/app-url.js";
 import { log } from "../log.js";
 import { getCredential } from "../vault/vault.js";
 import type { Analysis, Precedent } from "./analyse.js";
@@ -299,7 +300,7 @@ export async function postCiAlert(orgId: number, failureId: number): Promise<boo
       ...p,
       createdAt: new Date(p.createdAt),
     })),
-    detailUrl: `https://sadhak.online/app/ci/${failureId}`,
+    detailUrl: appUrl(`/app/ci/${failureId}`),
     quickFix: stored.quickFix === true,
     quickLabel: stored.quickLabel,
   });
@@ -460,7 +461,7 @@ export async function postN8nAlert(orgId: number, failureId: number): Promise<bo
     cause: d.cause,
     recommendation: d.recommendation,
     confidence: d.confidence,
-    detailUrl: `https://sadhak.online/app/workflows/${failureId}`,
+    detailUrl: appUrl(`/app/workflows/${failureId}`),
   });
 
   const posted = await call<{ ts?: string }>(token, "chat.postMessage", {

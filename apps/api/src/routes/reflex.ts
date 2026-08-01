@@ -6,6 +6,7 @@ import { audit } from "../audit.js";
 import { db } from "../db.js";
 import { NotFoundError, UserError } from "../errors.js";
 import { captureRationale } from "../historian/capture.js";
+import { appUrl } from "../http/app-url.js";
 import { enqueue } from "../jobs/queue.js";
 import { requireCapability } from "../middleware/auth.js";
 import { claimForRevert, getIncident, markAcknowledged } from "../reflex/incidents.js";
@@ -74,7 +75,7 @@ reflexRoutes.post(
         // Each surface hands in its own permanent artifact. For a Reflex ack
         // that is the Slack thread reply; the incident page is the fallback
         // when the acknowledgment came through the web app.
-        sourceUrl: body.sourceUrl ?? `https://sadhak.online/app/incidents/${id}`,
+        sourceUrl: body.sourceUrl ?? appUrl(`/app/incidents/${id}`),
         text: reason,
         author: actorLabel,
         actor: actorLabel,

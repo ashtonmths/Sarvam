@@ -7,6 +7,7 @@ import {
 } from "@sadhak/shared/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db.js";
+import { appUrl } from "../http/app-url.js";
 import { getCredential } from "../vault/vault.js";
 import { buildAlert, buildEscalation, type RationaleLink } from "./alert.js";
 import { getIncident, markAlerted } from "./incidents.js";
@@ -124,7 +125,7 @@ export async function postIncidentAlert(
     revertAvailable:
       isRevertible(incident.connector) &&
       (await hasWriteGrant(orgId, incident.connector)),
-    incidentUrl: `https://sadhak.online/app/incidents/${incident.id}`,
+    incidentUrl: appUrl(`/app/incidents/${incident.id}`),
   });
 
   const posted = await call<{ ts?: string }>(token, "chat.postMessage", {
