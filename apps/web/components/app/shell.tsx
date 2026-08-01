@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { CORRECTIONS, RATIONALE } from "../../lib/mock/data";
+import { CORRECTIONS, EDGES, RATIONALE } from "../../lib/mock/data";
 import { signOut, switchOrg, useSession } from "../../lib/session";
 import { LogoMark } from "../marks";
 
@@ -24,7 +24,16 @@ function I({ d, extra }: { d: string; extra?: React.ReactNode }) {
   );
 }
 
-const NAV = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  badged?: boolean;
+};
+
+// Two groups that mirror how the product is used: the map you look at, and
+// the work the gate generates for you.
+const MAP: NavItem[] = [
   {
     href: "/app",
     label: "Overview",
@@ -40,6 +49,9 @@ const NAV = [
     ),
   },
   { href: "/app/simulate", label: "Simulate", icon: <I d="M5 4 L19 12 L5 20 Z" /> },
+];
+
+const OPERATE: NavItem[] = [
   {
     href: "/app/queue",
     label: "Queue",
@@ -63,18 +75,48 @@ const NAV = [
     label: "Metrics",
     icon: <I d="M4 20 L4 14 M9.3 20 L9.3 9 M14.6 20 L14.6 12 M20 20 L20 5" />,
   },
-  {
-    href: "/app/settings",
-    label: "Settings",
-    icon: (
-      <I d="M12 9 m-3 0 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 M12 2.8 L13.2 5.6 L16.2 5 L16 8 L18.8 9.4 L17 12 L18.8 14.6 L16 16 L16.2 19 L13.2 18.4 L12 21.2 L10.8 18.4 L7.8 19 L8 16 L5.2 14.6 L7 12 L5.2 9.4 L8 8 L7.8 5 L10.8 5.6 Z" />
-    ),
-  },
 ];
+
+const SETTINGS: NavItem = {
+  href: "/app/settings",
+  label: "Settings",
+  icon: (
+    <I d="M12 9 m-3 0 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 M12 2.8 L13.2 5.6 L16.2 5 L16 8 L18.8 9.4 L17 12 L18.8 14.6 L16 16 L16.2 19 L13.2 18.4 L12 21.2 L10.8 18.4 L7.8 19 L8 16 L5.2 14.6 L7 12 L5.2 9.4 L8 8 L7.8 5 L10.8 5.6 Z" />
+  ),
+};
+
+const RAIL_PREF = "sadhak.rail";
+
+function RailLink({
+  item,
+  current,
+  badge,
+}: {
+  item: NavItem;
+  current: boolean;
+  badge?: number;
+}) {
+  return (
+    <Link
+      href={item.href}
+      className="rail__item"
+      aria-current={current ? "page" : undefined}
+      title={item.label}
+      data-testid={`rail-${item.label.toLowerCase()}`}
+    >
+      {item.icon}
+      <span className="rail__text">{item.label}</span>
+      {item.badged && badge != null && badge > 0 && (
+        <span className="rail__badge">{badge}</span>
+      )}
+    </Link>
+  );
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { ready, user, org, orgs } = useSession();
   const [orgMenu, setOrgMenu] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const orgRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const router = useRouter();
@@ -83,6 +125,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // (plan 11) are what populate them for real.
   const queueCount =
     RATIONALE.filter((r) => r.state === "drafted").length + CORRECTIONS.length;
+
+  // Coverage is the product's honest number: only human-confirmed rationale
+  // counts, which is exactly what the marketing site promises ("0 guesses").
+  const confirmed = RATIONALE.filter((r) => r.state === "confirmed").length;
+  const coveragePct = Math.round((confirmed / EDGES.length) * 100);
+
+  useEffect(() => {
+    setCollapsed(localStorage.getItem(RAIL_PREF) === "min");
+  }, []);
 
   // The API is the security boundary; this only keeps the shell from flashing.
   useEffect(() => {
@@ -107,15 +158,37 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     .join("")
     .toUpperCase();
 
+  const isCurrent = (href: string) =>
+    href === "/app" ? pathname === "/app" : pathname.startsWith(href);
+
+  const toggleRail = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem(RAIL_PREF, next ? "min" : "full");
+  };
+
   return (
     <div className="shell">
-      <aside className="shell__rail">
-        <Link href="/app" className="logo" aria-label="Sadhak overview">
-          <LogoMark />
-          sadhak
-        </Link>
+      <aside className={`shell__rail${collapsed ? " shell__rail--min" : ""}`}>
+        <div className="rail__head">
+          <Link href="/app" className="logo" aria-label="Sadhak overview">
+            <LogoMark />
+            <span className="rail__text">sadhak</span>
+          </Link>
+          <button
+            type="button"
+            className="rail__toggle"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+            onClick={toggleRail}
+          >
+            <svg width={15} height={15} viewBox="0 0 24 24" aria-hidden="true" {...glyph}>
+              <path d="M4 4.5 H20 V19.5 H4 Z M9.5 4.5 V19.5" />
+            </svg>
+          </button>
+        </div>
 
-        <div ref={orgRef} style={{ position: "relative" }}>
+        <div ref={orgRef} className="rail__org-wrap">
           <button
             type="button"
             className="rail__org"
@@ -149,47 +222,70 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="rail__nav" aria-label="App">
-          {NAV.map((item) => {
-            const current =
-              item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rail__item"
-                aria-current={current ? "page" : undefined}
-                data-testid={`rail-${item.label.toLowerCase()}`}
-              >
-                {item.icon}
-                {item.label}
-                {item.badged && queueCount > 0 && (
-                  <span className="rail__badge">{queueCount}</span>
-                )}
-              </Link>
-            );
-          })}
+          <span className="rail__label">The map</span>
+          {MAP.map((item) => (
+            <RailLink key={item.href} item={item} current={isCurrent(item.href)} />
+          ))}
+          <span className="rail__label">The work</span>
+          {OPERATE.map((item) => (
+            <RailLink
+              key={item.href}
+              item={item}
+              current={isCurrent(item.href)}
+              badge={queueCount}
+            />
+          ))}
         </nav>
 
-        <div className="rail__user">
-          <span className="rail__avatar" aria-hidden="true">
-            {initials}
+        <Link href="/app/agents" className="rail__card" data-testid="shell-coverage-card">
+          <span className="rail__card-eyebrow">
+            <span>Coverage</span>
+            <span>
+              {confirmed}/{EDGES.length}
+            </span>
           </span>
-          <span className="rail__user-meta">
-            <strong>{user.name}</strong>
-            <span>{org?.role ?? user.role}</span>
+          <span className="rail__card-meter" aria-hidden="true">
+            <i style={{ width: `${coveragePct}%` }} />
           </span>
-          <button
-            type="button"
-            className="rail__signout"
-            data-testid="shell-signout"
-            onClick={async () => {
-              await signOut();
-              router.push("/");
-              router.refresh();
-            }}
-          >
-            Sign out
-          </button>
+          <span className="rail__card-note">
+            {coveragePct}% of edges have confirmed rationale. Run the historians on the
+            rest.
+          </span>
+        </Link>
+        <Link
+          href="/app/agents"
+          className="rail__spark"
+          title={`Coverage ${coveragePct}% — run the historians`}
+          aria-label={`Coverage ${coveragePct} percent. Open agents.`}
+        >
+          <svg width={16} height={16} viewBox="0 0 24 24" aria-hidden="true" {...glyph}>
+            <path d="M12 3 L13.8 10.2 L21 12 L13.8 13.8 L12 21 L10.2 13.8 L3 12 L10.2 10.2 Z" />
+          </svg>
+        </Link>
+
+        <div className="rail__foot">
+          <RailLink item={SETTINGS} current={isCurrent(SETTINGS.href)} />
+          <div className="rail__user">
+            <span className="rail__avatar" aria-hidden="true" title={user.name}>
+              {initials}
+            </span>
+            <span className="rail__user-meta">
+              <strong>{user.name}</strong>
+              <span>{org?.role ?? user.role}</span>
+            </span>
+            <button
+              type="button"
+              className="rail__signout"
+              data-testid="shell-signout"
+              onClick={async () => {
+                await signOut();
+                router.push("/");
+                router.refresh();
+              }}
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </aside>
 
