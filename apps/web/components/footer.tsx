@@ -39,7 +39,7 @@ export function Footer() {
                 <span className="footer__col-title">Project</span>
                 <a
                   className="footer__link"
-                  href="https://github.com/Finite-Loop-Club-NMAMIT/ariadne"
+                  href="https://github.com/Finite-Loop-Club-NMAMIT/Sadhak"
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -47,7 +47,7 @@ export function Footer() {
                 </a>
                 <a
                   className="footer__link"
-                  href="https://github.com/Finite-Loop-Club-NMAMIT/ariadne/tree/main/docs"
+                  href="https://github.com/Finite-Loop-Club-NMAMIT/Sadhak/tree/main/docs"
                   target="_blank"
                   rel="noreferrer"
                 >
