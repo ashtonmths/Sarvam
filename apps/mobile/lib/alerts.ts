@@ -37,10 +37,55 @@ export const POLL_MS = 60_000;
  * is correct, and the message is noise that disappears the moment this runs
  * anywhere but Expo Go in dev.
  */
-export const PINGS_SUPPORTED = Platform.OS !== "web";
+const IS_WEB = Platform.OS === "web";
+
+/**
+ * The browser's own notification API, on web only.
+ *
+ * expo-notifications does not implement web, which is why pings used to be
+ * switched off there — but the browser has had this natively for years, and
+ * running the app in a tab is the fastest way to exercise the whole path
+ * without a phone. Typed locally rather than by pulling the DOM lib into a
+ * React Native tsconfig, which would make every other web-only global look
+ * available on a device too.
+ */
+interface WebNotification {
+  permission: "granted" | "denied" | "default";
+  requestPermission(): Promise<"granted" | "denied" | "default">;
+  new (
+    title: string,
+    options?: { body?: string; tag?: string },
+  ): {
+    onclick: (() => void) | null;
+    close(): void;
+  };
+}
+
+const webNotify: WebNotification | null = IS_WEB
+  ? ((globalThis as { Notification?: WebNotification }).Notification ?? null)
+  : null;
+
+/**
+ * Pings work everywhere: expo-notifications on a device, the browser API on
+ * web. Only a browser too old to have `Notification` is left out.
+ *
+ * On device, Expo Go prints one alarming line on SDK 53+ — that remote push was
+ * removed and you should use a development build. It is worth reading
+ * `warnOfExpoGoPushUsage` in expo-notifications before acting on it:
+ *
+ *     if (__DEV__ && isRunningInExpoGo() && !didWarn) { ... console.error(...) }
+ *
+ * A `console.error`, not a throw. `__DEV__` only, so a release build cannot
+ * reach it; Expo Go only, so a development build never sees it; once, by the
+ * `didWarn` latch. It surfaces during route load because the Alerts screen
+ * imports this file, and a red LogBox entry under a stack trace reads exactly
+ * like a crash. It is not one. What SDK 53 removed is *remote push*, which this
+ * module never used — local notifications were working throughout.
+ */
+export const PINGS_SUPPORTED = IS_WEB ? webNotify !== null : true;
 
 /** Why pings are off, for the screen to show instead of a dead switch. */
-export const PINGS_UNAVAILABLE_REASON = "Notifications are not available on web.";
+export const PINGS_UNAVAILABLE_REASON = "This browser has no notification support.";
 
 export interface Alert {
   id: string;
@@ -53,7 +98,9 @@ export interface Alert {
 let configured = false;
 
 export function configureNotifications() {
-  if (configured || !PINGS_SUPPORTED) return;
+  // Nothing to configure on web: the browser owns presentation, and there is no
+  // foreground/background distinction for it to be told about.
+  if (configured || !PINGS_SUPPORTED || IS_WEB) return;
   configured = true;
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -82,6 +129,16 @@ export function configureNotifications() {
 export function onAlertTap(go: () => void): () => void {
   if (!PINGS_SUPPORTED) return () => undefined;
 
+  // Web has no cold-start case to recover: a browser notification cannot
+  // outlive the tab that created it, so the click is always a live event and
+  // `ping` wires it directly.
+  if (IS_WEB) {
+    onWebTap = go;
+    return () => {
+      onWebTap = null;
+    };
+  }
+
   void Notifications.getLastNotificationResponseAsync().then((response) => {
     if (response) go();
   });
@@ -90,9 +147,21 @@ export function onAlertTap(go: () => void): () => void {
   return () => sub.remove();
 }
 
+/** Set by `onAlertTap` on web, read by `ping` when it builds a notification. */
+let onWebTap: (() => void) | null = null;
+
 /** Asks once. A refusal is a valid answer — the in-app list still works. */
 export async function askPermission(): Promise<boolean> {
   if (!PINGS_SUPPORTED) return false;
+
+  if (webNotify) {
+    // Browsers only show the prompt for a user gesture, which the switch is.
+    // A previous "denied" is final until the user clears it in site settings —
+    // asking again returns "denied" without showing anything.
+    if (webNotify.permission === "granted") return true;
+    return (await webNotify.requestPermission()) === "granted";
+  }
+
   const existing = await Notifications.getPermissionsAsync();
   if (existing.granted) return true;
   const asked = await Notifications.requestPermissionsAsync();
@@ -102,6 +171,18 @@ export async function askPermission(): Promise<boolean> {
 export async function ping(alert: Alert) {
   if (!PINGS_SUPPORTED) return;
   try {
+    if (webNotify) {
+      if (webNotify.permission !== "granted") return;
+      // `tag` collapses repeats of the same alert into one toast rather than
+      // stacking them, which matters because the poll re-reads the same list.
+      const shown = new webNotify(alert.title, { body: alert.body, tag: alert.id });
+      shown.onclick = () => {
+        onWebTap?.();
+        shown.close();
+      };
+      return;
+    }
+
     await Notifications.scheduleNotificationAsync({
       content: { title: alert.title, body: alert.body },
       trigger: null,
