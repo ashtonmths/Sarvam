@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import { FeaturePage, FeatureRow } from "../../../components/feature-page";
 import { GiveUpTrace, HistorianTrace } from "../../../components/product-cards";
@@ -37,7 +38,7 @@ function LoopScene() {
   return (
     <div style={{ width: "100%", maxWidth: 900 }}>
       <div className="graph" style={{ margin: 0, animation: "none" }}>
-        <div className="graph__col graph__col--card" style={{ flexBasis: 300 }}>
+        <div className="graph__col graph__col--card" style={{ "--col-basis": "300px" } as CSSProperties}>
           <div className="pcard" style={{ width: "100%" }}>
             <div className="pcard__eyebrow">
               <span>Unexplained edge</span>
@@ -65,7 +66,7 @@ function LoopScene() {
 
         <div className="graph__link" aria-hidden="true" />
 
-        <div className="graph__col graph__col--card" style={{ flexBasis: 300 }}>
+        <div className="graph__col graph__col--card" style={{ "--col-basis": "300px" } as CSSProperties}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
             <span className="verdict-tag verdict-tag--approve" style={{ alignSelf: "stretch" }}>
               <span className="verdict-tag__dot" /> drafted · with source link

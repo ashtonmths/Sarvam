@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import { FeaturePage } from "../../../components/feature-page";
 import { AgentRefusal } from "../../../components/product-cards";
@@ -37,7 +38,7 @@ function EngineScene() {
   return (
     <div style={{ width: "100%", maxWidth: 940 }}>
       <div className="graph" style={{ margin: 0, animation: "none" }}>
-        <div className="graph__col graph__col--card" style={{ flexBasis: 280 }}>
+        <div className="graph__col graph__col--card" style={{ "--col-basis": "280px" } as CSSProperties}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
             <div className="scene-line">
               <strong>pull request</strong> deletes the field in git
@@ -64,7 +65,7 @@ function EngineScene() {
 
         <div className="graph__link" aria-hidden="true" />
 
-        <div className="graph__col graph__col--card" style={{ flexBasis: 250 }}>
+        <div className="graph__col graph__col--card" style={{ "--col-basis": "250px" } as CSSProperties}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
             <span className="verdict-tag verdict-tag--block" style={{ alignSelf: "stretch" }}>
               <span className="verdict-tag__dot" /> merge blocked

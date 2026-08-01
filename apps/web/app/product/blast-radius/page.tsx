@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import { FeaturePage, FeatureRow } from "../../../components/feature-page";
 import { Msg } from "../../../components/product-cards";
@@ -16,7 +17,7 @@ function DecayScene() {
   return (
     <div style={{ width: "100%", maxWidth: 1000 }}>
       <div className="graph" style={{ margin: 0, animation: "none" }}>
-        <div className="graph__col graph__col--card" style={{ flexBasis: 220 }}>
+        <div className="graph__col graph__col--card" style={{ "--col-basis": "220px" } as CSSProperties}>
           <div className="pcard" style={{ width: "100%" }}>
             <div className="pcard__eyebrow">
               <span>Airtable</span>
@@ -34,7 +35,7 @@ function DecayScene() {
 
         <div className="graph__link" aria-hidden="true" />
 
-        <div className="graph__col graph__col--card" style={{ flexBasis: 220 }}>
+        <div className="graph__col graph__col--card" style={{ "--col-basis": "220px" } as CSSProperties}>
           <div className="hop">
             <div className="hop__name">billing-sync-flow</div>
             <div className="hop__meter">
@@ -50,7 +51,7 @@ function DecayScene() {
 
         <div className="graph__link" aria-hidden="true" />
 
-        <div className="graph__col graph__col--card" style={{ flexBasis: 220, opacity: 0.78 }}>
+        <div className="graph__col graph__col--card" style={{ "--col-basis": "220px", opacity: 0.78 } as CSSProperties}>
           <div className="hop">
             <div className="hop__name">eu-vat-report</div>
             <div className="hop__meter">
@@ -66,7 +67,7 @@ function DecayScene() {
 
         <div className="graph__link" aria-hidden="true" />
 
-        <div className="graph__col graph__col--card" style={{ flexBasis: 220, opacity: 0.55 }}>
+        <div className="graph__col graph__col--card" style={{ "--col-basis": "220px", opacity: 0.55 } as CSSProperties}>
           <div className="hop">
             <div className="hop__name">finance-dashboard</div>
             <div className="hop__meter">
