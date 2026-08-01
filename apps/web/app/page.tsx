@@ -9,7 +9,7 @@ import {
   GlyphGrid,
 } from "../components/marks";
 import { Nav } from "../components/nav";
-import { AgentRefusal, GiveUpTrace, HistorianTrace } from "../components/product-cards";
+import { AgentRefusal, GiveUpTrace, HistorianTrace, Msg } from "../components/product-cards";
 
 export default function Home() {
   return (
@@ -159,12 +159,10 @@ export default function Home() {
                   search Slack, follow threads, check commits, and attach the
                   human reasoning behind each connection with a source link.
                 </p>
-                <div className="step__art" style={{ padding: 12 }}>
-                  <blockquote className="rationale-quote" style={{ margin: 0, fontSize: 12 }}>
+                <div className="step__art" style={{ padding: 14, placeItems: "stretch" }}>
+                  <Msg bare author="@priya" meta="#ops · Mar 2024">
                     &ldquo;feeds EU VAT reporting, do not drop&rdquo;
-                    <br />
-                    <strong>@priya</strong> · #ops · Mar 2024
-                  </blockquote>
+                  </Msg>
                 </div>
               </div>
 

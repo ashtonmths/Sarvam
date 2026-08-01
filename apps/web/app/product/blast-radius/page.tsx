@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { FeaturePage, FeatureRow } from "../../../components/feature-page";
-import { ChangeCard, VerdictCard } from "../../../components/product-cards";
+import { ChangeCard, Msg, VerdictCard } from "../../../components/product-cards";
 
 export const metadata: Metadata = {
   title: "Blast radius",
@@ -22,6 +22,7 @@ export default function BlastRadiusPage() {
             gap: 24,
             width: "100%",
             maxWidth: 820,
+            alignItems: "start",
           }}
         >
           <ChangeCard />
@@ -114,18 +115,16 @@ export default function BlastRadiusPage() {
         }
         visual={
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <blockquote className="pcard rationale-quote" style={{ margin: 0, borderLeftWidth: 2 }}>
+            <Msg author="@priya" meta="#ops · Mar 2024">
               &ldquo;feeds EU VAT reporting, do not drop without checking with
-              finance&rdquo; · <strong>@priya</strong> · #ops · Mar 2024
-            </blockquote>
-            <blockquote className="pcard rationale-quote" style={{ margin: 0 }}>
-              &ldquo;the nightly dump reads this before the sync runs&rdquo; ·{" "}
-              <strong>PR #214</strong> · Jan 2025
-            </blockquote>
-            <blockquote className="pcard rationale-quote" style={{ margin: 0 }}>
-              &ldquo;added for the Stripe reconciliation edge case&rdquo; ·{" "}
-              <strong>commit 41ac2f0</strong> · Aug 2025
-            </blockquote>
+              finance&rdquo;
+            </Msg>
+            <Msg source="code" author="PR #214" meta="billing-sync · Jan 2025">
+              &ldquo;the nightly dump reads this before the sync runs&rdquo;
+            </Msg>
+            <Msg source="code" author="41ac2f0" meta="commit · Aug 2025">
+              &ldquo;added for the Stripe reconciliation edge case&rdquo;
+            </Msg>
           </div>
         }
       />
