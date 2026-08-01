@@ -137,6 +137,14 @@ export const connectorStatus = pgEnum("connector_status", [
 /** Read credentials crawl; write credentials revert. Never the same row. */
 export const credentialScope = pgEnum("credential_scope", ["read", "write"]);
 
+/**
+ * `auth` is deliberately opt-out-*able* nowhere: a verification link or a
+ * password reset is transactionally necessary, and suppressing it breaks the
+ * account rather than respecting a preference. No preference row is ever
+ * written for it.
+ */
+export const emailCategory = pgEnum("email_category", ["auth", "lifecycle", "digest"]);
+
 export const crawlState = pgEnum("crawl_state", [
   "queued",
   "running",
@@ -1013,3 +1021,50 @@ export type StructuralHash = typeof structuralHashes.$inferSelect;
 export type DriftFinding = typeof driftFindings.$inferSelect;
 export type MetricRollup = typeof metricRollups.$inferSelect;
 export type NewDriftFinding = typeof driftFindings.$inferInsert;
+
+/* ------------------------------------------------------------------ email */
+
+/**
+ * Opt-outs, stored as presence rather than as a boolean.
+ *
+ * A row means "this person does not want this category". No row means they do,
+ * which is also the state of every user who has never thought about it — so the
+ * default requires no backfill and cannot be got wrong by a missing migration.
+ */
+export const emailPreferences = pgTable(
+  "email_preferences",
+  {
+    userId: bigint("user_id", { mode: "number" })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    category: emailCategory("category").notNull(),
+    optedOutAt: timestamp("opted_out_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.category] })],
+);
+
+/**
+ * Every send, recorded. Two reasons, and the second is the one that matters:
+ * it answers "did we actually email them" during a support conversation, and
+ * it is the evidence that an opted-out person stopped receiving things.
+ */
+export const emailLog = pgTable(
+  "email_log",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    userId: bigint("user_id", { mode: "number" }).references(() => users.id, {
+      onDelete: "set null",
+    }),
+    orgId: bigint("org_id", { mode: "number" }).references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    category: emailCategory("category").notNull(),
+    template: text("template").notNull(),
+    to: text("to").notNull(),
+    providerMessageId: text("provider_message_id"),
+    /** Null when a provider is configured and it went out. */
+    skippedReason: text("skipped_reason"),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("email_log_org_template_idx").on(t.orgId, t.template, t.sentAt)],
+);

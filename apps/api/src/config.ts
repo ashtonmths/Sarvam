@@ -67,6 +67,17 @@ const Env = z.object({
   SLACK_API_BASE_URL: z.string().url().default("https://slack.com/api"),
 
   /**
+   * Resend API key. Absent ⇒ every send is recorded as skipped and nothing
+   * leaves, in the same spirit as the tracing and error-reporting keys. A
+   * lifecycle email that threw on a machine with no provider would take down
+   * the crawl that triggered it, and the crawl matters more.
+   */
+  RESEND_API_KEY: z.string().optional(),
+
+  /** The From address. Only meaningful when a provider is configured. */
+  MAIL_FROM: z.string().default("Sadhak <hello@sadhak.online>"),
+
+  /**
    * Sentry DSN. Absent ⇒ the SDK never initializes and every capture is a
    * no-op. Errors only; Tempo owns tracing.
    */

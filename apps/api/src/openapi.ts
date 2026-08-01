@@ -1,8 +1,7 @@
 import { changeDescriptorSchema } from "@sadhak/shared/types";
 import type { ZodTypeAny } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import { config } from "./config.js";
-import { signinSchema, signupSchema } from "./routes/auth.js";
+import { signinSchema, signupSchema } from "./routes/auth.schemas.js";
 
 /**
  * The OpenAPI document, assembled from the zod schemas the routes actually
@@ -107,12 +106,21 @@ function listOperation(summary: string, tag: string, capability?: string) {
   };
 }
 
-export function openapiDocument() {
+/**
+ * @param version What to report as the spec version. The server passes the
+ *   running build's sha; the emitter passes nothing.
+ *
+ * Deliberately a parameter rather than a read of `config`. Importing config
+ * here validated the entire env schema, so generating a document that describes
+ * the API's *shape* demanded a DATABASE_URL — which the lint job does not have,
+ * and which it has no business needing. CI failed on exactly that.
+ */
+export function openapiDocument(version = "dev") {
   return {
     openapi: "3.0.3",
     info: {
       title: "Sadhak API",
-      version: config.GIT_SHA ?? "dev",
+      version,
       description: [
         "Sadhak keeps a dependency graph of your systems and gates the changes",
         "that would break them.",

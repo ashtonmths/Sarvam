@@ -3,6 +3,7 @@ import type { ChangeDescriptor } from "@sadhak/shared/types";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { pruneExpiredSessions } from "../auth/session.js";
 import { runCrawl } from "../cartographer/index.js";
+import { sendWeeklyDigests } from "../comms/digest.js";
 import { db } from "../db.js";
 import { embedAll } from "../embed.js";
 import { executeRun } from "../historian/runs.js";
@@ -35,6 +36,15 @@ import { registerHandler } from "./registry.js";
 const TRIAGE_PER_TICK = 5;
 
 export function registerJobHandlers(): void {
+  /**
+   * The weekly digest. Skip-if-empty lives inside, so this runs unconditionally
+   * and decides per org — an org with a quiet week gets nothing rather than an
+   * email saying nothing happened.
+   */
+  registerHandler("comms.weekly_digest", async () => {
+    await sendWeeklyDigests();
+  });
+
   /** Self-rescheduling crawl. Backs off on failure rather than hammering. */
   registerHandler(
     "connector.crawl",

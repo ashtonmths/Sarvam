@@ -9,6 +9,11 @@ import {
 import { and, desc, eq, sql } from "drizzle-orm";
 import { runCrawl } from "./cartographer/index.js";
 import { closePools, db } from "./db.js";
+import {
+  incidentBacktest,
+  loadFixtures,
+  renderIncidentReport,
+} from "./reviewer/incident-backtest.js";
 import { keyStatus, rotateCredentials } from "./vault/rotate.js";
 
 /**
@@ -188,6 +193,18 @@ async function main(): Promise<void> {
       }
       break;
     }
+    case "backtest": {
+      const path = flag("fixtures");
+      if (!path) {
+        log("backtest needs --fixtures <path>. See docs/launch/beta-playbook.md.");
+        break;
+      }
+      const fixtures = loadFixtures(path);
+      const report = await incidentBacktest(fixtures);
+      log(renderIncidentReport(report));
+      break;
+    }
+
     default:
       log(
         [
@@ -198,6 +215,8 @@ async function main(): Promise<void> {
           "  key-status   which master key each stored credential is sealed under",
           "  rotate-credentials",
           "               re-seal every credential under the current master key",
+          "  backtest --fixtures <path>",
+          "               replay a partner's labeled incidents through the kernel",
         ].join("\n"),
       );
   }

@@ -5,6 +5,7 @@ import {
   unresolvedRefs,
 } from "@sadhak/shared/schema";
 import { and, eq } from "drizzle-orm";
+import { onFirstCrawlComplete } from "../comms/lifecycle.js";
 import { getConnector, makeReadContext } from "../connectors/registry.js";
 import type { EdgeSpec, ExternalRef, NodeKey, NodeSpec } from "../connectors/types.js";
 import { db } from "../db.js";
@@ -150,6 +151,10 @@ export async function runCrawl(
 
     // A successful crawl is what gives Historian its worklist.
     void enqueueUnexplainedEdges(orgId).catch(() => undefined);
+
+    // Proof of life, once ever. Fire-and-forget on purpose: a crawl that
+    // finished must not be reported as failed because an email did not send.
+    void onFirstCrawlComplete(orgId).catch(() => undefined);
 
     return { crawlId, state: "succeeded", stats };
   } catch (error) {

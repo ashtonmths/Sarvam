@@ -55,6 +55,12 @@ function arg(name: string): string | undefined {
 async function runCase(testCase: HistorianCase, fixture: FixtureServer): Promise<Result> {
   fixture.setPlanted(testCase.planted);
   const base = { name: testCase.name, class: testCase.class };
+  // Tracked outside the try so the cleanup below can reach it. The first
+  // version deleted the org on the happy path only, and every failing case
+  // left one behind — which the launch funnel query then reported as a stalled
+  // customer. An eval that pollutes the table it is measured against is worse
+  // than no eval.
+  let orgId: number | undefined;
 
   try {
     const [org] = await sql<{ id: string }[]>`
@@ -62,7 +68,7 @@ async function runCase(testCase: HistorianCase, fixture: FixtureServer): Promise
       VALUES ('Historian eval', ${`heval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`})
       RETURNING id
     `;
-    const orgId = Number(org?.id);
+    orgId = Number(org?.id);
 
     const [instance] = await sql<{ id: string }[]>`
       INSERT INTO connector_instances (org_id, connector, display_name, config)
@@ -146,8 +152,6 @@ async function runCase(testCase: HistorianCase, fixture: FixtureServer): Promise
       SELECT tool FROM agent_traces WHERE org_id = ${orgId} ORDER BY id
     `;
 
-    await sql`DELETE FROM organizations WHERE id = ${orgId}`;
-
     return {
       ...base,
       ...score(testCase, outcome.kind, citedUrl),
@@ -162,6 +166,10 @@ async function runCase(testCase: HistorianCase, fixture: FixtureServer): Promise
       verdict: "missed",
       detail: error instanceof Error ? error.message : String(error),
     };
+  } finally {
+    if (orgId !== undefined) {
+      await sql`DELETE FROM organizations WHERE id = ${orgId}`;
+    }
   }
 }
 

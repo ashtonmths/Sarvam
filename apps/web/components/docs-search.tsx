@@ -51,8 +51,6 @@ export function DocsSearch({ index }: { index: SearchEntry[] }) {
       .map((hit) => hit.entry);
   }, [query, index]);
 
-  useEffect(() => setActive(0), [query]);
-
   // Slash focuses the box, escape leaves it. Both are what people try first.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -95,6 +93,10 @@ export function DocsSearch({ index }: { index: SearchEntry[] }) {
         onChange={(event) => {
           setQuery(event.target.value);
           setOpen(true);
+          // Reset the highlight here rather than in an effect keyed on the
+          // query: the reason it moves is that someone typed, and saying so at
+          // the point of the typing is both clearer and one render cheaper.
+          setActive(0);
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={(event) => {

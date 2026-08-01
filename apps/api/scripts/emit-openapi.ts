@@ -11,6 +11,11 @@ import { openapiDocument } from "../src/openapi.js";
  *
  *   pnpm openapi:emit          write it
  *   pnpm check:openapi         fail if the committed copy is stale
+ *
+ * The comparison is byte-for-byte, which is why `docs/api/openapi.json` is
+ * excluded from Biome in `biome.json`. It is not a style preference: the
+ * formatter rewrites the file, the generator does not, and the two disagreeing
+ * failed this check on every run until the exclusion existed.
  */
 
 const OUT = fileURLToPath(new URL("../../../docs/api/openapi.json", import.meta.url));

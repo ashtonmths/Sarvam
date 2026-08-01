@@ -12,7 +12,8 @@
       "!**/.next",
       "!db/migrations",
       "!apps/web/public",
-      "!pnpm-lock.yaml"
+      "!pnpm-lock.yaml",
+      "!docs/api/openapi.json"
     ]
   },
   "formatter": {

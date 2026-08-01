@@ -131,7 +131,9 @@ jobs:
       #
       # ignore-unfixed, because a gate that cannot be satisfied gets bypassed.
       - name: Scan dependencies and filesystem
-        uses: aquasecurity/trivy-action@0.28.0
+        # 0.28.0 was never a published tag, so this step failed at
+        # resolution and the scan had never once run.
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -238,6 +240,19 @@ jobs:
 
       - name: Install the browser
         run: pnpm exec playwright install chromium --with-deps
+
+      # The compose stack mounts db/init into the postgres entrypoint. A GitHub
+      # Actions service container starts before the repo is checked out, so it
+      # cannot — and without demo_billing the seed's crawl finds nothing, the
+      # graph is empty, and every test asserting real counts fails on an
+      # environment gap rather than on the code.
+      - name: Create the demo databases the seed crawls
+        env:
+          PGPASSWORD: sadhak
+          POSTGRES_USER: sadhak
+        run: |
+          psql -h localhost -U sadhak -d sadhak -v ON_ERROR_STOP=1 -f db/init/01-databases.sql
+          PGHOST=localhost bash db/init/02-demo-billing.sh
 
       - name: Migrate and seed
         run: |

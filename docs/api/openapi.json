@@ -63,7 +63,13 @@
             "type": "string"
           }
         },
-        "required": ["type", "title", "status", "instance", "requestId"]
+        "required": [
+          "type",
+          "title",
+          "status",
+          "instance",
+          "requestId"
+        ]
       },
       "ChangeDescriptor": {
         "anyOf": [
@@ -72,15 +78,24 @@
             "properties": {
               "target": {
                 "type": "string",
-                "enum": ["field"]
+                "enum": [
+                  "field"
+                ]
               },
               "operation": {
                 "type": "string",
-                "enum": ["delete", "rename", "retype"]
+                "enum": [
+                  "delete",
+                  "rename",
+                  "retype"
+                ]
               },
               "connector": {
                 "type": "string",
-                "enum": ["airtable", "postgres"]
+                "enum": [
+                  "airtable",
+                  "postgres"
+                ]
               },
               "externalId": {
                 "type": "string",
@@ -99,7 +114,12 @@
                 "type": "string"
               }
             },
-            "required": ["target", "operation", "connector", "externalId"],
+            "required": [
+              "target",
+              "operation",
+              "connector",
+              "externalId"
+            ],
             "additionalProperties": false
           },
           {
@@ -107,15 +127,23 @@
             "properties": {
               "target": {
                 "type": "string",
-                "enum": ["workflow"]
+                "enum": [
+                  "workflow"
+                ]
               },
               "operation": {
                 "type": "string",
-                "enum": ["modify", "disable", "delete"]
+                "enum": [
+                  "modify",
+                  "disable",
+                  "delete"
+                ]
               },
               "connector": {
                 "type": "string",
-                "enum": ["n8n"]
+                "enum": [
+                  "n8n"
+                ]
               },
               "externalId": {
                 "type": "string",
@@ -128,7 +156,12 @@
                 "type": "string"
               }
             },
-            "required": ["target", "operation", "connector", "externalId"],
+            "required": [
+              "target",
+              "operation",
+              "connector",
+              "externalId"
+            ],
             "additionalProperties": false
           },
           {
@@ -136,15 +169,25 @@
             "properties": {
               "target": {
                 "type": "string",
-                "enum": ["credential"]
+                "enum": [
+                  "credential"
+                ]
               },
               "operation": {
                 "type": "string",
-                "enum": ["revoke"]
+                "enum": [
+                  "revoke"
+                ]
               },
               "connector": {
                 "type": "string",
-                "enum": ["n8n", "airtable", "postgres", "github", "slack"]
+                "enum": [
+                  "n8n",
+                  "airtable",
+                  "postgres",
+                  "github",
+                  "slack"
+                ]
               },
               "externalId": {
                 "type": "string",
@@ -157,7 +200,12 @@
                 "type": "string"
               }
             },
-            "required": ["target", "operation", "connector", "externalId"],
+            "required": [
+              "target",
+              "operation",
+              "connector",
+              "externalId"
+            ],
             "additionalProperties": false
           }
         ]
@@ -183,7 +231,11 @@
             "maxLength": 120
           }
         },
-        "required": ["name", "email", "password"],
+        "required": [
+          "name",
+          "email",
+          "password"
+        ],
         "additionalProperties": false
       },
       "SignIn": {
@@ -198,7 +250,10 @@
             "type": "string"
           }
         },
-        "required": ["email", "password"],
+        "required": [
+          "email",
+          "password"
+        ],
         "additionalProperties": false
       }
     },
@@ -229,7 +284,9 @@
     "/api/auth/signup": {
       "post": {
         "summary": "Create an account and its first organisation",
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "security": [],
         "requestBody": {
           "required": true,
@@ -281,7 +338,9 @@
     "/api/auth/signin": {
       "post": {
         "summary": "Start a session",
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "security": [],
         "requestBody": {
           "required": true,
@@ -323,7 +382,9 @@
     "/api/auth/me": {
       "get": {
         "summary": "The current user, their orgs, and their capabilities",
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "responses": {
           "200": {
             "description": "The session's identity and what it may do."
@@ -344,7 +405,9 @@
     "/api/verdicts": {
       "post": {
         "summary": "Ask the gate about a change",
-        "tags": ["Gate"],
+        "tags": [
+          "Gate"
+        ],
         "description": "Requires `gate:invoke`. Evaluates the change and returns the verdict\nwith the evidence behind it. **Nothing is forwarded** — this is the\nquestion, not the action. Use the forward route for that, and note\nit needs a different capability: an agent that may ask is not\nnecessarily an agent that may act.",
         "requestBody": {
           "required": true,
@@ -370,7 +433,11 @@
                     },
                     "verdict": {
                       "type": "string",
-                      "enum": ["APPROVE", "WARN", "BLOCK"]
+                      "enum": [
+                        "APPROVE",
+                        "WARN",
+                        "BLOCK"
+                      ]
                     },
                     "evidence": {
                       "type": "array",
@@ -379,7 +446,10 @@
                       }
                     }
                   },
-                  "required": ["id", "verdict"]
+                  "required": [
+                    "id",
+                    "verdict"
+                  ]
                 }
               }
             }
@@ -430,7 +500,9 @@
     "/api/verdicts/{id}": {
       "get": {
         "summary": "Re-read a verdict",
-        "tags": ["Gate"],
+        "tags": [
+          "Gate"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -462,7 +534,9 @@
     "/api/verdicts/{id}/explanation": {
       "get": {
         "summary": "Prose explaining a verdict",
-        "tags": ["Gate"],
+        "tags": [
+          "Gate"
+        ],
         "description": "Generated by a model, and therefore optional. When the model is unavailable or the daily quota is spent this returns no prose — the verdict and its evidence are unaffected, because they never touched a model.",
         "parameters": [
           {
@@ -495,7 +569,9 @@
     "/api/graph/nodes": {
       "get": {
         "summary": "List nodes",
-        "tags": ["Graph"],
+        "tags": [
+          "Graph"
+        ],
         "description": "Requires the `graph:read` capability.",
         "parameters": [
           {
@@ -540,7 +616,9 @@
                       "description": "Opaque. Absent or null on the last page. A tampered cursor is a 400, never a 500."
                     }
                   },
-                  "required": ["items"]
+                  "required": [
+                    "items"
+                  ]
                 }
               }
             }
@@ -571,7 +649,9 @@
     "/api/graph/edges": {
       "get": {
         "summary": "List edges",
-        "tags": ["Graph"],
+        "tags": [
+          "Graph"
+        ],
         "description": "Requires the `graph:read` capability.",
         "parameters": [
           {
@@ -616,7 +696,9 @@
                       "description": "Opaque. Absent or null on the last page. A tampered cursor is a 400, never a 500."
                     }
                   },
-                  "required": ["items"]
+                  "required": [
+                    "items"
+                  ]
                 }
               }
             }
@@ -647,7 +729,9 @@
     "/api/graph/stats": {
       "get": {
         "summary": "Counts by kind, connector and state",
-        "tags": ["Graph"],
+        "tags": [
+          "Graph"
+        ],
         "responses": {
           "200": {
             "description": "What the map is made of."
@@ -658,7 +742,9 @@
     "/api/graph/unresolved": {
       "get": {
         "summary": "References we refused to guess at",
-        "tags": ["Graph"],
+        "tags": [
+          "Graph"
+        ],
         "description": "Things a crawl saw referenced but could not resolve. Shown rather than guessed, because a wrong edge is worse than a missing one.",
         "parameters": [
           {
@@ -703,7 +789,9 @@
                       "description": "Opaque. Absent or null on the last page. A tampered cursor is a 400, never a 500."
                     }
                   },
-                  "required": ["items"]
+                  "required": [
+                    "items"
+                  ]
                 }
               }
             }
@@ -734,7 +822,9 @@
     "/api/rationale": {
       "get": {
         "summary": "List rationale",
-        "tags": ["Rationale"],
+        "tags": [
+          "Rationale"
+        ],
         "description": "Requires the `graph:read` capability.",
         "parameters": [
           {
@@ -779,7 +869,9 @@
                       "description": "Opaque. Absent or null on the last page. A tampered cursor is a 400, never a 500."
                     }
                   },
-                  "required": ["items"]
+                  "required": [
+                    "items"
+                  ]
                 }
               }
             }
@@ -810,7 +902,9 @@
     "/api/incidents": {
       "get": {
         "summary": "List detected changes",
-        "tags": ["Reflex"],
+        "tags": [
+          "Reflex"
+        ],
         "description": "Requires the `graph:read` capability.",
         "parameters": [
           {
@@ -855,7 +949,9 @@
                       "description": "Opaque. Absent or null on the last page. A tampered cursor is a 400, never a 500."
                     }
                   },
-                  "required": ["items"]
+                  "required": [
+                    "items"
+                  ]
                 }
               }
             }
@@ -886,7 +982,9 @@
     "/api/audit": {
       "get": {
         "summary": "The audit log",
-        "tags": ["Org"],
+        "tags": [
+          "Org"
+        ],
         "description": "Requires the `audit:read` capability.",
         "parameters": [
           {
@@ -931,7 +1029,9 @@
                       "description": "Opaque. Absent or null on the last page. A tampered cursor is a 400, never a 500."
                     }
                   },
-                  "required": ["items"]
+                  "required": [
+                    "items"
+                  ]
                 }
               }
             }
@@ -962,7 +1062,9 @@
     "/api/org/export": {
       "get": {
         "summary": "Export everything this organisation has",
-        "tags": ["Org"],
+        "tags": [
+          "Org"
+        ],
         "description": "Requires `org:delete`, which only an owner holds. One JSON document:\ngraph, rationale, verdicts, decisions, incidents and the audit log.\n\nCredentials are excluded — they are sealed to this org and connector\nand would not work anywhere else. Embeddings are excluded because\nthey are derived from text already in the file.",
         "responses": {
           "200": {
@@ -991,7 +1093,9 @@
     "/api/org": {
       "delete": {
         "summary": "Delete this organisation and everything in it",
-        "tags": ["Org"],
+        "tags": [
+          "Org"
+        ],
         "description": "Irreversible. Cascades at the database — graph, rationale, verdicts, credentials and audit log. There is no grace period and no soft delete, because a window during which we still hold everything is a retention policy wearing a deletion policy's name.",
         "requestBody": {
           "required": true,
@@ -1005,7 +1109,9 @@
                     "description": "The organisation's name, typed exactly."
                   }
                 },
-                "required": ["confirmName"]
+                "required": [
+                  "confirmName"
+                ]
               }
             }
           }

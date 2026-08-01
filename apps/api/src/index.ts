@@ -24,6 +24,7 @@ import {
 import { requireAuth, requireOrg } from "./middleware/auth.js";
 import { openapiDocument } from "./openapi.js";
 import { authRoutes } from "./routes/auth.js";
+import { commsRoutes } from "./routes/comms.js";
 import { connectorRoutes } from "./routes/connectors.js";
 import { gateRoutes } from "./routes/gate.js";
 import { githubRoutes } from "./routes/github.js";
@@ -135,7 +136,7 @@ app.get("/metrics", async (c) => {
  * organisation has, and an agent builder who has to sign up before learning
  * whether the shape fits is one who goes elsewhere.
  */
-app.get("/openapi.json", (c) => c.json(openapiDocument()));
+app.get("/openapi.json", (c) => c.json(openapiDocument(config.GIT_SHA ?? "dev")));
 
 app.get(
   "/reference",
@@ -151,6 +152,12 @@ app.get(
 
 // Unauthenticated by necessity: this is where sessions are created.
 app.route("/api/auth", authRoutes);
+
+// Also unauthenticated by necessity. RFC 8058's one-click unsubscribe is a
+// POST from a mail client on behalf of somebody who never opened a browser;
+// requiring a session would make Gmail's unsubscribe button silently do
+// nothing, which is worse than not having one.
+app.route("/api/comms", commsRoutes);
 
 // MCP carries its own API-key auth inside the JSON-RPC envelope, so it mounts
 // outside the session group. The key's org scopes every query.

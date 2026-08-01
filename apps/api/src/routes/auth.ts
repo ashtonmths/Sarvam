@@ -19,26 +19,9 @@ import { db } from "../db.js";
 import { ConflictError, UnauthorizedError, UserError } from "../errors.js";
 import { requireAuth } from "../middleware/auth.js";
 import { slugify } from "../tenant.js";
+import { signinSchema, signupSchema } from "./auth.schemas.js";
 
 export const authRoutes = new Hono();
-
-/**
- * Exported so the OpenAPI spec is generated from the same object the handler
- * validates with. A spec written separately is fiction by the second release;
- * one derived from the validator cannot disagree with the code, because it is
- * the code.
- */
-export const signupSchema = z.object({
-  name: z.string().min(1).max(120),
-  email: z.string().email().max(254),
-  password: z.string(),
-  company: z.string().max(120).optional(),
-});
-
-export const signinSchema = z.object({
-  email: z.string().email().max(254),
-  password: z.string(),
-});
 
 function issueCookie(c: Context, token: string) {
   setCookie(c, SESSION_COOKIE, token, {
