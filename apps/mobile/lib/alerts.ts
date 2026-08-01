@@ -66,6 +66,30 @@ export function configureNotifications() {
   });
 }
 
+/**
+ * Sends the user to Alerts when they tap a ping.
+ *
+ * Without this, tapping one opens the app on whatever screen it was last on
+ * and leaves them to find the thing that just interrupted them — which is a
+ * worse outcome than not having notified at all.
+ *
+ * Two arrivals to cover, and only one of them is an event. A tap on a *running*
+ * app fires the listener; a tap that cold-starts the app happens long before
+ * any listener exists, and is readable only as the "last response" the module
+ * held onto. Handling just the first is the common bug, and it is invisible in
+ * testing because the app is nearly always already running.
+ */
+export function onAlertTap(go: () => void): () => void {
+  if (!PINGS_SUPPORTED) return () => undefined;
+
+  void Notifications.getLastNotificationResponseAsync().then((response) => {
+    if (response) go();
+  });
+
+  const sub = Notifications.addNotificationResponseReceivedListener(() => go());
+  return () => sub.remove();
+}
+
 /** Asks once. A refusal is a valid answer — the in-app list still works. */
 export async function askPermission(): Promise<boolean> {
   if (!PINGS_SUPPORTED) return false;

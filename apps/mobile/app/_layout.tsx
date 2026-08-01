@@ -1,11 +1,11 @@
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { configureNotifications } from "../lib/alerts";
+import { configureNotifications, onAlertTap } from "../lib/alerts";
 import { SessionProvider } from "../lib/session";
 import { T } from "../lib/theme";
 import { FONT_MAP } from "../lib/type";
@@ -23,6 +23,10 @@ export default function RootLayout() {
   const onReady = useCallback(() => {
     if (loaded || error) SplashScreen.hideAsync().catch(() => {});
   }, [loaded, error]);
+
+  // Mounted here rather than on the Alerts screen: a tap has to work when that
+  // screen is not the one currently rendered, which is the whole point of it.
+  useEffect(() => onAlertTap(() => router.navigate("/(tabs)/alerts")), []);
 
   // A font that fails to decode is not worth a blank app: `error` releases the
   // hold and the tree renders in the platform default rather than never.

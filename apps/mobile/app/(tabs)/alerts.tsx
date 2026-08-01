@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, Switch, Text, View } from "react-native";
+import { AppState, StyleSheet, Switch, Text, View } from "react-native";
 import {
   type Alert,
   askPermission,
@@ -62,8 +62,25 @@ export default function Alerts() {
 
   useEffect(() => {
     void load();
-    const id = setInterval(() => void load(), POLL_MS);
-    return () => clearInterval(id);
+    let id = setInterval(() => void load(), POLL_MS);
+
+    // Polling a backgrounded app spends battery on answers nobody can see, and
+    // the OS throttles the timer anyway — so the interval it resumes on is not
+    // the one it was given. Stopping on the way out and loading once on the way
+    // back is both cheaper and fresher: the first thing shown after unlocking
+    // the phone is current rather than up to a minute stale.
+    const sub = AppState.addEventListener("change", (next) => {
+      clearInterval(id);
+      if (next === "active") {
+        void load();
+        id = setInterval(() => void load(), POLL_MS);
+      }
+    });
+
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
   }, [load]);
 
   const onRefresh = useCallback(async () => {
