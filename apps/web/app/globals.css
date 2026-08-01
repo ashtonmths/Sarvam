@@ -721,6 +721,7 @@ button {
 }
 
 .step {
+  position: relative;
   background: var(--panel);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-md);
@@ -728,6 +729,17 @@ button {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* the steps are a real sequence, so draw it */
+.step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 38px;
+  right: -21px;
+  width: 21px;
+  border-top: 1.5px dashed var(--ink-faint);
+  opacity: 0.6;
 }
 
 .step__no {
@@ -752,9 +764,11 @@ button {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
   padding: 16px;
-  min-height: 120px;
-  display: grid;
-  place-items: center;
+  min-height: 168px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
 }
 
 /* ---------------------------------------------------------------- agents */
@@ -858,6 +872,105 @@ button {
 
 .trace__giveup {
   color: var(--warn);
+}
+
+/* ------------------------------------------------------------- tool grid */
+
+.toolgrid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.tool-pill {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  background: var(--card);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 11px 15px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.tool-pill strong {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.tool-pill span {
+  color: var(--ink-faint);
+  font-size: 11px;
+  text-align: right;
+}
+
+.tool-pill--go {
+  border-color: color-mix(in srgb, var(--approve) 35%, var(--line-soft));
+  background: color-mix(in srgb, var(--approve-soft) 40%, var(--card));
+}
+
+.tool-pill--stop {
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--line-soft));
+  background: color-mix(in srgb, var(--warn-soft) 40%, var(--card));
+}
+
+/* --------------------------------------------------------- fan out board */
+
+.fanout {
+  width: 100%;
+}
+
+.fanout__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.fanout__cell {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  min-width: 0;
+}
+
+.fanout__cell i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--approve);
+}
+
+.fanout__cell--warn i {
+  background: var(--warn);
+}
+
+.fanout__cell--run i {
+  background: var(--thread);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.fanout__cell em {
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 /* ----------------------------------------------------------------- modes */

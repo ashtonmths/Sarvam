@@ -135,19 +135,23 @@ export default function Home() {
                   schemas and GitHub repos, and builds one dependency graph of
                   who reads what, who writes what, and what breaks what.
                 </p>
-                <div className="step__art">
-                  <svg width="160" height="88" viewBox="0 0 160 88" aria-hidden="true">
-                    <g stroke="var(--ink-faint)" strokeWidth="1.2" strokeDasharray="3 4" fill="none">
-                      <path d="M30 24 L80 44 L30 64 M80 44 L130 24 M80 44 L130 64" />
-                    </g>
-                    <g fill="var(--card)" stroke="var(--ink)" strokeWidth="1.4">
-                      <circle cx="30" cy="24" r="7" />
-                      <circle cx="30" cy="64" r="7" />
-                      <circle cx="130" cy="24" r="7" />
-                      <circle cx="130" cy="64" r="7" />
-                    </g>
-                    <circle cx="80" cy="44" r="9" fill="var(--thread)" />
-                  </svg>
+                <div className="step__art trace">
+                  <div className="trace__line">
+                    <span className="trace__tool">n8n</span>
+                    <span className="trace__note">12 flows, 84 steps</span>
+                  </div>
+                  <div className="trace__line">
+                    <span className="trace__tool">airtable</span>
+                    <span className="trace__note">2 bases, 31 fields</span>
+                  </div>
+                  <div className="trace__line">
+                    <span className="trace__tool">postgres</span>
+                    <span className="trace__note">9 tables, 1 view</span>
+                  </div>
+                  <div className="trace__line">
+                    <span className="trace__step">→</span>
+                    <span className="trace__result">214 edges mapped in 4m 02s</span>
+                  </div>
                 </div>
               </div>
 
@@ -159,10 +163,16 @@ export default function Home() {
                   search Slack, follow threads, check commits, and attach the
                   human reasoning behind each connection with a source link.
                 </p>
-                <div className="step__art" style={{ padding: 14, placeItems: "stretch" }}>
+                <div className="step__art">
                   <Msg bare author="@priya" meta="#ops · Mar 2024">
                     &ldquo;feeds EU VAT reporting, do not drop&rdquo;
                   </Msg>
+                  <div className="trace" style={{ marginTop: 4 }}>
+                    <div className="trace__line" style={{ borderTop: "1px dashed var(--line-soft)", borderBottom: "none" }}>
+                      <span className="trace__step">→</span>
+                      <span className="trace__result">pinned to vat_rate → billing-sync</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -174,16 +184,8 @@ export default function Home() {
                   evidence attached: approve, warn, or block. What cannot be
                   blocked gets detected in seconds and reverted in one click.
                 </p>
-                <div className="step__art" style={{ padding: 12, placeItems: "stretch" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                      justifyContent: "center",
-                      alignItems: "flex-start",
-                    }}
-                  >
+                <div className="step__art">
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
                     <span className="verdict-tag verdict-tag--approve">
                       <span className="verdict-tag__dot" /> approve · rename field
                     </span>
@@ -193,6 +195,12 @@ export default function Home() {
                     <span className="verdict-tag verdict-tag--block">
                       <span className="verdict-tag__dot" /> block · revenue path
                     </span>
+                  </div>
+                  <div className="trace" style={{ marginTop: 4 }}>
+                    <div className="trace__line" style={{ borderTop: "1px dashed var(--line-soft)", borderBottom: "none" }}>
+                      <span className="trace__step">→</span>
+                      <span className="trace__note" style={{ marginLeft: 0, textAlign: "left" }}>same graph, same change, same verdict</span>
+                    </div>
                   </div>
                 </div>
               </div>
