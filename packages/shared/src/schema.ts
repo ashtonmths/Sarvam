@@ -1445,3 +1445,23 @@ export const ciFailures = pgTable(
     index("ci_failures_signature_idx").on(t.orgId, t.signature),
   ],
 );
+
+/**
+ * Which model produced the vectors currently in the database.
+ *
+ * One row, ever. It exists so that changing EMBEDDING_PROVIDER is a safe
+ * operation rather than a silent corruption: two embedding models do not share
+ * a vector space even when they agree on width, so a query embedded by one and
+ * compared against chunks embedded by the other returns nonsense. Nothing
+ * errors — the lexical half of retrieval keeps working and the ranking merely
+ * gets worse, which is close to undetectable.
+ *
+ * On boot the API compares this against the configured model and, on a change,
+ * clears the vectors so the embed job recomputes them.
+ */
+export const embeddingState = pgTable("embedding_state", {
+  /** Always 1. The check constraint is what makes "one row, ever" true. */
+  id: integer("id").primaryKey().default(1),
+  model: text("model").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

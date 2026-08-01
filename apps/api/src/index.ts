@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { config } from "./config.js";
 import { constantTimeEqual } from "./crypto/compare.js";
 import { closePools } from "./db.js";
+import { reconcileEmbeddingModel } from "./embed-state.js";
 import { NotFoundError } from "./errors.js";
 import { requestsRemainingToday } from "./historian/budget.js";
 import { beginDraining, readiness } from "./http/health.js";
@@ -219,6 +220,22 @@ const isEntrypoint = process.argv[1]?.endsWith("index.ts");
 if (isEntrypoint) {
   const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
     log().info({ event: "api_started", port: info.port }, "sadhak api listening");
+  });
+
+  /**
+   * Before the worker, so a provider change clears the stale vectors *before*
+   * the embed job starts refilling them. The other order leaves a window where
+   * both spaces are being written at once.
+   *
+   * Failure here is logged and not fatal. A database blip on boot should not
+   * stop the API serving; the reconcile runs again on the next start, and until
+   * then retrieval is no worse than it already was.
+   */
+  void reconcileEmbeddingModel().catch((error) => {
+    log().error(
+      { event: "embedding_reconcile_failed", err: error },
+      "embeddings: reconcile failed",
+    );
   });
 
   if (config.JOBS_ENABLED) {

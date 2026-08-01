@@ -187,6 +187,32 @@ const Env = z.object({
   OPENROUTER_MODEL_STRONG: z.string().min(1).optional(),
   OPENROUTER_MODEL_BULK: z.string().min(1).optional(),
 
+  /**
+   * Who computes embeddings. `local` runs bge-small-en-v1.5 in process: free,
+   * works offline, needs a writable cache and a few hundred MB of RAM.
+   * `openrouter` calls the embeddings API instead, for a host that cannot spare
+   * either — a small VPS, or an architecture the onnx runtime has no binary for.
+   *
+   * Switching invalidates every stored vector. Two models do not share a vector
+   * space even at the same width, so a query embedded by one and compared
+   * against chunks embedded by the other returns noise — and since the lexical
+   * half of retrieval keeps working, that reads as mediocre ranking rather than
+   * a broken index. src/embed.ts notices the change and clears the vectors so
+   * the embed job recomputes them.
+   */
+  EMBEDDING_PROVIDER: z.enum(["local", "openrouter"]).default("local"),
+
+  /**
+   * Must output 384 dimensions, the width of the vector() columns. MiniLM-L6-v2
+   * is the drop-in replacement; nvidia's free embedder returns 2048 and would
+   * need a migration. A mismatch fails the write rather than corrupting the
+   * index quietly.
+   */
+  OPENROUTER_EMBEDDING_MODEL: z
+    .string()
+    .min(1)
+    .default("sentence-transformers/all-minilm-l6-v2"),
+
   // Where the local embedding model is cached. Unset, src/embed.ts uses /models
   // in a container and .cache/models outside one. Set it when neither is
   // writable — a read-only cache is not a degraded mode, it fails every embed.

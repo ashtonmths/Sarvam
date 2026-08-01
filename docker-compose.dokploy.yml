@@ -132,6 +132,21 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL_STRONG: ${OPENROUTER_MODEL_STRONG}
       OPENROUTER_MODEL_BULK: ${OPENROUTER_MODEL_BULK}
+
+      # Embeddings go to OpenRouter here, not to the in-process model.
+      #
+      # Local embedding works and is free, but it needs an onnxruntime binary
+      # for the host's architecture, a writable cache, a 130MB download on first
+      # use and a few hundred MB of RAM. All four are fine on a laptop and all
+      # four are a way for a small VPS to fail at the moment someone uploads a
+      # transcript during a demo. MiniLM-L6-v2 returns the same 384 dimensions
+      # for about half a cent per million tokens.
+      #
+      # Set this to `local` to go back. The API clears and recomputes the
+      # vectors on the next boot, because the two models do not share a vector
+      # space and mixing them degrades search without failing anything.
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openrouter}
+      OPENROUTER_EMBEDDING_MODEL: ${OPENROUTER_EMBEDDING_MODEL:-sentence-transformers/all-minilm-l6-v2}
       # Connector credentials live in the per-org vault, not here. N8N_BASE_URL
       # stays as the default base for instances that do not override it.
       N8N_BASE_URL: http://n8n:5678

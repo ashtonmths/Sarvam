@@ -36,6 +36,8 @@ services:
       pnpm --filter @sadhak/api start"
     environment:
       NODE_ENV: production
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      OPENROUTER_EMBEDDING_MODEL: ${OPENROUTER_EMBEDDING_MODEL:-sentence-transformers/all-minilm-l6-v2}
       PORT: "3001"
       DATABASE_URL: postgres://sadhak:sadhak@db:5432/sadhak
       # Read from .env so the vault opens the credentials already stored in the

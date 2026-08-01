@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { env, type FeatureExtractionPipeline, pipeline } from "@huggingface/transformers";
-import { config } from "./config.js";
+import { config, requireEnv } from "./config.js";
 
 /**
  * Embeddings run locally. Two reasons: it removes a second vendor, and it means
@@ -106,31 +106,98 @@ export function meanNormalized(vectors: number[][]): number[] {
   return summed.map((v) => v / magnitude);
 }
 
-export async function embed(text: string): Promise<number[]> {
+/**
+ * The name of whatever is producing vectors right now.
+ *
+ * Written to the database alongside the vectors so a provider swap is
+ * detectable. Without it, changing EMBEDDING_PROVIDER silently leaves two
+ * incompatible vector spaces in one column.
+ */
+export function activeEmbeddingModel(): string {
+  return config.EMBEDDING_PROVIDER === "openrouter"
+    ? `openrouter:${config.OPENROUTER_EMBEDDING_MODEL}`
+    : `local:${EMBEDDING_MODEL}`;
+}
+
+/**
+ * One batch of windows in, one vector per window out.
+ *
+ * The seam between the two providers is deliberately here rather than at
+ * `embed`/`embedAll`: windowing, mean-pooling and re-normalising are properties
+ * of how this codebase handles long text, not of who computes the vectors, and
+ * duplicating them per provider is how the two drift apart.
+ */
+async function runWindows(windows: string[]): Promise<number[][]> {
+  if (config.EMBEDDING_PROVIDER === "openrouter") return embedRemote(windows);
+
   const run = await getExtractor();
-  const windows = windowsOf(text);
   const output = await run(windows, { pooling: "mean", normalize: true });
   const flat = Array.from(output.data as Float32Array);
+  return windows.map((_, i) => flat.slice(i * EMBEDDING_DIMS, (i + 1) * EMBEDDING_DIMS));
+}
 
-  return meanNormalized(
-    windows.map((_, i) => flat.slice(i * EMBEDDING_DIMS, (i + 1) * EMBEDDING_DIMS)),
-  );
+/**
+ * OpenRouter's embeddings endpoint.
+ *
+ * Not routed through llm.ts: that module's token bucket and daily cap exist to
+ * ration a 20-request-per-minute chat allowance, and embedding a backlog would
+ * consume the budget the Historian and the CI analysis depend on. Embeddings
+ * are a different product with different pricing, so they get their own path.
+ *
+ * The dimension check is not paranoia. A model returning 1024 or 2048 would be
+ * rejected by Postgres on insert with a message about vector width, several
+ * layers from the setting that caused it.
+ */
+async function embedRemote(texts: string[]): Promise<number[][]> {
+  const key = requireEnv("OPENROUTER_API_KEY");
+  const model = config.OPENROUTER_EMBEDDING_MODEL;
+
+  const res = await fetch("https://openrouter.ai/api/v1/embeddings", {
+    method: "POST",
+    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+    body: JSON.stringify({ model, input: texts }),
+    signal: AbortSignal.timeout(60_000),
+  });
+
+  if (!res.ok) {
+    throw new Error(`OpenRouter embeddings failed (${res.status}): ${await res.text()}`);
+  }
+
+  const body = (await res.json()) as {
+    data?: Array<{ embedding: number[]; index: number }>;
+  };
+  const rows = body.data ?? [];
+  if (rows.length !== texts.length) {
+    throw new Error(
+      `OpenRouter returned ${rows.length} embeddings for ${texts.length} inputs`,
+    );
+  }
+
+  // Ordered by `index`, not by arrival. The API does not promise response order
+  // and a silently transposed batch attaches every vector to the wrong text.
+  const ordered = [...rows].sort((a, b) => a.index - b.index);
+
+  for (const row of ordered) {
+    if (row.embedding.length !== EMBEDDING_DIMS) {
+      throw new Error(
+        `${model} returns ${row.embedding.length}-dimension vectors; the schema stores ${EMBEDDING_DIMS}. Pick a ${EMBEDDING_DIMS}-dimension model or migrate the vector columns.`,
+      );
+    }
+  }
+
+  return ordered.map((row) => row.embedding);
+}
+
+export async function embed(text: string): Promise<number[]> {
+  const windows = windowsOf(text);
+  return meanNormalized(await runWindows(windows));
 }
 
 export async function embedAll(texts: string[]): Promise<number[][]> {
-  const run = await getExtractor();
-
   // Flattened into one batch so a long text costs extra windows rather than an
   // extra round trip, then regrouped by which text each window came from.
   const windowed = texts.map(windowsOf);
-  const flatWindows = windowed.flat();
-
-  const output = await run(flatWindows, { pooling: "mean", normalize: true });
-  const flat = Array.from(output.data as Float32Array);
-
-  const vectors = flatWindows.map((_, i) =>
-    flat.slice(i * EMBEDDING_DIMS, (i + 1) * EMBEDDING_DIMS),
-  );
+  const vectors = await runWindows(windowed.flat());
 
   let cursor = 0;
   return windowed.map((windows) => {
