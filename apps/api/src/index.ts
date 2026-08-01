@@ -40,6 +40,7 @@ import { githubRoutes } from "./routes/github.js";
 import { graphRoutes } from "./routes/graph.js";
 import { historianRoutes } from "./routes/historian.js";
 import { mcpRoutes } from "./routes/mcp.js";
+import { n8nRoutes } from "./routes/n8n.js";
 import { orgRoutes } from "./routes/org.js";
 import { rationaleRoutes } from "./routes/rationale.js";
 import { reflexRoutes } from "./routes/reflex.js";
@@ -207,6 +208,7 @@ api.route("/", ciRoutes);
 api.route("/", changeRoutes);
 api.route("/", historianRoutes);
 api.route("/", slackOauthRoutes);
+api.route("/", n8nRoutes);
 api.get("/jobs/stats", async (c) => c.json(await queueStats()));
 
 // Both shapes hit the same handlers; `:orgId` is asserted against the

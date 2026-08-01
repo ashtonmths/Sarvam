@@ -39,6 +39,15 @@ interface GithubInstallation {
   enforcing: boolean | null;
 }
 
+/** The caller's own n8n account. Never anyone else's — see the route. */
+interface N8nAccount {
+  state: "pending" | "invited" | "active" | "failed";
+  email: string;
+  inviteAcceptUrl: string | null;
+  instanceId: number | null;
+  failureReason: string | null;
+}
+
 const GLYPH: Record<string, React.ReactNode> = {
   postgres: <GlyphDb />,
   n8n: <GlyphFlow />,
@@ -68,9 +77,17 @@ export default function ConnectorsPane() {
     items: GithubInstallation[];
     note: string;
   }>("/api/github/installations");
+  const n8n = useQuery<{ account: N8nAccount | null; n8nUrl: string | null }>(
+    "/api/n8n/account",
+  );
 
   const [busy, setBusy] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  const [revealed, setRevealed] = useState<{
+    email: string;
+    password: string | null;
+  } | null>(null);
 
   async function crawlNow(id: number) {
     setBusy(id);
@@ -107,6 +124,40 @@ export default function ConnectorsPane() {
 
   const instances = data.data?.instances ?? [];
   const descriptors = data.data?.descriptors ?? [];
+
+  /**
+   * The pending invite for one card, if it is that card's.
+   *
+   * Matched on `instanceId` so a workspace with a second n8n connection — the
+   * customer's own instance, say — does not show an invite that has nothing to
+   * do with it. The fallback covers accounts provisioned before the connector
+   * row was linked, where showing it on the only n8n card is still right.
+   */
+  const account = n8n.data?.account ?? null;
+  const n8nUrl = n8n.data?.n8nUrl ?? null;
+
+  async function reveal() {
+    setRevealing(true);
+    try {
+      setRevealed(
+        await api.post<{ email: string; password: string | null }>(
+          "/api/n8n/account/reveal",
+        ),
+      );
+    } catch (err) {
+      setNotice(
+        err instanceof ApiError ? err.userMessage : "Could not read the n8n password",
+      );
+    } finally {
+      setRevealing(false);
+    }
+  }
+
+  function inviteFor(instanceId: number): string | null {
+    if (account?.state !== "invited" || !account.inviteAcceptUrl) return null;
+    if (account.instanceId !== null && account.instanceId !== instanceId) return null;
+    return account.inviteAcceptUrl;
+  }
 
   return (
     <>
@@ -202,6 +253,83 @@ export default function ConnectorsPane() {
                       <SlackChannels />
                     </div>
                   )}
+
+                  {/* The invite, on the card that is blocked by it.
+
+                      n8n emails this link, except when SMTP is unconfigured —
+                      which is the default and is the case here, so nothing is
+                      ever delivered and the account sits unusable with no
+                      indication why. Without this the connector reads as
+                      broken and the only route to the link is a database
+                      query. Same reasoning as the branch-protection fix
+                      below: put it where the problem is visible. */}
+                  {instance.connector === "n8n" && inviteFor(instance.id) && (
+                    <div className="ccard__fix">
+                      <p>
+                        An n8n account was created for you but has no password yet. Open
+                        the invite to set one, then add the API key n8n gives you.
+                      </p>
+                      <a
+                        className="btn btn--tiny"
+                        href={inviteFor(instance.id) ?? "#"}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        data-testid="n8n-invite-link"
+                      >
+                        Accept n8n invite
+                      </a>
+                    </div>
+                  )}
+
+                  {/* The login for an account the user never chose a password
+                      for. Sadhak generated it, and n8n cannot mail a reset
+                      with SMTP unconfigured, so this screen is the only route
+                      to it. Behind a click rather than on screen by default:
+                      the page polls, and a password rendered on every load
+                      ends up in more screenshots than it should. */}
+                  {instance.connector === "n8n" &&
+                    account?.state === "active" &&
+                    account.instanceId === instance.id && (
+                      <div className="ccard__extra">
+                        <h4 className="ccard__sub">Your n8n sign-in</h4>
+                        {/* Rendered only when the server supplied an address.
+                            N8N_PUBLIC_URL is optional, and a button linking to
+                            "null" is worse than no button. */}
+                        {n8nUrl && (
+                          <p>
+                            <a
+                              className="btn btn--ghost btn--tiny"
+                              href={n8nUrl}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              data-testid="n8n-dashboard-link"
+                            >
+                              Open n8n dashboard ↗
+                            </a>
+                          </p>
+                        )}
+                        {revealed ? (
+                          <dl className="n8n-creds">
+                            <dt>Email</dt>
+                            <dd className="mono">{revealed.email}</dd>
+                            <dt>Password</dt>
+                            <dd className="mono">
+                              {revealed.password ?? "You set this yourself"}
+                            </dd>
+                          </dl>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--tiny"
+                            disabled={revealing}
+                            onClick={() => void reveal()}
+                            data-testid="n8n-reveal"
+                          >
+                            {revealing ? "Working…" : "Show n8n password"}
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                   <footer className="ccard__foot">
                     <button
