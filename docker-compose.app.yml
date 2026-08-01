@@ -26,9 +26,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # Same as production: migrate, then serve. Running it here means a broken
-    # migration is caught on a laptop rather than during a deploy.
-    command: sh -c "pnpm --filter @sadhak/api db:migrate && pnpm --filter @sadhak/api start"
+    # Same as production: migrate, seed, then serve. Running it here means a
+    # broken migration is caught on a laptop rather than during a deploy — which
+    # only holds while this chain matches the one in docker-compose.dokploy.yml,
+    # including the seed being unable to stop the server coming up.
+    command: >
+      sh -c "pnpm --filter @sadhak/api db:migrate &&
+      { pnpm --filter @sadhak/api seed || echo 'seed failed - serving anyway'; } &&
+      pnpm --filter @sadhak/api start"
     environment:
       NODE_ENV: production
       PORT: "3001"
