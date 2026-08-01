@@ -22,6 +22,17 @@ import type { Analysis, Precedent } from "./analyse.js";
 
 const SLACK_API = "https://slack.com/api";
 
+/**
+ * Slack rejects a whole message if any section exceeds 3000 characters, and it
+ * does so with HTTP 200 and `ok:false`. Truncating here is what stops one long
+ * model answer from silently costing the entire alert.
+ */
+const SLACK_SECTION_LIMIT = 2800;
+
+function fit(text: string, limit = SLACK_SECTION_LIMIT): string {
+  return text.length <= limit ? text : `${text.slice(0, limit - 1)}…`;
+}
+
 async function botToken(orgId: number): Promise<string | null> {
   const [instance] = await db
     .select({ id: connectorInstances.id })
@@ -332,9 +343,10 @@ export function buildN8nAlert(input: {
       type: "section",
       text: {
         type: "mrkdwn",
-        text:
+        text: fit(
           `${lead}\n${impactLine}` +
-          (input.failedNode ? `\nFailed at *${input.failedNode}*` : ""),
+            (input.failedNode ? `\nFailed at *${input.failedNode}*` : ""),
+        ),
       },
     },
     {
@@ -344,12 +356,25 @@ export function buildN8nAlert(input: {
     { type: "section", text: { type: "mrkdwn", text: `*Why*\n${input.cause}` } },
   ];
 
-  if (input.error) {
-    blocks.push({
-      type: "context",
-      elements: [{ type: "mrkdwn", text: `\`${input.error.slice(0, 200)}\`` }],
-    });
-  }
+  blocks.push({
+    type: "context",
+    elements: [
+      {
+        type: "mrkdwn",
+        text: [
+          confidenceLabel({
+            cause: input.cause,
+            recommendation: input.recommendation,
+            confidence: input.confidence,
+            evidence: [],
+          }),
+          input.error ? `\`${input.error.slice(0, 180)}\`` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      },
+    ],
+  });
 
   blocks.push({
     type: "actions",
@@ -415,7 +440,16 @@ export async function postN8nAlert(orgId: number, failureId: number): Promise<bo
     text,
     blocks,
   });
-  if (!posted?.ts) return false;
+  if (!posted?.ts) {
+    // Logged, because Slack answers 200 with ok:false for a malformed message
+    // and this used to return silently — the diagnosis sat in the database
+    // with nobody told and nothing to indicate why.
+    log().warn(
+      { event: "n8n_alert_rejected", failureId, channel },
+      "n8n: slack refused the alert",
+    );
+    return false;
+  }
 
   await db
     .update(n8nExecutionFailures)

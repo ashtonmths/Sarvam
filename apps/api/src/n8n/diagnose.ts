@@ -14,15 +14,15 @@ import { openPrsTouching } from "./open-prs.js";
  * The order is the design, and it runs cheapest-first on purpose:
  *
  *  1. Impact — who depends on this workflow. Graph traversal, no model.
- *  2. Is this ours? Look for a change on our side in the window. If nothing
- *     changed, stop. A workflow can fail because a vendor is down or a
- *     credential expired, and spending a reasoning model to conclude "nothing
- *     we did" is the most common way this feature would waste its budget.
- *  3. Gather — document chunks and the changes that landed in the window.
- *  4. Is it already fixed? If an open PR touches the implicated files, say so
- *     and stop. "Merge #482" beats a root-cause essay when the work is done.
- *  5. Widen — walk back through earlier checkpoints, up to three, until the
- *     window holds enough to reason over.
+ *  2. Widen — walk back through up to three checkpoint windows, stopping at
+ *     the first that contains a landed change.
+ *  3. Is this ours? If no window held one, stop. A workflow fails because a
+ *     vendor is down or a credential expired far more often than because we
+ *     shipped something, and spending a reasoning model to conclude "not ours"
+ *     on each of those is how the budget disappears.
+ *  4. Is it already fixed? If an open PR touches the files that changed, say
+ *     so and stop. "Merge #482" beats a root-cause essay when the work is done.
+ *  5. Gather — the written record, searched on the error and the workflow.
  *  6. Reason — one model call over everything gathered.
  *
  * Every step before 6 is deterministic. Each one either answers the question
@@ -44,8 +44,10 @@ export interface Diagnosis {
   recommendation: string;
   confidence: number;
   evidence: Array<{ source: string; detail: string }>;
-  /** How far back the search reached, and why it stopped there. */
+  /** How many windows were tried. */
   windowsSearched: number;
+  /** What the last one actually was, in words — a checkpoint, or a blind lookback. */
+  searchReach: string;
   schemaChangeSuspected: boolean;
 }
 
@@ -53,8 +55,17 @@ export interface Diagnosis {
 const MAX_WINDOWS = 3;
 /** Impacted nodes worth naming in a Slack message. */
 const TOP_IMPACT = 5;
-/** Changes shown to the model. More than this is noise, not context. */
-const MAX_CHANGES = 20;
+/**
+ * Changes read from the window, and changes shown to the model.
+ *
+ * Two numbers, because one was wrong. The cap used to be a SQL LIMIT, so a
+ * busy window silently truncated the *evidence*: schema detection and the
+ * open-PR path search both ran over the twenty most recent changes, and a
+ * migration sitting twenty-fifth was invisible to the feature's own headline
+ * case. The scan now reads the whole window and only the prompt is trimmed.
+ */
+export const MAX_CHANGES_SCANNED = 200;
+export const MAX_CHANGES_SHOWN = 20;
 
 /**
  * Everything downstream of the failed workflow.
@@ -108,7 +119,21 @@ interface RawChangeRow extends Omit<ChangeRow, "occurred_at"> {
   occurred_at: Date | string;
 }
 
-/** Changes recorded on our side inside a window, with the files they touched. */
+/**
+ * Changes that actually *landed* inside a window, with the files they touched.
+ *
+ * Commits only, and that restriction is the fix for a circular answer rather
+ * than a performance choice. github-client stores a pull request at
+ * `merged_at ?? created_at`, so an **open** PR is a row in `changes` dated when
+ * it was opened. Without this filter a vendor outage at 14:00 with an unrelated
+ * PR opened at 13:00 would pass the "did anything change" gate *because of that
+ * PR*, then have the open-PR lookup find the same PR and recommend merging it
+ * as the fix. The PR was the change, the fix, and the reason the unrelated exit
+ * did not fire.
+ *
+ * A commit is unambiguous: it is in the branch. A merged PR contributes its
+ * commits anyway, so nothing real is lost.
+ */
 async function changesIn(orgId: number, from: Date, to: Date): Promise<ChangeRow[]> {
   const rows = (await raw`
     SELECT c.external_id, c.title, c.author_login AS author, c.occurred_at,
@@ -118,11 +143,12 @@ async function changesIn(orgId: number, from: Date, to: Date): Promise<ChangeRow
     -- Cast, because the driver leaves an uncast Date parameter for Postgres to
     -- infer and it lands on text, which fails the bind before the query runs.
     WHERE c.org_id = ${orgId}
+      AND c.kind = 'commit'
       AND c.occurred_at > ${from.toISOString()}::timestamptz
       AND c.occurred_at <= ${to.toISOString()}::timestamptz
     GROUP BY c.id, c.external_id, c.title, c.author_login, c.occurred_at
     ORDER BY c.occurred_at DESC
-    LIMIT ${MAX_CHANGES}
+    LIMIT ${MAX_CHANGES_SCANNED}
   `) as unknown as RawChangeRow[];
 
   return rows.map((row) => ({
@@ -186,6 +212,17 @@ export async function diagnoseFailure(failureId: number): Promise<void> {
     .where(eq(n8nExecutionFailures.id, failureId));
   if (!row) return;
 
+  /**
+   * Already diagnosed, so stop before spending anything.
+   *
+   * The handler posts to Slack after this returns, and a throw from that post
+   * retries the whole job — which re-entered here and bought a second graph
+   * traversal, a second GitHub scan and a second strong-tier completion for a
+   * failure that was already explained. Three attempts, three diagnoses, one
+   * failure.
+   */
+  if (row.diagnosisState !== "captured") return;
+
   const failedAt = row.stoppedAt ?? row.startedAt ?? row.detectedAt;
 
   // 1. Impact — always computed, even if the diagnosis stops early. "Nothing
@@ -202,13 +239,33 @@ export async function diagnoseFailure(failureId: number): Promise<void> {
    * explains nothing. Bounded at three, because a fourth window is wide enough
    * that "a change happened in it" stops being evidence of anything.
    */
-  const candidates = await candidatesBefore(row.orgId, failedAt, {}, 12);
+  // Scoped to this workflow's node, not `{}`.
+  //
+  // candidatesBefore excludes checkpoints belonging to a *different* node only
+  // when it is told which node this is, and it ranks scoped checkpoints ahead
+  // of org-wide ones. Passing an empty scope inverted that: three unrelated
+  // Reflex recoveries from twenty minutes ago outranked the release checkpoint
+  // from three hours ago, so every window was minutes wide, every one was
+  // empty, and the deploy that actually broke this was never inside any of
+  // them. The ladder widened correctly across entirely the wrong candidates.
+  const candidates = await candidatesBefore(
+    row.orgId,
+    failedAt,
+    row.nodeId ? { nodeId: row.nodeId } : {},
+    12,
+  );
   const windows = windowsFrom(candidates, failedAt, MAX_WINDOWS);
 
   let changes: ChangeRow[] = [];
   let windowsSearched = 0;
+  let searchReach = "no window was searched";
   for (const window of windows) {
     windowsSearched += 1;
+    // Recorded, because `windowsSearched` alone cannot distinguish a two-minute
+    // crawl window from the synthetic 24-hour lookback used when an org has no
+    // checkpoints at all — and reporting the second as "1 checkpoint window
+    // searched" claims a known-good starting point that never existed.
+    searchReach = window.reason;
     changes = await changesIn(row.orgId, window.from, window.to);
     if (changes.length > 0) break;
   }
@@ -236,6 +293,7 @@ export async function diagnoseFailure(failureId: number): Promise<void> {
           confidence: 0.5,
           evidence: [],
           windowsSearched,
+          searchReach,
           schemaChangeSuspected: false,
         } satisfies Diagnosis,
       })
@@ -258,17 +316,32 @@ export async function diagnoseFailure(failureId: number): Promise<void> {
    * best one: the fix exists, and what is missing is a merge rather than an
    * investigation.
    */
-  const [repo] = (await raw`
-    SELECT owner, name, installation_id FROM repositories WHERE org_id = ${row.orgId} LIMIT 1
+  /**
+   * Every tracked repository, not the first one found.
+   *
+   * This was `LIMIT 1` with no ORDER BY, so an org tracking more than one
+   * repository had the open-PR check silently consult an arbitrary one — and
+   * the fix, if it existed, was usually in the repository that actually
+   * changed.
+   */
+  const repos = (await raw`
+    SELECT owner, name, installation_id FROM repositories WHERE org_id = ${row.orgId}
+    ORDER BY id
   `) as unknown as Array<{ owner: string; name: string; installation_id: number | null }>;
 
-  if (repo && paths.length > 0) {
-    const open = await openPrsTouching(
-      repo.owner,
-      repo.name,
-      repo.installation_id === null ? null : Number(repo.installation_id),
-      paths,
-    );
+  if (repos.length > 0 && paths.length > 0) {
+    const open = (
+      await Promise.all(
+        repos.map((repo) =>
+          openPrsTouching(
+            repo.owner,
+            repo.name,
+            repo.installation_id === null ? null : Number(repo.installation_id),
+            paths,
+          ),
+        ),
+      )
+    ).flat();
 
     if (open.length > 0) {
       const best = open[0] as (typeof open)[number];
@@ -287,6 +360,7 @@ export async function diagnoseFailure(failureId: number): Promise<void> {
               detail: `#${pr.number} ${pr.title} touches ${pr.matchedPaths.join(", ")} — ${pr.url}`,
             })),
             windowsSearched,
+            searchReach,
             schemaChangeSuspected,
           } satisfies Diagnosis,
         })
@@ -320,8 +394,9 @@ export async function diagnoseFailure(failureId: number): Promise<void> {
           .join("\n")}`
       : "--- nothing recorded downstream of this workflow ---",
     "",
-    `--- changes on our side in the window (${windowsSearched} checkpoint window${windowsSearched === 1 ? "" : "s"} searched) ---`,
+    `--- changes on our side (${windowsSearched} window${windowsSearched === 1 ? "" : "s"} searched; ${searchReach}) ---`,
     changes
+      .slice(0, MAX_CHANGES_SHOWN)
       .map(
         (change) =>
           `${change.occurred_at.toISOString().slice(0, 16)} ${change.external_id.slice(0, 8)}` +
@@ -364,6 +439,7 @@ export async function diagnoseFailure(failureId: number): Promise<void> {
         ...parsed,
         impact,
         windowsSearched,
+        searchReach,
         schemaChangeSuspected,
       } satisfies Diagnosis,
     })
@@ -383,7 +459,10 @@ export async function diagnoseFailure(failureId: number): Promise<void> {
 /** Parses the model's JSON, refusing anything without a cause. */
 export function parseDiagnosis(
   content: string | null,
-): Omit<Diagnosis, "impact" | "windowsSearched" | "schemaChangeSuspected"> | null {
+): Omit<
+  Diagnosis,
+  "impact" | "windowsSearched" | "searchReach" | "schemaChangeSuspected"
+> | null {
   if (!content) return null;
   const cleaned = content
     .trim()

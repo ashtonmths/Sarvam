@@ -138,7 +138,19 @@ function headers(token: string): Record<string, string> {
  * budget, and records the edge as unexplainable. A backfill is a job, so it
  * can afford to throw and be retried, and that is strictly more honest.
  */
-async function getJson<T>(url: string, token: string, signal?: AbortSignal): Promise<T> {
+/**
+ * Exported so every GitHub read goes through the same door.
+ *
+ * The egress guard, DNS pinning and rate-limit handling all live here. A
+ * caller that reimplements the request with bare `fetch` loses all three, and
+ * loses them silently — a 403 from a rate limit becomes an empty result rather
+ * than a retry, which is indistinguishable from "there was nothing to find".
+ */
+export async function getJson<T>(
+  url: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<T> {
   const response = await pinnedFetch(
     url,
     { headers: headers(token), ...(signal ? { signal } : {}) },

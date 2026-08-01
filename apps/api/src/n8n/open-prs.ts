@@ -1,4 +1,4 @@
-import { tokenForRepo } from "../changes/github-client.js";
+import { getJson, tokenForRepo } from "../changes/github-client.js";
 
 /**
  * Pull requests that are open right now and touch the implicated files.
@@ -30,17 +30,6 @@ export interface OpenPr {
 const MAX_PRS_SCANNED = 20;
 const MAX_RETURNED = 3;
 
-async function gh<T>(url: string, token: string): Promise<T | null> {
-  const res = await fetch(url, {
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: "application/vnd.github+json",
-      "x-github-api-version": "2022-11-28",
-    },
-  });
-  return res.ok ? ((await res.json()) as T) : null;
-}
-
 /**
  * Returns open PRs whose changed files intersect `paths`.
  *
@@ -70,48 +59,58 @@ export async function openPrsTouching(
     return [];
   }
 
-  const list = await gh<Array<{ number: number }>>(
+  /**
+   * The list endpoint already returns title, url, author and updated_at, so
+   * there is no per-PR detail request. That halved the call count.
+   *
+   * Rate limits propagate rather than being swallowed. `getJson` raises on 403
+   * and 429, and letting that reach the job is the point: a scan that could not
+   * run must not look like a scan that found nothing, or the run falls through
+   * to a paid model call and stores a verdict the lookup would have
+   * short-circuited.
+   */
+  const list = await getJson<
+    Array<{
+      number: number;
+      title: string;
+      html_url: string;
+      user?: { login?: string };
+      updated_at: string;
+    }>
+  >(
     `${GITHUB_API}/repos/${owner}/${name}/pulls?state=open&sort=updated&direction=desc&per_page=${MAX_PRS_SCANNED}`,
     token,
   );
-  if (!list || list.length === 0) return [];
+  if (list.length === 0) return [];
 
   const found: OpenPr[] = [];
 
-  for (const { number } of list) {
+  for (const pr of list) {
     if (found.length >= MAX_RETURNED) break;
 
     // One request per PR for its file list. Bounded by MAX_PRS_SCANNED, and it
     // stops as soon as enough matches are found, so the common case — no open
     // PR touches this — costs the scan and the common case with a match costs
     // less.
-    const files = await gh<Array<{ filename: string }>>(
-      `${GITHUB_API}/repos/${owner}/${name}/pulls/${number}/files?per_page=100`,
+    const files = await getJson<Array<{ filename: string }>>(
+      `${GITHUB_API}/repos/${owner}/${name}/pulls/${pr.number}/files?per_page=100`,
       token,
     );
-    if (!files) continue;
 
     const matched = paths.filter((path) =>
       files.some((file) => file.filename === path || file.filename.endsWith(`/${path}`)),
     );
     if (matched.length === 0) continue;
 
-    const detail = await gh<{
-      number: number;
-      title: string;
-      html_url: string;
-      user?: { login?: string };
-      updated_at: string;
-    }>(`${GITHUB_API}/repos/${owner}/${name}/pulls/${number}`, token);
-    if (!detail) continue;
-
     found.push({
-      number: detail.number,
-      title: detail.title,
-      url: detail.html_url,
-      author: detail.user?.login ?? null,
-      updatedAt: detail.updated_at,
-      matchedPaths: matched,
+      number: pr.number,
+      title: pr.title,
+      url: pr.html_url,
+      author: pr.user?.login ?? null,
+      updatedAt: pr.updated_at,
+      // Capped: these are rendered into a Slack section, which rejects the
+      // whole message over 3000 characters, and forty repo paths clears that.
+      matchedPaths: matched.slice(0, 6),
     });
   }
 

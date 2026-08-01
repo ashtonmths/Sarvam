@@ -88,3 +88,39 @@ describe("parseDiagnosis", () => {
     expect(parsed?.evidence).toEqual([{ source: "change", detail: "abc1234" }]);
   });
 });
+
+/**
+ * The circular answer, pinned.
+ *
+ * github-client stores a pull request at `merged_at ?? created_at`, so an open
+ * PR is a row in `changes` dated when it was opened. Before the kind filter, an
+ * unrelated open PR could satisfy the "did anything change on our side" gate
+ * and then be recommended by the open-PR lookup as its own fix — the PR was the
+ * change, the fix, and the reason the unrelated exit did not fire.
+ *
+ * Asserted against the SQL because the filter is the whole guarantee and it
+ * lives in a raw query, where a typecheck cannot see it.
+ */
+describe("the changes query", () => {
+  it("counts only landed commits, never open pull requests", async () => {
+    const source = await import("node:fs").then((fs) =>
+      fs.readFileSync(new URL("./diagnose.ts", import.meta.url), "utf8"),
+    );
+    const query = source.slice(
+      source.indexOf("FROM changes c"),
+      source.indexOf("GROUP BY"),
+    );
+    expect(query).toContain("c.kind = 'commit'");
+  });
+
+  /**
+   * The cap must trim the prompt, not the evidence. As a SQL LIMIT it also
+   * truncated what schema detection and the open-PR path search could see, so a
+   * migration sitting 25th in a busy window was invisible to the one case this
+   * feature exists for.
+   */
+  it("scans far more of the window than it shows the model", async () => {
+    const { MAX_CHANGES_SCANNED, MAX_CHANGES_SHOWN } = await import("./diagnose.js");
+    expect(MAX_CHANGES_SCANNED).toBeGreaterThan(MAX_CHANGES_SHOWN);
+  });
+});

@@ -56,6 +56,31 @@ n8nRoutes.get("/n8n/failures", requireCapability("graph:read"), async (c) => {
  * on that account. Anyone who can read another user's row can take over their
  * n8n, so there is deliberately no route that accepts a user id at all.
  */
+/**
+ * One failure and everything behind its diagnosis.
+ *
+ * What the Slack alert's button opens. The alert is short on purpose, so this
+ * has to carry the evidence: the impact, the windows searched, the error, and
+ * what the model concluded. A recommendation nobody can check is one nobody
+ * should act on.
+ */
+n8nRoutes.get("/n8n/failures/:id", requireCapability("graph:read"), async (c) => {
+  const orgId = c.get("orgId");
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) throw new NotFoundError();
+
+  const [row] = await db
+    .select()
+    .from(n8nExecutionFailures)
+    // Scoped by org as well as by id. A failure id is a small integer, and
+    // guessing another tenant's must find nothing rather than something.
+    .where(and(eq(n8nExecutionFailures.id, id), eq(n8nExecutionFailures.orgId, orgId)))
+    .limit(1);
+
+  if (!row) throw new NotFoundError();
+  return c.json({ failure: row });
+});
+
 n8nRoutes.get("/n8n/account", requireAuth, async (c) => {
   const actor = c.get("actor");
   if (actor.type !== "user") return c.json({ account: null });

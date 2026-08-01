@@ -21,7 +21,7 @@ import { postCiAlert, postN8nAlert } from "../ci/notify.js";
 import { markCiFailed, orgForRepository, recordCiFailure } from "../ci/record.js";
 import { sendWeeklyDigests } from "../comms/digest.js";
 import { getConnector } from "../connectors/registry.js";
-import { db } from "../db.js";
+import { db, sql as raw } from "../db.js";
 import { embedAll } from "../embed.js";
 import { orgForInstallation } from "../github/checks.js";
 import { executeRun } from "../historian/runs.js";
@@ -387,21 +387,30 @@ export function registerJobHandlers(): void {
        * still needs work makes the pass self-healing, and the dedupe key means
        * a row already queued is not queued twice.
        */
-      const pending = await db
-        .select({ id: n8nExecutionFailures.id })
-        .from(n8nExecutionFailures)
-        .where(
-          and(
-            eq(n8nExecutionFailures.orgId, ctx.orgId),
-            eq(n8nExecutionFailures.diagnosisState, "captured"),
-          ),
-        )
-        .limit(10);
+      const pending = (await raw`
+        SELECT id FROM n8n_execution_failures
+        WHERE org_id = ${ctx.orgId}
+          AND (
+            diagnosis_state = 'captured'
+            -- Diagnosed but never announced. Slack can refuse for reasons that
+            -- are fixed later by a human — no channel picked, no bot token, a
+            -- message it rejected — and without this the row left the sweep the
+            -- moment it was diagnosed and was never retried. The diagnosis sat
+            -- in the database, correct and unread, and picking a channel
+            -- afterwards backfilled nothing.
+            OR (slack_ts IS NULL AND diagnosis IS NOT NULL)
+          )
+          -- Bounded, so an org that never configures Slack re-queues a handful
+          -- of recent rows rather than its whole history every minute.
+          AND detected_at > now() - interval '7 days'
+        ORDER BY detected_at DESC
+        LIMIT 10
+      `) as unknown as Array<{ id: number }>;
 
       for (const failure of pending) {
         await enqueue(
           "n8n.diagnose",
-          { failureId: failure.id },
+          { failureId: Number(failure.id) },
           { orgId: ctx.orgId, dedupeKey: `n8n.diagnose:${failure.id}`, priority: 6 },
         );
       }
