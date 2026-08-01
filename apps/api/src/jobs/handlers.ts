@@ -1,6 +1,7 @@
 import {
   connectorInstances,
   documentChunks,
+  n8nExecutionFailures,
   rationale,
   repositories,
 } from "@sadhak/shared/schema";
@@ -16,7 +17,7 @@ import {
 } from "../changes/backfill.js";
 import { upsertRepository } from "../changes/store.js";
 import { analyseFailure } from "../ci/analyse.js";
-import { postCiAlert } from "../ci/notify.js";
+import { postCiAlert, postN8nAlert } from "../ci/notify.js";
 import { markCiFailed, orgForRepository, recordCiFailure } from "../ci/record.js";
 import { sendWeeklyDigests } from "../comms/digest.js";
 import { getConnector } from "../connectors/registry.js";
@@ -26,6 +27,7 @@ import { orgForInstallation } from "../github/checks.js";
 import { executeRun } from "../historian/runs.js";
 import { purgeStaleCounters } from "../http/rate-limit.js";
 import { log } from "../log.js";
+import { diagnoseFailure } from "../n8n/diagnose.js";
 import { pollN8nExecutionFailures } from "../n8n/failures.js";
 import { provisionN8nAccount, refreshAccountState } from "../n8n/provision.js";
 import { pollN8nWorkflows } from "../reflex/detect-n8n.js";
@@ -374,6 +376,35 @@ export function registerJobHandlers(): void {
     if (!ctx.orgId) return;
     try {
       await pollN8nExecutionFailures(ctx.orgId);
+
+      /**
+       * Sweep for anything undiagnosed rather than diagnosing what this poll
+       * happened to insert.
+       *
+       * The poll returns a count, and a failure inserted by a webhook or by an
+       * earlier poll that died mid-run would otherwise sit in `captured`
+       * forever with nothing scheduled to look at it. Asking the table what
+       * still needs work makes the pass self-healing, and the dedupe key means
+       * a row already queued is not queued twice.
+       */
+      const pending = await db
+        .select({ id: n8nExecutionFailures.id })
+        .from(n8nExecutionFailures)
+        .where(
+          and(
+            eq(n8nExecutionFailures.orgId, ctx.orgId),
+            eq(n8nExecutionFailures.diagnosisState, "captured"),
+          ),
+        )
+        .limit(10);
+
+      for (const failure of pending) {
+        await enqueue(
+          "n8n.diagnose",
+          { failureId: failure.id },
+          { orgId: ctx.orgId, dedupeKey: `n8n.diagnose:${failure.id}`, priority: 6 },
+        );
+      }
     } finally {
       // In `finally`, so a thrown poll still reschedules. Without this a
       // single bad response ends failure detection for that org until the
@@ -390,6 +421,43 @@ export function registerJobHandlers(): void {
       );
     }
   });
+
+  /**
+   * Work out why a workflow failed, then say so in Slack.
+   *
+   * Separate from the poll because it is the expensive half: a graph
+   * traversal, GitHub calls, and a model. Keeping it out of the poller means a
+   * slow diagnosis never delays detection of the next failure, and a failure
+   * that cannot be diagnosed does not stop the others being tried.
+   */
+  registerHandler(
+    "n8n.diagnose",
+    async (payload, ctx) => {
+      const failureId = Number(payload.failureId);
+      if (!Number.isInteger(failureId) || !ctx.orgId) return;
+
+      try {
+        await diagnoseFailure(failureId);
+      } catch (error) {
+        // Recorded on the row before rethrowing, so a failure that exhausts
+        // its retries is queryable rather than merely silent.
+        await db
+          .update(n8nExecutionFailures)
+          .set({
+            diagnosisState: "failed",
+            diagnosisError: (error instanceof Error
+              ? error.message
+              : String(error)
+            ).slice(0, 500),
+          })
+          .where(eq(n8nExecutionFailures.id, failureId));
+        throw error;
+      }
+
+      await postN8nAlert(ctx.orgId, failureId);
+    },
+    { timeoutMs: 5 * 60_000, maxAttempts: 3 },
+  );
 
   /** Observes invite acceptance, which n8n never announces. */
   registerHandler("n8n.refresh_account", async (payload) => {

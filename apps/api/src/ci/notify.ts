@@ -1,4 +1,9 @@
-import { ciFailures, connectorInstances, reflexSettings } from "@sadhak/shared/schema";
+import {
+  ciFailures,
+  connectorInstances,
+  n8nExecutionFailures,
+  reflexSettings,
+} from "@sadhak/shared/schema";
 import { and, eq } from "drizzle-orm";
 import { db, sql as raw } from "../db.js";
 import { log } from "../log.js";
@@ -278,5 +283,145 @@ export async function postCiAlert(orgId: number, failureId: number): Promise<boo
     .where(eq(ciFailures.id, failureId));
 
   log().info({ event: "ci_alert_posted", failureId, channel }, "ci: alert posted");
+  return true;
+}
+
+/* ------------------------------------------------------- n8n workflows */
+
+/**
+ * The workflow-failure message.
+ *
+ * Leads with impact, because that is the question the owner has first: does
+ * this matter. A workflow nothing depends on failing at 3am is not the same
+ * event as one five reports read from, and a message that opens with the stack
+ * trace makes the reader work out which they have.
+ */
+export function buildN8nAlert(input: {
+  workflow: string;
+  failedNode: string | null;
+  error: string | null;
+  state: string;
+  impact: { count: number; top: Array<{ name: string; kind: string; hops: number }> };
+  cause: string;
+  recommendation: string;
+  confidence: number;
+  detailUrl: string;
+}): { text: string; blocks: Record<string, unknown>[] } {
+  const impactLine =
+    input.impact.count === 0
+      ? "Nothing recorded downstream of this workflow."
+      : `*${input.impact.count}* dependent${input.impact.count === 1 ? "" : "s"} affected — ` +
+        input.impact.top
+          .slice(0, 3)
+          .map((n) => `\`${n.name}\``)
+          .join(", ");
+
+  const text = `${input.workflow} failed: ${input.recommendation}`;
+
+  // `fix_pending` is its own shape. The action is a merge, not an
+  // investigation, so the message says that and nothing else competes with it.
+  const lead =
+    input.state === "fix_pending"
+      ? `:hourglass_flowing_sand: *${input.workflow}* failed — a fix may already be open`
+      : input.state === "unrelated"
+        ? `:grey_question: *${input.workflow}* failed — nothing we shipped explains it`
+        : `:rotating_light: *${input.workflow}* failed`;
+
+  const blocks: Record<string, unknown>[] = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          `${lead}\n${impactLine}` +
+          (input.failedNode ? `\nFailed at *${input.failedNode}*` : ""),
+      },
+    },
+    {
+      type: "section",
+      text: { type: "mrkdwn", text: `*What to do*\n${input.recommendation}` },
+    },
+    { type: "section", text: { type: "mrkdwn", text: `*Why*\n${input.cause}` } },
+  ];
+
+  if (input.error) {
+    blocks.push({
+      type: "context",
+      elements: [{ type: "mrkdwn", text: `\`${input.error.slice(0, 200)}\`` }],
+    });
+  }
+
+  blocks.push({
+    type: "actions",
+    elements: [
+      {
+        type: "button",
+        text: { type: "plain_text", text: "See the full diagnosis" },
+        url: input.detailUrl,
+        style: "primary",
+      },
+    ],
+  });
+
+  return { text, blocks };
+}
+
+/**
+ * Posts a workflow diagnosis, once.
+ *
+ * `unrelated` still posts. The owner of a broken workflow needs to know it
+ * broke even when the cause is not ours — staying silent on those would make
+ * the bot trustworthy only for the failures it happens to be able to explain.
+ */
+export async function postN8nAlert(orgId: number, failureId: number): Promise<boolean> {
+  const [row] = await db
+    .select()
+    .from(n8nExecutionFailures)
+    .where(eq(n8nExecutionFailures.id, failureId));
+  if (!row || row.slackTs || !row.diagnosis) return false;
+
+  const [settings] = await db
+    .select()
+    .from(reflexSettings)
+    .where(eq(reflexSettings.orgId, orgId))
+    .limit(1);
+  const channel = settings?.slackChannelId;
+  if (!channel) return false;
+
+  const token = await botToken(orgId);
+  if (!token) return false;
+
+  const d = row.diagnosis as unknown as {
+    impact: { count: number; top: Array<{ name: string; kind: string; hops: number }> };
+    cause: string;
+    recommendation: string;
+    confidence: number;
+  };
+
+  const { text, blocks } = buildN8nAlert({
+    workflow: row.workflowName ?? row.workflowId,
+    failedNode: row.failedNode,
+    error: row.errorMessage,
+    state: row.diagnosisState,
+    impact: d.impact ?? { count: 0, top: [] },
+    cause: d.cause,
+    recommendation: d.recommendation,
+    confidence: d.confidence,
+    detailUrl: `https://sadhak.online/app/workflows/${failureId}`,
+  });
+
+  const posted = await call<{ ts?: string }>(token, "chat.postMessage", {
+    channel,
+    text,
+    blocks,
+  });
+  if (!posted?.ts) return false;
+
+  await db
+    .update(n8nExecutionFailures)
+    .set({ slackChannelId: channel, slackTs: posted.ts })
+    .where(eq(n8nExecutionFailures.id, failureId));
+
+  log().info({ event: "n8n_alert_posted", failureId, channel }, "n8n: alert posted");
   return true;
 }

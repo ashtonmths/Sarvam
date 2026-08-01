@@ -1581,6 +1581,22 @@ export const n8nExecutionFailures = pgTable(
     detectPath: text("detect_path").notNull().default("poll"),
     detectedAt: timestamp("detected_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+
+    /**
+     * How far the diagnosis got. Written even when it stops early, because
+     * "stopped, and here is why" is the useful record: `unrelated` means no
+     * change on our side could explain it, and that is an answer worth keeping
+     * rather than an absence that looks like the job never ran.
+     *
+     * captured -> diagnosed | unrelated | fix_pending | failed, then alerted.
+     */
+    diagnosisState: text("diagnosis_state").notNull().default("captured"),
+    /** Impact, cause, recommendation, evidence, and the windows searched. */
+    diagnosis: jsonb("diagnosis").$type<Record<string, unknown>>(),
+    diagnosisError: text("diagnosis_error"),
+    slackChannelId: text("slack_channel_id"),
+    slackTs: text("slack_ts"),
+    diagnosedAt: timestamp("diagnosed_at", { withTimezone: true }),
   },
   (t) => [
     unique("n8n_execution_failures_instance_execution").on(t.instanceId, t.executionId),

@@ -1,0 +1,430 @@
+import { n8nExecutionFailures } from "@sadhak/shared/schema";
+import { eq } from "drizzle-orm";
+import { candidatesBefore, windowsFrom } from "../changes/checkpoints.js";
+import { db, sql as raw } from "../db.js";
+import { searchDocuments } from "../documents/retrieve.js";
+import { complete } from "../llm.js";
+import { log } from "../log.js";
+import { traverse } from "../sentinel/traverse.js";
+import { openPrsTouching } from "./open-prs.js";
+
+/**
+ * Why an n8n workflow failed, and who it hurt.
+ *
+ * The order is the design, and it runs cheapest-first on purpose:
+ *
+ *  1. Impact — who depends on this workflow. Graph traversal, no model.
+ *  2. Is this ours? Look for a change on our side in the window. If nothing
+ *     changed, stop. A workflow can fail because a vendor is down or a
+ *     credential expired, and spending a reasoning model to conclude "nothing
+ *     we did" is the most common way this feature would waste its budget.
+ *  3. Gather — document chunks and the changes that landed in the window.
+ *  4. Is it already fixed? If an open PR touches the implicated files, say so
+ *     and stop. "Merge #482" beats a root-cause essay when the work is done.
+ *  5. Widen — walk back through earlier checkpoints, up to three, until the
+ *     window holds enough to reason over.
+ *  6. Reason — one model call over everything gathered.
+ *
+ * Every step before 6 is deterministic. Each one either answers the question
+ * outright or narrows what the model has to consider, which is what makes a
+ * cheap model sufficient at the end.
+ */
+
+export interface ImpactedNode {
+  nodeId: number;
+  name: string;
+  kind: string;
+  hops: number;
+  score: number;
+}
+
+export interface Diagnosis {
+  impact: { count: number; top: ImpactedNode[] };
+  cause: string;
+  recommendation: string;
+  confidence: number;
+  evidence: Array<{ source: string; detail: string }>;
+  /** How far back the search reached, and why it stopped there. */
+  windowsSearched: number;
+  schemaChangeSuspected: boolean;
+}
+
+/** How many earlier checkpoints the search may fall back through. */
+const MAX_WINDOWS = 3;
+/** Impacted nodes worth naming in a Slack message. */
+const TOP_IMPACT = 5;
+/** Changes shown to the model. More than this is noise, not context. */
+const MAX_CHANGES = 20;
+
+/**
+ * Everything downstream of the failed workflow.
+ *
+ * This is the "how much did it impact" answer, and it comes from the graph
+ * rather than from the model — it is a traversal over recorded dependencies, so
+ * it is the same number every time and can be checked by opening the map.
+ */
+export async function impactOf(
+  orgId: number,
+  nodeId: number,
+): Promise<{ count: number; top: ImpactedNode[] }> {
+  const rows = await traverse(orgId, nodeId);
+  if (rows.length === 0) return { count: 0, top: [] };
+
+  // traverse already returns name and kind, so there is no second lookup here.
+  // Ranked by `impact`, which is the traversal's own decayed score — the same
+  // ordering the blast radius uses everywhere else, so the workflow's top
+  // dependants read the same here as they do on the map.
+  const top = rows
+    .map((row) => ({
+      nodeId: row.id,
+      name: row.name,
+      kind: row.kind,
+      hops: row.hops,
+      score: row.impact,
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, TOP_IMPACT);
+
+  return { count: rows.length, top };
+}
+
+interface ChangeRow {
+  external_id: string;
+  title: string | null;
+  author: string | null;
+  occurred_at: Date;
+  paths: string[];
+}
+
+/**
+ * The row as the driver actually hands it back.
+ *
+ * `occurred_at` arrives as a string here, and the `as unknown as` cast around a
+ * raw query is an assertion the compiler simply believes — so declaring it as
+ * Date typechecked, passed every test, and threw on the first `.toISOString()`
+ * at runtime. Naming the wire shape separately is what stops the lie.
+ */
+interface RawChangeRow extends Omit<ChangeRow, "occurred_at"> {
+  occurred_at: Date | string;
+}
+
+/** Changes recorded on our side inside a window, with the files they touched. */
+async function changesIn(orgId: number, from: Date, to: Date): Promise<ChangeRow[]> {
+  const rows = (await raw`
+    SELECT c.external_id, c.title, c.author_login AS author, c.occurred_at,
+           COALESCE(array_agg(DISTINCT p.path) FILTER (WHERE p.path IS NOT NULL), '{}') AS paths
+    FROM changes c
+    LEFT JOIN change_paths p ON p.change_id = c.id
+    -- Cast, because the driver leaves an uncast Date parameter for Postgres to
+    -- infer and it lands on text, which fails the bind before the query runs.
+    WHERE c.org_id = ${orgId}
+      AND c.occurred_at > ${from.toISOString()}::timestamptz
+      AND c.occurred_at <= ${to.toISOString()}::timestamptz
+    GROUP BY c.id, c.external_id, c.title, c.author_login, c.occurred_at
+    ORDER BY c.occurred_at DESC
+    LIMIT ${MAX_CHANGES}
+  `) as unknown as RawChangeRow[];
+
+  return rows.map((row) => ({
+    ...row,
+    occurred_at:
+      row.occurred_at instanceof Date ? row.occurred_at : new Date(row.occurred_at),
+  }));
+}
+
+/**
+ * Whether anything in this set of changes looks like a schema change.
+ *
+ * Deliberately a path and title heuristic rather than parsing SQL. The point is
+ * to tell the model that a migration landed in the window so it weighs it, not
+ * to decide the answer — a false positive costs one sentence of context, and a
+ * false negative would hide the single most common cause of a workflow that
+ * queried a column yesterday and cannot today.
+ */
+export function looksLikeSchemaChange(changes: ChangeRow[]): boolean {
+  return changes.some(
+    (change) =>
+      change.paths.some((path) =>
+        /migrations?\/|\.sql$|schema\.(ts|js|py|rb)$|alembic|liquibase|flyway/i.test(
+          path,
+        ),
+      ) ||
+      /\b(migration|schema|alter table|drop column|rename column)\b/i.test(
+        change.title ?? "",
+      ),
+  );
+}
+
+const SYSTEM = `You diagnose why an automation workflow failed, for the person who owns it.
+
+You are given: what the workflow is and what it depends on, what it broke for, the error, the changes that landed on our side in the window, and any notes or transcripts that mention it.
+
+Return JSON only:
+{
+  "cause": "what broke and why, one or two sentences",
+  "recommendation": "the concrete next action, specific enough to start on",
+  "confidence": 0.0 to 1.0,
+  "evidence": [{"source": "error|change|document|impact", "detail": "the specific thing that supports this"}]
+}
+
+Rules:
+- Prefer a change in the window over a general explanation. If a migration touched a table this workflow reads, say so and name it.
+- Recommend an action, not an investigation.
+- If the changes in the window do not plausibly explain the error, say that plainly and set confidence low. A wrong confident cause sends someone down the wrong path with our authority behind it.
+- Never invent a file, commit, person or table that is not in the input.`;
+
+/**
+ * Runs the pipeline for one captured failure and stores the result.
+ *
+ * Stores a terminal state in every branch, including the early exits, so a
+ * failure never sits in `captured` with nothing scheduled to explain it.
+ */
+export async function diagnoseFailure(failureId: number): Promise<void> {
+  const [row] = await db
+    .select()
+    .from(n8nExecutionFailures)
+    .where(eq(n8nExecutionFailures.id, failureId));
+  if (!row) return;
+
+  const failedAt = row.stoppedAt ?? row.startedAt ?? row.detectedAt;
+
+  // 1. Impact — always computed, even if the diagnosis stops early. "Nothing
+  //    downstream" is as useful to know as a long list.
+  const impact = row.nodeId
+    ? await impactOf(row.orgId, row.nodeId)
+    : { count: 0, top: [] };
+
+  /**
+   * 2. Widen through checkpoints until the window holds changes.
+   *
+   * The ladder is the same one incident investigation uses: start at the last
+   * moment things were known good and only reach further back when that window
+   * explains nothing. Bounded at three, because a fourth window is wide enough
+   * that "a change happened in it" stops being evidence of anything.
+   */
+  const candidates = await candidatesBefore(row.orgId, failedAt, {}, 12);
+  const windows = windowsFrom(candidates, failedAt, MAX_WINDOWS);
+
+  let changes: ChangeRow[] = [];
+  let windowsSearched = 0;
+  for (const window of windows) {
+    windowsSearched += 1;
+    changes = await changesIn(row.orgId, window.from, window.to);
+    if (changes.length > 0) break;
+  }
+
+  /**
+   * 3. Nothing changed on our side, so this is not ours to explain.
+   *
+   * Recorded as an answer rather than a failure. A workflow fails when a vendor
+   * is down or a credential expires, and those outnumber the ones we caused —
+   * spending a model call to conclude "nothing we did" on each of them is how
+   * the budget disappears.
+   */
+  if (changes.length === 0) {
+    await db
+      .update(n8nExecutionFailures)
+      .set({
+        diagnosisState: "unrelated",
+        diagnosedAt: new Date(),
+        diagnosis: {
+          impact,
+          cause:
+            "No change on our side landed in the searched window, so this failure is unlikely to be caused by our code or schema.",
+          recommendation:
+            "Check the workflow's credentials and the service it calls. Nothing we shipped in this window touches it.",
+          confidence: 0.5,
+          evidence: [],
+          windowsSearched,
+          schemaChangeSuspected: false,
+        } satisfies Diagnosis,
+      })
+      .where(eq(n8nExecutionFailures.id, failureId));
+
+    log().info(
+      { event: "n8n_failure_unrelated", failureId, windowsSearched },
+      "n8n: no change in window, stopping before the model",
+    );
+    return;
+  }
+
+  const schemaChangeSuspected = looksLikeSchemaChange(changes);
+  const paths = [...new Set(changes.flatMap((change) => change.paths))].slice(0, 40);
+
+  /**
+   * 4. Already fixed but not merged.
+   *
+   * Checked before the model because it is both the cheapest answer and the
+   * best one: the fix exists, and what is missing is a merge rather than an
+   * investigation.
+   */
+  const [repo] = (await raw`
+    SELECT owner, name, installation_id FROM repositories WHERE org_id = ${row.orgId} LIMIT 1
+  `) as unknown as Array<{ owner: string; name: string; installation_id: number | null }>;
+
+  if (repo && paths.length > 0) {
+    const open = await openPrsTouching(
+      repo.owner,
+      repo.name,
+      repo.installation_id === null ? null : Number(repo.installation_id),
+      paths,
+    );
+
+    if (open.length > 0) {
+      const best = open[0] as (typeof open)[number];
+      await db
+        .update(n8nExecutionFailures)
+        .set({
+          diagnosisState: "fix_pending",
+          diagnosedAt: new Date(),
+          diagnosis: {
+            impact,
+            cause: `An open pull request already touches ${best.matchedPaths.join(", ")}, which changed in the window this workflow started failing.`,
+            recommendation: `Review and merge #${best.number} — "${best.title}"${best.author ? ` by ${best.author}` : ""}. It may already contain the fix.`,
+            confidence: 0.65,
+            evidence: open.map((pr) => ({
+              source: "change",
+              detail: `#${pr.number} ${pr.title} touches ${pr.matchedPaths.join(", ")} — ${pr.url}`,
+            })),
+            windowsSearched,
+            schemaChangeSuspected,
+          } satisfies Diagnosis,
+        })
+        .where(eq(n8nExecutionFailures.id, failureId));
+
+      log().info(
+        { event: "n8n_failure_fix_pending", failureId, pr: best.number },
+        "n8n: an open PR may already fix this",
+      );
+      return;
+    }
+  }
+
+  // 5. Gather the written record. Search on the error and the workflow name —
+  //    what people write about is the thing that broke, not the stack.
+  const query = [row.workflowName, row.failedNode, row.errorMessage]
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 200);
+  const docs = query ? await searchDocuments(row.orgId, query, 4) : [];
+
+  const context = [
+    `Workflow: ${row.workflowName ?? row.workflowId}`,
+    row.failedNode ? `Failed at node: ${row.failedNode}` : null,
+    `Error: ${row.errorMessage ?? "(none recorded)"}`,
+    `Mode: ${row.mode ?? "unknown"}    Failed at: ${failedAt.toISOString()}`,
+    "",
+    impact.count > 0
+      ? `--- what depends on this workflow (${impact.count} nodes) ---\n${impact.top
+          .map((n) => `${n.name} (${n.kind}, ${n.hops} hop${n.hops === 1 ? "" : "s"})`)
+          .join("\n")}`
+      : "--- nothing recorded downstream of this workflow ---",
+    "",
+    `--- changes on our side in the window (${windowsSearched} checkpoint window${windowsSearched === 1 ? "" : "s"} searched) ---`,
+    changes
+      .map(
+        (change) =>
+          `${change.occurred_at.toISOString().slice(0, 16)} ${change.external_id.slice(0, 8)}` +
+          `${change.author ? ` by ${change.author}` : ""}: ${change.title ?? "(no title)"}` +
+          `${change.paths.length > 0 ? `\n    touched: ${change.paths.slice(0, 8).join(", ")}` : ""}`,
+      )
+      .join("\n"),
+    "",
+    schemaChangeSuspected
+      ? "--- note: at least one change in this window looks like a database migration ---"
+      : "",
+    docs.length > 0
+      ? `--- from written notes ---\n${docs.map((d) => `[${d.permalink}] ${d.title}: ${d.body.slice(0, 400)}`).join("\n")}`
+      : "",
+  ]
+    .filter((part) => part !== null && part !== "")
+    .join("\n");
+
+  // 6. One model call, over a window that the deterministic steps narrowed.
+  const completion = await complete({
+    tier: "strong",
+    orgId: row.orgId,
+    caller: "n8n.diagnose",
+    responseFormat: { type: "json_object" },
+    messages: [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: context },
+    ],
+  });
+
+  const parsed = parseDiagnosis(completion.content);
+  if (!parsed) throw new Error("the model did not return a usable diagnosis");
+
+  await db
+    .update(n8nExecutionFailures)
+    .set({
+      diagnosisState: "diagnosed",
+      diagnosedAt: new Date(),
+      diagnosis: {
+        ...parsed,
+        impact,
+        windowsSearched,
+        schemaChangeSuspected,
+      } satisfies Diagnosis,
+    })
+    .where(eq(n8nExecutionFailures.id, failureId));
+
+  log().info(
+    {
+      event: "n8n_failure_diagnosed",
+      failureId,
+      confidence: parsed.confidence,
+      windowsSearched,
+    },
+    "n8n: failure diagnosed",
+  );
+}
+
+/** Parses the model's JSON, refusing anything without a cause. */
+export function parseDiagnosis(
+  content: string | null,
+): Omit<Diagnosis, "impact" | "windowsSearched" | "schemaChangeSuspected"> | null {
+  if (!content) return null;
+  const cleaned = content
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+
+  const value = parsed as Record<string, unknown>;
+  const cause = typeof value.cause === "string" ? value.cause.trim() : "";
+  if (!cause) return null;
+
+  const rawConfidence = typeof value.confidence === "number" ? value.confidence : 0.5;
+
+  return {
+    cause,
+    recommendation:
+      typeof value.recommendation === "string" && value.recommendation.trim()
+        ? value.recommendation.trim()
+        : "No specific action proposed.",
+    // Models return 95 for "95%" often enough that this must not render as 9500%.
+    confidence: Math.max(
+      0,
+      Math.min(1, rawConfidence > 1 ? rawConfidence / 100 : rawConfidence),
+    ),
+    evidence: Array.isArray(value.evidence)
+      ? value.evidence
+          .filter(
+            (e): e is Record<string, unknown> => typeof e === "object" && e !== null,
+          )
+          .map((e) => ({
+            source: String(e.source ?? "unknown"),
+            detail: String(e.detail ?? ""),
+          }))
+          .filter((e) => e.detail)
+      : [],
+  };
+}
