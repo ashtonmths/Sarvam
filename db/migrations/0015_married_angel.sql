@@ -1,0 +1,1 @@
+ALTER TABLE "repo_cursors" ADD COLUMN "draining_to" timestamp with time zone;

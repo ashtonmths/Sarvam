@@ -94,7 +94,7 @@ export default function DecisionsPage() {
           action={{ href: "/app/simulate", label: "Run a simulation →" }}
         />
       ) : (
-        <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="panel panel--table">
           <table className="dtable dtable--click">
             <thead>
               <tr>

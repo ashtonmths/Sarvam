@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { reflexIncidents } from "@sadhak/shared/schema";
 import type { BlastRow, ChangeDescriptor, Evidence } from "@sadhak/shared/types";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { recordDerivedCheckpoint } from "../changes/checkpoints.js";
 import { db } from "../db.js";
 
 /**
@@ -178,10 +179,44 @@ export async function claimForRevert(incidentId: number, by: string): Promise<bo
 }
 
 export async function markReverted(incidentId: number): Promise<boolean> {
-  return transition(incidentId, ["reverting"], "reverted", {
+  const reverted = await transition(incidentId, ["reverting"], "reverted", {
     revertedAt: sql`COALESCE(${reflexIncidents.revertedAt}, now())`,
     revertError: null,
   });
+  if (!reverted) return false;
+
+  /**
+   * A successful revert is the strongest automatic evidence of known-good this
+   * system produces: something broke, it was put back, and somebody watched it
+   * happen. Recording it means the *next* incident search starts here instead
+   * of reaching past a period we already know was repaired.
+   *
+   * Read back rather than passed in, because only the transition above knows
+   * it actually moved — recording a checkpoint for a revert that lost the race
+   * would assert health at an instant nobody verified.
+   */
+  const [row] = await db
+    .select({
+      orgId: reflexIncidents.orgId,
+      externalId: reflexIncidents.externalId,
+      connector: reflexIncidents.connector,
+      nodeId: reflexIncidents.nodeId,
+    })
+    .from(reflexIncidents)
+    .where(eq(reflexIncidents.id, incidentId))
+    .limit(1);
+
+  if (row) {
+    await recordDerivedCheckpoint({
+      orgId: row.orgId,
+      kind: "incident_recovered",
+      label: `Reverted ${row.connector} ${row.externalId}`,
+      nodeId: row.nodeId,
+      evidence: { incidentId },
+    });
+  }
+
+  return true;
 }
 
 export async function markRevertFailed(

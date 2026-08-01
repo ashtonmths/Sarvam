@@ -62,10 +62,7 @@ export default function ApiKeysPane() {
   return (
     <>
       {fresh && (
-        <section
-          className="panel"
-          style={{ marginBottom: 16, borderColor: "var(--thread)" }}
-        >
+        <section className="panel" style={{ borderColor: "var(--thread)" }}>
           <h2 className="panel__title">Your new key</h2>
           <p className="panel__caption">
             This is the only time the full key is shown. It is stored hashed — we cannot
@@ -108,7 +105,7 @@ export default function ApiKeysPane() {
         </section>
       )}
 
-      <section className="panel" style={{ marginBottom: 16 }}>
+      <section className="panel">
         <h2 className="panel__title">API keys</h2>
         <p className="panel__caption">
           These authenticate the REST gate and the MCP server. A key can only be granted

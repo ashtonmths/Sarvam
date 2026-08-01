@@ -5,6 +5,7 @@ import {
   unresolvedRefs,
 } from "@sadhak/shared/schema";
 import { and, eq } from "drizzle-orm";
+import { recordDerivedCheckpoint } from "../changes/checkpoints.js";
 import { onFirstCrawlComplete } from "../comms/lifecycle.js";
 import { getConnector, makeReadContext } from "../connectors/registry.js";
 import type { EdgeSpec, ExternalRef, NodeKey, NodeSpec } from "../connectors/types.js";
@@ -158,6 +159,20 @@ export async function runCrawl(
 
     // A successful crawl is what gives Historian its worklist.
     void enqueueUnexplainedEdges(orgId).catch(() => undefined);
+
+    /**
+     * A crawl that mapped the graph without error is weak evidence that the
+     * systems it read were working at that instant — enough to bound a later
+     * incident search, which is why its confidence is the lowest of any kind.
+     * Recorded so an org has something to narrow with before anyone has
+     * thought to press a button.
+     */
+    void recordDerivedCheckpoint({
+      orgId,
+      kind: "crawl_healthy",
+      label: `${instance.connector} crawl completed cleanly`,
+      evidence: { crawlId, ...stats },
+    }).catch(() => undefined);
 
     // Proof of life, once ever. Fire-and-forget on purpose: a crawl that
     // finished must not be reported as failed because an email did not send.

@@ -196,10 +196,7 @@ export default function SubprocessorsPage() {
         <p>
           Something on this page that does not match what you observe is a bug, and we
           would rather hear about it than not:{" "}
-          <a href="https://github.com/Finite-Loop-Club-NMAMIT/Sadhak/issues">
-            open an issue
-          </a>
-          .
+          <a href="https://github.com/ashtonmths/Sarvam/issues">open an issue</a>.
         </p>
       }
     />

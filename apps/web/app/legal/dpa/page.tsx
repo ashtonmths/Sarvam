@@ -130,10 +130,8 @@ export default function DpaPage() {
       footnote={
         <p>
           Redlines and objections are welcome as a{" "}
-          <a href="https://github.com/Finite-Loop-Club-NMAMIT/Sadhak/issues">
-            GitHub issue
-          </a>{" "}
-          or by email, whichever your process prefers.
+          <a href="https://github.com/ashtonmths/Sarvam/issues">GitHub issue</a> or by
+          email, whichever your process prefers.
         </p>
       }
     />

@@ -62,7 +62,7 @@ export default function AgentsPage() {
           body="Historian runs after a crawl, or when you start an exit interview above. Every tool call it makes is recorded, so you can see exactly how it reached a conclusion."
         />
       ) : (
-        <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="panel panel--table">
           <table className="dtable">
             <thead>
               <tr>

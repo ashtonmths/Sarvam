@@ -82,7 +82,7 @@ services:
       - dokploy-network
 
   api:
-    image: ghcr.io/finite-loop-club-nmamit/sadhak-api:latest
+    image: ghcr.io/ashtonmths/sadhak-api:latest
     restart: unless-stopped
     <<: *logging
     depends_on:
@@ -139,7 +139,7 @@ services:
       - sadhak-obs
 
   web:
-    image: ghcr.io/finite-loop-club-nmamit/sadhak-web:latest
+    image: ghcr.io/ashtonmths/sadhak-web:latest
     restart: unless-stopped
     <<: *logging
     depends_on:

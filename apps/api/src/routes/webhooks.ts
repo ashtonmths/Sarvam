@@ -60,8 +60,22 @@ webhookRoutes.post("/webhooks/github", async (c) => {
       await handleInstallation(payload);
       return c.json({ ok: true });
 
+    /**
+     * A push is the live half of the change store. It is recorded rather than
+     * gated: the gate reasons about a *proposed* change, and this is one that
+     * already happened, which is exactly the material an incident search needs.
+     */
+    case "push":
+      await enqueueChangeCapture(payload, "push");
+      return c.json({ ok: true });
+
     case "pull_request": {
       const action = payload.action ?? "";
+      // Capture first, and separately from gating: a merge is a change worth
+      // recording even though it is not a merge to evaluate.
+      if (["closed", "opened", "reopened", "synchronize"].includes(action)) {
+        await enqueueChangeCapture(payload, "pull_request");
+      }
       if (!["opened", "synchronize", "reopened"].includes(action)) {
         return c.json({ ok: true, ignored: action });
       }
@@ -89,7 +103,8 @@ interface GithubPayload {
     account?: { login?: string };
     repository_selection?: string;
   };
-  repository?: { full_name?: string };
+  repository?: { full_name?: string; default_branch?: string };
+  ref?: string;
   pull_request?: {
     number: number;
     head?: { sha?: string };
@@ -132,6 +147,46 @@ async function handleInstallation(payload: GithubPayload): Promise<void> {
         suspendedAt: payload.action === "suspend" ? new Date() : null,
       },
     });
+}
+
+/**
+ * Records that something changed, and lets a job go and fetch the detail.
+ *
+ * The webhook body carries enough to know *what* changed but not the file
+ * paths, and fetching those is one API call per commit. Doing it inline would
+ * make GitHub wait on our rate limit, and a webhook that times out gets
+ * redelivered — turning a slow call into a retry storm. So the handler stores
+ * nothing and enqueues, which is the same shape `github.check` already uses.
+ */
+async function enqueueChangeCapture(
+  payload: GithubPayload,
+  trigger: "push" | "pull_request",
+): Promise<void> {
+  const installationId = payload.installation?.id;
+  const fullName = payload.repository?.full_name;
+  if (!installationId || !fullName) return;
+
+  // Only the default branch. A push to a topic branch has not happened to
+  // anybody yet, and recording every one would bury the changes that shipped.
+  const defaultBranch = payload.repository?.default_branch ?? "main";
+  if (
+    trigger === "push" &&
+    payload.ref &&
+    payload.ref !== `refs/heads/${defaultBranch}`
+  ) {
+    return;
+  }
+
+  await enqueue(
+    "github.capture_changes",
+    { installationId, fullName, defaultBranch, trigger },
+    {
+      // Coalesced per repository: several pushes in a minute should produce
+      // one catch-up pass, not one job each.
+      dedupeKey: `github.capture_changes:${fullName}`,
+      priority: 4,
+    },
+  );
 }
 
 async function enqueueCheck(payload: GithubPayload): Promise<void> {

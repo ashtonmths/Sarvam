@@ -79,7 +79,7 @@ export default function Home() {
                 </p>
                 <div className="hero__actions">
                   <Link href="/signup" className="btn btn--ink">
-                    Get early access <span className="btn__arrow">→</span>
+                    Try the demo <span className="btn__arrow">→</span>
                   </Link>
                   <Link href="/product/blast-radius" className="btn btn--ghost">
                     See how it works
@@ -358,7 +358,7 @@ export default function Home() {
             <div className="cta__panel">
               <ThreadLines className="cta__thread" />
               <span className="eyebrow" style={{ color: "#9aa0ac" }}>
-                Early access
+                Try it
               </span>
               <h2>CI got gates a decade ago. Your operations never did.</h2>
               <p>
@@ -366,7 +366,7 @@ export default function Home() {
                 on the layer where your revenue actually runs.
               </p>
               <Link href="/signup" className="btn btn--paper">
-                Get early access <span className="btn__arrow">→</span>
+                Try the demo <span className="btn__arrow">→</span>
               </Link>
             </div>
           </div>

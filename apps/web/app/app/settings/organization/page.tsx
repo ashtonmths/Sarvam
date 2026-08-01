@@ -46,7 +46,7 @@ function DataControls({ orgName }: { orgName: string }) {
   }
 
   return (
-    <section className="panel danger" style={{ marginTop: 16 }}>
+    <section className="panel danger">
       <h2 className="panel__title">Your data</h2>
       <p className="panel__caption">
         Take it with you, or take it away. Neither needs a support ticket.
@@ -121,7 +121,7 @@ export default function OrganizationPane() {
 
   return (
     <>
-      <section className="panel" style={{ marginBottom: 16 }}>
+      <section className="panel">
         <h2 className="panel__title">Organization</h2>
         <table className="dtable">
           <tbody>

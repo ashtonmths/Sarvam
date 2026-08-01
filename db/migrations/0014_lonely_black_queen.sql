@@ -1,0 +1,1 @@
+ALTER TABLE "repo_cursors" ADD COLUMN "pages_walked" integer DEFAULT 0 NOT NULL;

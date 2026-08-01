@@ -156,7 +156,7 @@ export default async function DocsPage({
             <p className="docs__updated">
               Last updated {doc.updated} ·{" "}
               <a
-                href={`https://github.com/Finite-Loop-Club-NMAMIT/Sadhak/blob/main/apps/web/content/docs/${
+                href={`https://github.com/ashtonmths/Sarvam/blob/main/apps/web/content/docs/${
                   doc.slug.length === 0 ? "index" : doc.slug.join("/")
                 }.mdx`}
                 target="_blank"

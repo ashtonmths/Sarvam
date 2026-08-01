@@ -30,7 +30,7 @@ function AuthFormInner({ mode }: { mode: "signin" | "signup" }) {
         <div className="auth__form-wrap">
           <div>
             <span className="eyebrow eyebrow--thread">
-              {isSignup ? "Early access" : "Welcome back"}
+              {isSignup ? "Get started" : "Welcome back"}
             </span>
             <h1 className="auth__title">
               {isSignup ? "Create your account" : "Sign in to Sadhak"}

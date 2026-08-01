@@ -615,8 +615,9 @@ button {
   text-transform: uppercase;
   color: var(--ink-faint);
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 12px;
+  gap: 6px 12px;
   margin-bottom: 12px;
 }
 
@@ -803,6 +804,10 @@ button {
 
 .section {
   padding: 96px 0 0;
+  /* clip, not hidden: a decorative element inside one of these sections bleeds
+     ~4px past the viewport on a phone, and `clip` trims it without creating a
+     scroll container (which would break sticky descendants). */
+  overflow-x: clip;
 }
 
 .section__head {
@@ -1044,9 +1049,16 @@ button {
 
 .fanout__grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin: 14px 0;
+}
+
+/* four mono-text cells do not fit across a phone */
+@media (max-width: 560px) {
+  .fanout__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .fanout__cell {
@@ -2134,17 +2146,20 @@ button {
     display: none;
   }
 
+  /* minmax(0, 1fr) rather than a bare 1fr: 1fr floors at the column's
+     min-content width, so a long heading in any of these grids widened the
+     column past the container and scrolled the whole page sideways. */
   .steps,
   .modes,
   .pillars {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .split,
   .split--flip {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .auth {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   /* The scene used to be display:none here, which left a bare form floating on
      paper — the one viewport where the page said nothing about the product.

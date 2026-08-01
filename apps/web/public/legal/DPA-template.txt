@@ -15,7 +15,7 @@
 ## 1. Parties and roles
 
 **Controller:** the customer organisation using Sadhak.
-**Processor:** Sadhak (the Finite Loop Club project).
+**Processor:** Sadhak.
 
 The Controller decides which systems to connect and which channels to mine. The
 Processor processes personal data only to provide the service, and only on the

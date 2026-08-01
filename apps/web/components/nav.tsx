@@ -67,13 +67,6 @@ export function Nav() {
             ))}
           </span>
           <Link
-            href="/pricing"
-            className="nav__link"
-            aria-current={pathname === "/pricing" ? "page" : undefined}
-          >
-            Pricing
-          </Link>
-          <Link
             href="/docs"
             className="nav__link"
             aria-current={pathname.startsWith("/docs") ? "page" : undefined}

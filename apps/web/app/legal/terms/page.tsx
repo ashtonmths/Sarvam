@@ -166,10 +166,8 @@ export default function TermsPage() {
       footnote={
         <p>
           Questions about any of this are welcome as a{" "}
-          <a href="https://github.com/Finite-Loop-Club-NMAMIT/Sadhak/issues">
-            GitHub issue
-          </a>
-          , including the ones that are awkward for us to answer.
+          <a href="https://github.com/ashtonmths/Sarvam/issues">GitHub issue</a>,
+          including the ones that are awkward for us to answer.
         </p>
       }
     />

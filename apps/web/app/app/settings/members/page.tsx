@@ -77,7 +77,7 @@ export default function MembersPane() {
         </div>
       )}
 
-      <section className="panel" style={{ marginBottom: 16 }}>
+      <section className="panel">
         <h2 className="panel__title">Members</h2>
         <p className="panel__caption">
           Roles map to capabilities, not to screens. Admins cannot change an owner&rsquo;s

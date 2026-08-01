@@ -31,9 +31,6 @@ export function Footer() {
                 <Link className="footer__link" href="/product/gate">
                   The gate
                 </Link>
-                <Link className="footer__link" href="/pricing">
-                  Pricing
-                </Link>
                 <Link className="footer__link" href="/docs">
                   Docs
                 </Link>
@@ -42,7 +39,7 @@ export function Footer() {
                 <span className="footer__col-title">Project</span>
                 <a
                   className="footer__link"
-                  href="https://github.com/Finite-Loop-Club-NMAMIT/Sadhak"
+                  href="https://github.com/ashtonmths/Sarvam"
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -50,7 +47,7 @@ export function Footer() {
                 </a>
                 <a
                   className="footer__link"
-                  href="https://github.com/Finite-Loop-Club-NMAMIT/Sadhak/tree/main/docs"
+                  href="https://github.com/ashtonmths/Sarvam/tree/main/docs"
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -91,7 +88,7 @@ export function Footer() {
           </div>
 
           <div className="footer__legal">
-            <span>Sadhak, built by Finite Loop Club</span>
+            <span>Sadhak</span>
             <span>Change intelligence for business operations</span>
           </div>
         </div>

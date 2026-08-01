@@ -6,124 +6,307 @@
 
 /* ------------------------------------------------------------------ shell */
 
+/* One column now: navigation moved from a left rail to a top bar, so every
+   page gets the full width and the eye starts at the content, not the chrome. */
 .shell {
-  display: grid;
-  grid-template-columns: auto 1fr;
   min-height: 100dvh;
   background: var(--paper);
 }
 
-.shell__rail {
+.shell__main {
+  min-width: 0;
+  max-width: 1460px;
+  margin-inline: auto;
+  padding: 26px 30px 76px;
+}
+
+/* Same header rhythm as the overview's, so every page opens the same way. */
+.shell__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.shell__head h1 {
+  font-size: 26px;
+}
+
+.shell__head-sub {
+  margin-top: 5px;
+  color: var(--ink-faint);
+  font-size: 13.5px;
+  max-width: 64ch;
+}
+
+/* --------------------------------------------------------------- top nav */
+
+.topnav {
   position: sticky;
   top: 0;
-  height: 100dvh;
-  width: 236px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 16px 14px;
-  border-right: 1px solid var(--line-soft);
-  background: var(--panel);
-  transition: width 0.22s ease;
+  z-index: 40;
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line-soft);
 }
 
-.shell__rail--min {
-  width: 72px;
-  padding-inline: 12px;
-}
-
-/* label text fades out of existence in the icon rail */
-.rail__text {
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.shell__rail--min .rail__text {
-  display: none;
-}
-
-.rail__head {
+.topnav__inner {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 38px;
+  gap: 18px;
+  max-width: 1460px;
+  margin-inline: auto;
+  padding: 11px 30px;
 }
 
-.shell__rail--min .rail__head {
-  justify-content: center;
-}
-
-.shell__rail .logo {
+.topnav__brand {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 6px;
+  flex: none;
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 19px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
-.rail__toggle {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  flex: none;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: none;
-  color: var(--ink-faint);
-  transition:
-    color 0.15s ease,
-    border-color 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.rail__toggle:hover {
-  color: var(--ink);
-  border-color: var(--line);
-  background: var(--card);
-}
-
-.rail__org-wrap {
-  position: relative;
-}
-
-.shell__rail--min .rail__org-wrap {
-  display: none;
-}
-
-.rail__org {
+.topnav__nav {
   display: flex;
-  width: 100%;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--card);
-  font-size: 14px;
-  font-weight: 500;
-  text-align: left;
-  transition: border-color 0.15s ease;
+  gap: 2px;
 }
 
-.rail__org:hover,
-.rail__org[data-state="open"] {
+/* the mobile trigger; the desktop strip is the default and this hides under it */
+.topnav__burger {
+  position: relative;
+  display: none;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.topnav__burger[data-state="open"] {
+  background: var(--panel);
   border-color: var(--ink-faint);
 }
 
-.rail__org-name {
+.topnav__link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 99px;
+  background: none;
+  font-family: var(--font-body);
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--ink-soft);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  transition:
+    color 0.16s ease,
+    background-color 0.16s ease;
 }
 
-.rail__org-caret {
+.topnav__link:hover,
+.topnav__link[data-state="open"] {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--card) 85%, transparent);
+}
+
+.topnav__link[data-active] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* the active group keeps a thread underline, so the state survives hover */
+.topnav__link[data-active]::after {
+  content: "";
+  position: absolute;
+  left: 15px;
+  right: 15px;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 99px;
+  background: var(--thread);
+}
+
+.topnav__caret {
   flex: none;
   color: var(--ink-faint);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.topnav__link[data-state="open"] .topnav__caret {
+  transform: rotate(180deg);
+}
+
+.topnav__pip {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--thread);
+  color: var(--card);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.topnav__tools {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-left: auto;
+}
+
+.topnav__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: clamp(180px, 22vw, 300px);
+  padding: 6px 6px 6px 16px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--card);
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.topnav__search:focus-within {
+  border-color: var(--thread);
+  box-shadow: 0 0 0 4px var(--thread-soft);
+}
+
+.topnav__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  outline: none;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.topnav__search input::placeholder {
+  color: var(--ink-faint);
+}
+
+.topnav__search-go {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink-soft);
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.topnav__search-go:hover {
+  background: var(--ink);
+  color: var(--card);
+}
+
+.topnav__icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink-soft);
+  transition:
+    color 0.16s ease,
+    background-color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.topnav__icon:hover,
+.topnav__icon[data-state="open"] {
+  color: var(--ink);
+  background: var(--card);
+  border-color: var(--line);
+}
+
+.topnav__dot {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--block);
+  box-shadow: 0 0 0 2px var(--card);
+}
+
+/* The org's initials in a rounded square. A generic building glyph told you
+   nothing; two letters tell you which org you are looking at. */
+.topnav__org {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--card);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.topnav__org:hover,
+.topnav__org[data-state="open"] {
+  color: var(--ink);
+  background: var(--panel);
+  border-color: var(--ink-faint);
+}
+
+.topnav__avatar {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--panel);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  transition: box-shadow 0.16s ease;
+}
+
+.topnav__avatar:hover,
+.topnav__avatar[data-state="open"] {
+  box-shadow: 0 0 0 3px var(--thread-soft);
 }
 
 /* ------------------------------------------- dropdowns (Radix, our skin) */
@@ -234,103 +417,6 @@
   border-radius: 8px;
 }
 
-/* ----------------------------------------------------------------- topbar */
-
-.shell__col {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 11px 34px;
-  background: color-mix(in srgb, var(--paper) 82%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.topbar__lead {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 1;
-  min-width: 0;
-}
-
-.topbar__lead search {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-}
-
-.topbar__search {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: min(360px, 100%);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--card);
-  padding: 8px 12px;
-  color: var(--ink-faint);
-  transition: border-color 0.15s ease;
-}
-
-.topbar__search:focus-within {
-  border-color: var(--ink-faint);
-}
-
-.topbar__search input {
-  border: 0;
-  background: none;
-  outline: none;
-  font: inherit;
-  font-size: 14px;
-  color: var(--ink);
-  width: 100%;
-}
-
-.topbar__search input::placeholder {
-  color: var(--ink-faint);
-}
-
-.topbar__actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.topbar__actions .btn svg {
-  flex: none;
-}
-
-.topbar__avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 0;
-  display: grid;
-  place-items: center;
-  background: var(--ink);
-  color: var(--panel);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  transition: box-shadow 0.15s ease;
-}
-
-.topbar__avatar:hover,
-.topbar__avatar[data-state="open"] {
-  box-shadow: 0 0 0 3px var(--thread-soft);
-}
-
 .dropdown__id {
   display: flex;
   flex-direction: column;
@@ -362,124 +448,621 @@
   color: var(--block);
 }
 
-/* --------------------------------------------------- overview: the tape */
+/* ---------------------------------------------- sub-navigation menus */
 
-.tape {
-  margin-bottom: 20px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-}
-
-.tape__track {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 22px;
-  min-width: max-content;
-  padding: 10px 2px;
-}
-
-/* the thread the verdicts ride on */
-.tape__track::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  border-top: 1.5px dashed var(--ink-faint);
-  opacity: 0.45;
-}
-
-.tape__gate {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--ink);
-  color: var(--panel);
-  border-radius: 11px;
-  padding: 10px 16px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.1em;
-  white-space: nowrap;
-  box-shadow:
-    0 0 0 3px var(--paper),
-    0 0 0 4px var(--line);
-}
-
-.tape__gate-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--thread);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--thread) 28%, transparent);
-}
-
-.tape__stop {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: var(--card);
+.navmenu {
+  z-index: 70;
+  width: 328px;
+  padding: 8px;
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius-sm);
-  padding: 9px 12px;
-  box-shadow: 0 1px 2px rgba(23, 25, 30, 0.04);
-  transition:
-    border-color 0.15s ease,
-    transform 0.15s ease;
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow:
+    0 2px 6px rgba(23, 25, 30, 0.05),
+    0 26px 52px -22px rgba(23, 25, 30, 0.3);
+  animation: navmenu-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.tape__stop:hover {
-  border-color: var(--line);
-  transform: translateY(-1px);
+@keyframes navmenu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-.tape__row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.tape__change {
+.navmenu__eyebrow {
+  display: block;
+  padding: 6px 10px 8px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--ink);
-  white-space: nowrap;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tape__when {
-  font-size: 11px;
-  color: var(--ink-faint);
-  white-space: nowrap;
-}
-
-.tape__now {
-  position: relative;
-  z-index: 1;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  background: var(--paper);
-  padding: 2px 6px;
+}
+
+.navmenu__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: 13px;
+  outline: none;
+  user-select: none;
+  transition: background-color 0.14s ease;
+}
+
+.navmenu__item[data-highlighted] {
+  background: var(--panel);
+}
+
+.navmenu__item[data-active] {
+  background: var(--thread-soft);
+}
+
+.navmenu__icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 11px;
+  background: var(--panel);
+  color: var(--ink-soft);
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.navmenu__item[data-highlighted] .navmenu__icon {
+  background: var(--card);
+  color: var(--ink);
+}
+
+.navmenu__item[data-active] .navmenu__icon {
+  background: var(--thread);
+  color: var(--card);
+}
+
+.navmenu__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.navmenu__body strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.navmenu__body span {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ink-faint);
+}
+
+.navmenu__go {
+  flex: none;
+  margin-left: auto;
+  color: var(--ink-faint);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.navmenu__item[data-highlighted] .navmenu__go {
+  opacity: 1;
+  transform: none;
+}
+
+/* ------------------------------------------------ overview: page header */
+
+.ovhead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.ovhead h1 {
+  font-size: 26px;
+}
+
+.ovhead__sub {
+  margin-top: 5px;
+  font-size: 13.5px;
+  color: var(--ink-faint);
+  max-width: 64ch;
+}
+
+.ovhead__side {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.ovhead__date {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--card);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------- overview: drift bar */
+
+.driftbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 13px 16px;
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line-soft));
+  border-radius: 18px;
+  background: linear-gradient(
+    92deg,
+    var(--warn-soft),
+    color-mix(in srgb, var(--warn-soft) 26%, var(--card))
+  );
+}
+
+.driftbar__icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--warn) 26%, transparent);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--warn-ink);
+}
+
+.driftbar__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.driftbar__body strong {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.driftbar__body span {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+/* The solid pill, shared by the page header's action and the drift banner's.
+   They were one class, which meant a mobile rule written for the banner also
+   stretched the header button past the viewport. */
+.pillbtn,
+.driftbar__go {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: 99px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pillbtn:hover,
+.driftbar__go:hover {
+  transform: translateY(-1px);
+}
+
+/* --------------------------------------------------- overview: the grid */
+
+/* stretch, not start: cards in a row share a height, so a short card never
+   leaves a ragged void beside a tall one. */
+.ov {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: stretch;
+}
+
+.ov__span2 {
+  grid-column: span 2;
+}
+
+/* The last row has nothing under it to line up with, so its cards take their
+   natural height instead of stretching to the tallest and hollowing out. */
+.ov__auto {
+  align-self: start;
+}
+
+/* ------------------------------------------------- overview: card shell */
+
+.ovcard {
+  display: flex;
+  flex-direction: column;
+  padding: 22px;
+  border: 1px solid var(--line-soft);
+  border-radius: 22px;
+  background: var(--card);
+  box-shadow:
+    0 1px 2px rgba(23, 25, 30, 0.035),
+    0 18px 40px -26px rgba(23, 25, 30, 0.3);
+}
+
+.ovcard__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.ovcard__title {
+  font-size: 17px;
+}
+
+.ovcard__more {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line);
+  transition:
+    color 0.16s ease,
+    text-decoration-color 0.16s ease;
+}
+
+.ovcard__more:hover {
+  color: var(--thread);
+  text-decoration-color: var(--thread);
+}
+
+.ovcard__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 99px;
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.ovcard__caption {
+  margin-top: 5px;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+/* a stretched card's empty state sits in the middle of the space, not pinned
+   to the top of it */
+.ovcard__empty {
+  margin: auto 0;
+  padding: 18px 0;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
+/* ------------------------------------------------ overview: tracker card */
+
+.track {
+  padding: 26px 28px 20px;
+  border-radius: 26px;
+}
+
+.track__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.track__badge {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line-soft);
+  border-radius: 13px;
+  background: var(--panel);
+  color: var(--ink-soft);
+}
+
+.track__title {
+  margin-top: 14px;
+  font-size: 31px;
+  letter-spacing: -0.035em;
+}
+
+.track__sub {
+  margin-top: 7px;
+  max-width: 48ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-faint);
+}
+
+.rangepick {
+  display: inline-flex;
+  gap: 2px;
+  flex: none;
+  min-width: 0;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--panel);
+}
+
+.rangepick button {
+  border: 0;
+  border-radius: 99px;
+  padding: 6px 15px;
+  background: none;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-faint);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.rangepick button[data-on] {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(23, 25, 30, 0.09);
+}
+
+.track__body {
+  display: grid;
+  grid-template-columns: minmax(126px, 170px) 1fr;
+  gap: 22px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.track__figure {
+  padding-bottom: 34px;
+}
+
+.track__pct {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 46px;
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+
+.track__pct-note {
+  display: block;
+  margin-top: 9px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-faint);
+}
+
+/* ------------------------------------------------ overview: pulse chart */
+
+.pulse {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 4px;
+}
+
+.pulse__col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 0 10px;
+  border: 0;
+  border-radius: 22px;
+  background: none;
+  transition: background-color 0.24s ease;
+}
+
+.pulse__col:hover {
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+}
+
+.pulse__col[data-on] {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel) 92%, transparent),
+    color-mix(in srgb, var(--panel) 22%, transparent)
+  );
+}
+
+.pulse__plot {
+  position: relative;
+  width: 100%;
+  height: 170px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+/* Transition, never an entrance animation: this height IS the value. An
+   animation that grows it from zero renders the wrong number until it
+   finishes — and in a backgrounded or non-compositing tab it never does. */
+.pulse__stem {
+  position: relative;
+  width: 2px;
+  border-radius: 99px;
+  background: linear-gradient(
+    180deg,
+    var(--line),
+    color-mix(in srgb, var(--line-soft) 30%, transparent)
+  );
+  transition:
+    height 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.24s ease;
+}
+
+.pulse__col[data-on] .pulse__stem {
+  background: linear-gradient(
+    180deg,
+    var(--thread),
+    color-mix(in srgb, var(--thread) 6%, transparent)
+  );
+}
+
+.pulse__dot {
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 50%;
+  background: var(--thread);
+  box-shadow: 0 0 0 3px var(--card);
+  transition:
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s ease;
+}
+
+.pulse__col[data-on] .pulse__dot {
+  transform: scale(1.2);
+  box-shadow:
+    0 0 0 3px var(--card),
+    0 0 0 7px var(--thread-soft);
+}
+
+.pulse__tip {
+  position: absolute;
+  bottom: calc(100% + 15px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border-radius: 99px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+  animation: tip-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pulse__tip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -3px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 2px;
+  background: var(--ink);
+  transform: rotate(45deg);
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 5px);
+  }
+}
+
+/* The end columns anchor their tooltip inward. Centred on a 2px stem it hangs
+   half its width past the card edge, which is most of the time on a phone —
+   the first and last bucket are exactly the ones people look at. */
+.pulse__col:first-child .pulse__tip {
+  left: -3px;
+  transform: none;
+  animation-name: tip-in-edge;
+}
+
+.pulse__col:first-child .pulse__tip::after {
+  left: 6px;
+  margin-left: 0;
+}
+
+.pulse__col:last-child .pulse__tip {
+  left: auto;
+  right: -3px;
+  transform: none;
+  animation-name: tip-in-edge;
+}
+
+.pulse__col:last-child .pulse__tip::after {
+  left: auto;
+  right: 6px;
+  margin-left: 0;
+}
+
+@keyframes tip-in-edge {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+}
+
+.pulse__label {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--panel);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-faint);
+  transition:
+    background-color 0.22s ease,
+    color 0.22s ease;
+}
+
+.pulse__col[data-on] .pulse__label {
+  background: var(--ink);
+  color: var(--paper);
 }
 
 /* ------------------------------------------------ overview: stat strip */
 
+/* A card, matching the overview's figure block. This used to be a bare strip
+   with a hairline above and below, which read as a leftover from the old design
+   on every page that used it. */
 .ostats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 20px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 18px;
+  border: 1px solid var(--line-soft);
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow:
+    0 1px 2px rgba(23, 25, 30, 0.035),
+    0 18px 40px -26px rgba(23, 25, 30, 0.3);
 }
 
 .ostats__cell {
@@ -514,78 +1097,625 @@
   color: var(--ink-faint);
 }
 
-/* ------------------------------------------- overview: watchlist + feed */
-
-.ogrid {
-  display: grid;
-  grid-template-columns: 1.25fr 1fr;
-  gap: 16px;
-  align-items: start;
-}
-
-.ogrid__stack {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.watch {
-  display: grid;
-  grid-template-columns: auto 1fr minmax(70px, 130px) auto auto;
-  align-items: center;
-  gap: 14px;
-  padding: 13px 4px;
+/* the same four figures, folded into the tracker card's footer */
+/* Inside the tracker card it is not a card of its own — just a hairline and the
+   four figures, so the two do not nest as boxes within boxes. */
+.ostats--inline {
+  margin: 22px 0 0;
+  border: 0;
   border-top: 1px solid var(--line-soft);
-  transition: background-color 0.12s ease;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
 }
 
-.watch:hover {
-  background: color-mix(in srgb, var(--panel) 55%, transparent);
+.ostats--inline .ostats__cell {
+  padding: 16px 18px 0;
+  gap: 3px;
 }
 
-.watch__rank {
-  font-family: var(--font-mono);
-  font-size: 11px;
+.ostats--inline .ostats__cell:first-child {
+  padding-left: 0;
+}
+
+.ostats--inline .ostats__cell strong {
+  font-family: var(--font-display);
+  font-size: 23px;
+  letter-spacing: -0.03em;
+}
+
+.ostats--inline .ostats__cell span {
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
   color: var(--ink-faint);
 }
 
-.watch__id {
+.ostats--inline .ostats__cell em {
+  font-size: 11.5px;
+}
+
+/* --------------------------------------------- overview: recent verdicts */
+
+.declist {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.declist__row {
+  border-top: 1px solid var(--line-soft);
+}
+
+.declist__row:first-child {
+  border-top: 0;
+}
+
+.declist__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+/* Tinted, not saturated. A wall of solid red/green squares shouts; the soft
+   chip carries the same signal and lets the verdict badge do the shouting. */
+.declist__tile {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+
+.declist__tile--approve {
+  background: var(--approve-soft);
+  border-color: color-mix(in srgb, var(--approve) 22%, transparent);
+  color: var(--approve-ink);
+}
+
+.declist__tile--warn {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 22%, transparent);
+  color: var(--warn-ink);
+}
+
+.declist__tile--block {
+  background: var(--block-soft);
+  border-color: color-mix(in srgb, var(--block) 22%, transparent);
+  color: var(--block-ink);
+}
+
+.declist__id {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
 }
 
-.watch__id strong {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 500;
+.declist__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.declist__name em {
+  font-style: normal;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.watch__id span {
-  font-size: 12px;
+.declist__sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
   color: var(--ink-faint);
 }
 
-.watch__meter {
-  height: 4px;
+.declist__caret {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink-soft);
+  transition:
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.22s ease,
+    color 0.22s ease;
+}
+
+.declist__row[data-open] .declist__caret {
+  transform: rotate(180deg);
+  background: var(--thread-soft);
+  color: var(--thread);
+}
+
+/* 0fr → 1fr: a height transition without measuring anything in JavaScript */
+.declist__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.declist__row[data-open] .declist__body {
+  grid-template-rows: 1fr;
+}
+
+.declist__inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.declist__pad {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 0 0 16px 52px;
+}
+
+.declist__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.declist__note {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.declist__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.declist__meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Named `dchip`, not `chip`: globals.css already owns `.chip` for the marketing
+   hero's absolutely-positioned connector bubbles, and that `position: absolute`
+   made these escape the collapsed row's clip. */
+.dchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 99px;
+  background: var(--panel);
+  font-size: 11.5px;
+  white-space: nowrap;
+  color: var(--ink-soft);
+}
+
+/* ------------------------------------------------- overview: watchlist */
+
+.wl {
+  display: flex;
+  flex-direction: column;
+  margin-top: 2px;
+}
+
+/* A table row, not a card: rank, identity, the number, the way in. The impact
+   meter is 72px and lives under its own figure — a full-width bar under the
+   name read as an underline rather than as data. */
+.wl__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 58px 38px 30px;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.wl__row:first-child {
+  border-top: 0;
+}
+
+.wl__rank {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.wl__impact {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-align: right;
+}
+
+.wl__id {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wl__name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.wl__name em {
+  font-style: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wl__sub {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.wl__meter {
+  width: 100%;
+  height: 5px;
   border-radius: 99px;
   background: var(--line-soft);
   overflow: hidden;
 }
 
-.watch__meter i {
+.wl__meter i {
   display: block;
   height: 100%;
   border-radius: 99px;
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.watch__impact {
+.wl__go {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--ink-soft);
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.wl__go:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--card);
+  transform: translateY(-1px);
+}
+
+/* ------------------------------------------------- overview: promo card */
+
+.promo {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 24px;
+  border-radius: 22px;
+  background: linear-gradient(155deg, #262a33, #15171c 52%, #1c2029);
+  color: #f4f2ec;
+  box-shadow: 0 20px 44px -26px rgba(23, 25, 30, 0.65);
+}
+
+.promo::before {
+  content: "";
+  position: absolute;
+  top: -120px;
+  right: -90px;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 34%, rgba(64, 83, 200, 0.5), transparent 62%);
+}
+
+/* concentric hairlines, the quiet version of the reference's woven corner */
+.promo::after {
+  content: "";
+  position: absolute;
+  right: -70px;
+  bottom: -84px;
+  width: 210px;
+  height: 210px;
+  border-radius: 50%;
+  border: 1px solid rgba(244, 242, 236, 0.1);
+  box-shadow:
+    0 0 0 22px rgba(244, 242, 236, 0.045),
+    0 0 0 46px rgba(244, 242, 236, 0.028);
+}
+
+.promo > * {
+  position: relative;
+  z-index: 1;
+}
+
+.promo__eyebrow {
   font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(244, 242, 236, 0.55);
+}
+
+.promo__figure {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.promo__figure strong {
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+
+.promo__figure span {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: rgba(244, 242, 236, 0.6);
+}
+
+.promo__body {
   font-size: 12.5px;
+  line-height: 1.55;
+  color: rgba(244, 242, 236, 0.72);
+}
+
+.promo__meter {
+  height: 5px;
+  border-radius: 99px;
+  background: rgba(244, 242, 236, 0.14);
+  overflow: hidden;
+}
+
+.promo__meter i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #6f83e8, #aab7f5);
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.promo__cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding: 10px 10px 10px 18px;
+  border-radius: 99px;
+  background: #faf8f3;
+  color: #17191e;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.18s ease;
+}
+
+.promo__cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px -14px rgba(0, 0, 0, 0.75);
+}
+
+.promo__cta i {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  background: #17191e;
+  color: #faf8f3;
+}
+
+/* ----------------------------------------------- overview: verdict mix */
+
+/* flex:1 on the grid and on each column's bars — the chart absorbs whatever
+   height the row settled on instead of leaving a void under it */
+.mix {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  flex: 1;
+  margin-top: 14px;
+}
+
+.mix__col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 14px;
+}
+
+.mix__col + .mix__col {
+  padding-left: 14px;
+  border-left: 1px solid var(--line-soft);
+}
+
+.mix__label {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.mix__value {
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.mix__share {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+.mix__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  flex: 1;
+  min-height: 64px;
+  margin-top: 12px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.mix__bars i {
+  flex: 1;
+  min-width: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transition: height 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mix__col--approve {
+  color: var(--approve);
+}
+
+.mix__col--warn {
+  color: var(--warn);
+}
+
+.mix__col--block {
+  color: var(--block);
+}
+
+/* ------------------------------------------------- overview: agent runs */
+
+.arun {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.arun:first-of-type {
+  border-top: 0;
+}
+
+.arun__tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border: 1px solid var(--line-soft);
+  border-radius: 13px;
+  background: var(--panel);
+  color: var(--ink-soft);
+}
+
+.arun__dot {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--card);
+}
+
+.arun__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.arun__body strong {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.arun__body span {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.arun__when {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------- overview: map composition */
+
+.kindbar {
+  display: grid;
+  grid-template-columns: 92px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+}
+
+.kindbar__label {
+  font-size: 12px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kindbar__track {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.kindbar__track i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(
+    90deg,
+    var(--thread),
+    color-mix(in srgb, var(--thread) 55%, var(--card))
+  );
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.kindbar__count {
+  font-family: var(--font-mono);
+  font-size: 12px;
   color: var(--ink-soft);
 }
 
@@ -613,472 +1743,243 @@
   text-decoration-thickness: 2px;
 }
 
-.arun {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  padding: 11px 0;
-  border-top: 1px solid var(--line-soft);
+/* the fine print rides the bottom of whatever height the row settled on */
+.ovcard .panel__foot {
+  margin-top: auto;
+  padding-top: 14px;
 }
 
-.arun__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-top: 5px;
-  flex: none;
-}
+/* ------------------------------------------- sub-navigation: mobile sheet */
 
-.arun__body {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  font-size: 13px;
-}
-
-.arun__body strong {
-  font-weight: 500;
-}
-
-.arun__body span {
-  color: var(--ink-faint);
-  font-size: 12.5px;
-}
-
-.arun__when {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-faint);
-  white-space: nowrap;
-}
-
-.kindbar {
-  display: grid;
-  grid-template-columns: 70px 1fr auto;
-  align-items: center;
-  gap: 12px;
-  padding: 7px 0;
-}
-
-.kindbar__label {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--ink-soft);
-}
-
-.kindbar__track {
-  height: 4px;
-  border-radius: 99px;
-  background: var(--line-soft);
-  overflow: hidden;
-}
-
-.kindbar__track i {
-  display: block;
-  height: 100%;
-  border-radius: 99px;
-  background: var(--thread);
-}
-
-.kindbar__count {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--ink-soft);
-}
-
-.rail__nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-height: 0;
+.navmenu--sheet {
+  width: min(320px, calc(100vw - 32px));
+  max-height: min(70vh, var(--radix-dropdown-menu-content-available-height, 70vh));
   overflow-y: auto;
 }
 
-.rail__label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  padding: 0 12px;
-  margin: 14px 0 6px;
-}
-
-.rail__nav .rail__label:first-child {
-  margin-top: 2px;
-}
-
-/* in the icon rail, section labels become dashed thread breaks */
-.shell__rail--min .rail__label {
-  padding: 0;
-  margin: 10px 6px;
-  height: 0;
-  overflow: hidden;
-  border-top: 1.5px dashed var(--line);
-  color: transparent;
-}
-
-.rail__item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 9px 12px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  font-size: 14.5px;
-  font-weight: 500;
-  color: var(--ink-soft);
-  transition:
-    background-color 0.12s ease,
-    color 0.12s ease;
-}
-
-.shell__rail--min .rail__item {
-  justify-content: center;
-  padding: 11px 0;
-}
-
-.rail__item:hover {
-  background: color-mix(in srgb, var(--card) 70%, transparent);
-  color: var(--ink);
-}
-
-.rail__item[aria-current="page"] {
-  background: var(--card);
-  border-color: var(--line-soft);
-  color: var(--ink);
-  box-shadow:
-    0 1px 2px rgba(23, 25, 30, 0.05),
-    0 6px 14px -10px rgba(23, 25, 30, 0.25);
-}
-
-.rail__item[aria-current="page"] svg {
-  color: var(--thread);
-}
-
-.rail__item svg {
-  flex: none;
-}
-
-.rail__badge {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 1px 7px;
-  border-radius: 99px;
-  background: var(--thread-soft);
-  color: var(--thread);
-}
-
-/* collapsed: the count becomes a dot riding the icon's corner */
-.shell__rail--min .rail__badge {
-  position: absolute;
-  top: 7px;
-  right: 13px;
-  width: 7px;
-  height: 7px;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--thread);
-  color: transparent;
-  overflow: hidden;
-}
-
-/* ---- coverage card: the honest number, pinned where eyes rest ---- */
-
-.rail__card {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  padding: 13px 14px;
-  background: var(--card);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-md);
-  box-shadow: 0 1px 2px rgba(23, 25, 30, 0.04);
-  transition: border-color 0.15s ease;
-}
-
-.rail__card:hover {
-  border-color: var(--line);
-}
-
-.rail__card-eyebrow {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-.rail__card-eyebrow span:last-child {
-  color: var(--thread);
-  letter-spacing: 0.04em;
-}
-
-.rail__card-meter {
-  display: block;
-  height: 4px;
-  border-radius: 99px;
-  background: var(--line-soft);
-  overflow: hidden;
-}
-
-.rail__card-meter i {
-  display: block;
-  height: 100%;
-  border-radius: 99px;
-  background: var(--thread);
-}
-
-.rail__card-note {
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--ink-soft);
-}
-
-.shell__rail--min .rail__card {
-  display: none;
-}
-
-.rail__spark {
-  display: none;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  margin-inline: auto;
-  border: 1px solid var(--thread-soft);
-  border-radius: 50%;
-  background: var(--card);
-  color: var(--thread);
-  transition: border-color 0.15s ease;
-}
-
-.rail__spark:hover {
-  border-color: var(--thread);
-}
-
-.shell__rail--min .rail__spark {
-  display: grid;
-}
-
-/* ---- footer group ---- */
-
-.rail__foot {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 10px;
+.navmenu__group + .navmenu__group {
+  margin-top: 4px;
+  padding-top: 6px;
   border-top: 1px solid var(--line-soft);
 }
 
-.rail__user {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px 2px;
-  font-size: 13.5px;
-}
+/* ----------------------------------------------- overview: responsive */
 
-.shell__rail--min .rail__user {
-  justify-content: center;
-  padding-inline: 0;
-}
-
-.rail__avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--ink);
-  color: var(--panel);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  flex: none;
-}
-
-.rail__user-meta {
-  min-width: 0;
-  line-height: 1.3;
-}
-
-.rail__user-meta strong {
-  display: block;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rail__user-meta span {
-  color: var(--ink-faint);
-  font-size: 12px;
-}
-
-.rail__signout {
-  margin-left: auto;
-  border: 0;
-  background: none;
-  color: var(--ink-faint);
-  font-size: 12.5px;
-  padding: 4px;
-}
-
-.rail__signout:hover {
-  color: var(--block);
-}
-
-/* Collapsed rail: the modifier sits after the base rules it overrides, so the
-   cascade reads top to bottom instead of relying on specificity to undo
-   something declared later. */
-.shell__rail--min .rail__user-meta,
-.shell__rail--min .rail__signout {
-  display: none;
-}
-
-.shell__main {
-  min-width: 0;
-  padding: 24px 34px 64px;
-}
-
-.shell__head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-
-.shell__head h1 {
-  font-size: 27px;
-}
-
-.shell__head-sub {
-  margin-top: 6px;
-  color: var(--ink-soft);
-  font-size: 14.5px;
-  max-width: 62ch;
-}
-
-@media (max-width: 900px) {
-  .shell {
+@media (max-width: 1180px) {
+  .ov {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ov__span2 {
+    grid-column: span 2;
+  }
+  .track__body {
     grid-template-columns: 1fr;
+    align-items: start;
   }
-  .shell__rail,
-  .shell__rail--min {
-    position: static;
-    width: auto;
-    height: auto;
-    flex-direction: row;
-    align-items: center;
-    overflow-x: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--line-soft);
+  .track__figure {
+    padding-bottom: 0;
   }
-  .rail__nav {
-    flex-direction: row;
-    align-items: center;
-    overflow-y: visible;
-  }
-  .rail__toggle,
-  .rail__label,
-  .rail__card,
-  .rail__spark {
+}
+
+/* The four group triggers stop fitting beside the brand and the tools here, so
+   they fold into one menu rather than a strip that scrolls sideways and clips
+   its own first label. */
+@media (max-width: 1080px) {
+  .topnav__nav {
     display: none;
   }
-  .shell__rail--min .rail__text {
-    display: inline;
+  .topnav__burger {
+    display: grid;
   }
-  .shell__rail--min .rail__item {
-    padding: 9px 12px;
+  .topnav__inner {
+    gap: 12px;
+    padding: 11px 20px;
   }
-  .shell__rail--min .rail__badge {
-    position: static;
-    width: auto;
-    height: auto;
-    padding: 1px 7px;
-    border-radius: 99px;
-    background: var(--thread-soft);
-    color: var(--thread);
-    overflow: visible;
-  }
-  .rail__foot {
-    flex-direction: row;
-    align-items: center;
-    border-top: 0;
-    padding-top: 0;
-    margin-left: auto;
-  }
-  .rail__user {
-    padding: 0 4px;
-  }
-  .shell__rail--min .rail__user-meta {
-    display: block;
-  }
-  .shell__rail--min .rail__user {
-    justify-content: flex-start;
-  }
-  .rail__signout {
-    display: inline;
-  }
-  .topbar {
-    padding: 10px 18px;
-  }
-  .topbar__toggle {
-    display: none;
-  }
-  .topbar__actions .btn {
-    display: none;
-  }
+}
+
+@media (max-width: 860px) {
   .shell__main {
-    padding: 20px 18px 48px;
+    padding: 20px 16px 56px;
   }
-  .ostats {
+  /* minmax(0, 1fr), never plain 1fr: a bare 1fr floors at the column's
+     min-content width, which let the widest card push the whole page sideways. */
+  .ov {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .ov__span2 {
+    grid-column: span 1;
+  }
+  .ovhead {
+    align-items: stretch;
+    gap: 14px;
+  }
+  .ovhead__side {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .ovhead__date {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: center;
+  }
+  .pillbtn {
+    flex: 1 1 auto;
+  }
+  .track {
+    padding: 20px 18px 16px;
+  }
+  .track__title {
+    font-size: 25px;
+  }
+  .track__sub {
+    font-size: 12.5px;
+  }
+  .ovcard {
+    padding: 18px;
+    border-radius: 18px;
+  }
+  .promo {
+    padding: 20px;
+    border-radius: 18px;
+  }
+  .ostats,
+  .ostats--inline {
     grid-template-columns: repeat(2, 1fr);
   }
   .ostats__cell:nth-child(odd) {
     border-left: 0;
   }
+  .ostats--inline .ostats__cell:nth-child(odd) {
+    padding-left: 0;
+  }
   .ostats__cell:nth-child(-n + 2) {
     border-bottom: 1px solid var(--line-soft);
   }
-  .ogrid {
-    grid-template-columns: 1fr;
+  .ostats--inline .ostats__cell:nth-child(-n + 2) {
+    border-bottom: 0;
   }
-  .watch {
-    grid-template-columns: auto 1fr auto;
-  }
-  .watch__meter,
-  .watch__impact {
+}
+
+@media (max-width: 620px) {
+  .topnav__search {
     display: none;
+  }
+  .topnav__inner {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  .topnav__brand span {
+    display: none;
+  }
+  .shell__main {
+    padding: 18px 14px 48px;
+  }
+  .ovhead h1 {
+    font-size: 23px;
+  }
+  .ovhead__sub {
+    font-size: 12.5px;
+  }
+  .track__title {
+    font-size: 22px;
+  }
+  .track__pct {
+    font-size: 38px;
+  }
+  .pulse {
+    gap: 2px;
+  }
+  .pulse__plot {
+    height: 132px;
+  }
+  .pulse__col {
+    gap: 10px;
+  }
+  .pulse__label {
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
+  }
+  .pulse__tip {
+    padding: 5px 9px;
+    font-size: 10.5px;
+  }
+  /* the blast-radius row drops its meter before it drops the number */
+  .wl__row {
+    grid-template-columns: auto minmax(0, 1fr) 38px 28px;
+    gap: 10px;
+  }
+  .wl__meter {
+    display: none;
+  }
+  .declist__pad {
+    padding-left: 0;
+  }
+  .mix__value {
+    font-size: 22px;
+  }
+  .mix__col {
+    padding-right: 8px;
+  }
+  .mix__col + .mix__col {
+    padding-left: 8px;
+  }
+  .mix__share {
+    font-size: 9.5px;
+  }
+  .driftbar {
+    flex-wrap: wrap;
+  }
+  .driftbar__go {
+    flex: 1 1 100%;
+  }
+  /* stays 2×2 rather than a four-row column: the figures are short, and
+     stacking them pushed everything below the fold for no gain */
+  .ostats--inline .ostats__cell {
+    padding: 12px 12px 0;
   }
 }
 
 /* ----------------------------------------------------------------- panels */
 
+/* The overview's card language, applied to the primitive every other page is
+   already built from — one edit here revamps ~40 card instances across graph,
+   queue, decisions, drift, metrics, agents and settings rather than rewriting
+   each page separately. */
 .panel {
   background: var(--card);
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius-md);
-  padding: 20px 22px;
-  box-shadow: var(--shadow-card);
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow:
+    0 1px 2px rgba(23, 25, 30, 0.035),
+    0 18px 40px -26px rgba(23, 25, 30, 0.3);
+}
+
+/* A panel whose whole body is a table: no padding, and it SCROLLS rather than
+   clips. Replaces an inline `overflow: hidden` that left the right-hand columns
+   of the decisions and agents tables unreachable on a phone. */
+.panel--table {
+  padding: 0;
+  overflow-x: auto;
+}
+
+/* Any card holding a table scrolls it internally rather than letting it shove
+   the page sideways. Covers the pages that never got the modifier class. */
+.panel:has(.dtable) {
+  overflow-x: auto;
 }
 
 .panel__title {
-  font-size: 16px;
+  font-size: 17px;
+  letter-spacing: -0.02em;
   margin-bottom: 4px;
 }
 
 .panel__caption {
   font-size: 12.5px;
+  line-height: 1.5;
   color: var(--ink-faint);
   margin-bottom: 14px;
 }
@@ -1185,13 +2086,33 @@
   padding: 8px 20px;
 }
 
+/* Compact verdict chips inside the dense overview lists. The full-size badge is
+   right on a detail page and oversized in a four-row list. */
+.wl .vbadge,
+.declist .vbadge {
+  gap: 5px;
+  padding: 2px 8px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.wl .vbadge::before,
+.declist .vbadge::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+/* Filled rather than outlined, matching the overview's chips — a page with a
+   dozen bare-outline tags reads as a wireframe. */
 .tag {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 9px;
+  padding: 3px 10px;
   border-radius: 99px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-soft);
+  background: var(--panel);
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-soft);
@@ -1238,23 +2159,33 @@
 .dtable th {
   text-align: left;
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
+  font-size: 10px;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
   font-weight: 500;
   color: var(--ink-faint);
-  padding: 8px 12px;
+  padding: 13px 16px;
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
   border-bottom: 1px solid var(--line);
+  white-space: nowrap;
 }
 
 .dtable td {
-  padding: 11px 12px;
+  padding: 13px 16px;
   border-bottom: 1px solid var(--line-soft);
-  vertical-align: top;
+  vertical-align: middle;
+}
+
+.dtable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.dtable tbody tr {
+  transition: background-color 0.14s ease;
 }
 
 .dtable tbody tr:hover {
-  background: color-mix(in srgb, var(--thread-soft) 30%, transparent);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
 }
 
 .dtable tbody tr[data-selected="true"] {
@@ -1519,30 +2450,42 @@
 
 /* ------------------------------------------------------------------ tabs */
 
+/* The overview's Week/Month segmented control, reused as the page tab set. */
 .tabs {
   display: inline-flex;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--line-soft);
-  border-radius: 12px;
+  gap: 2px;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
   background: var(--panel);
   margin-bottom: 20px;
+  overflow-x: auto;
 }
 
 .tabs button {
   border: 0;
   background: none;
   padding: 7px 16px;
-  border-radius: 9px;
-  font-size: 14px;
+  border-radius: 99px;
+  font-family: var(--font-body);
+  font-size: 13.5px;
   font-weight: 500;
-  color: var(--ink-soft);
+  color: var(--ink-faint);
+  white-space: nowrap;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.tabs button:hover {
+  color: var(--ink);
 }
 
 .tabs button[aria-selected="true"] {
   background: var(--card);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgba(23, 25, 30, 0.07);
+  box-shadow: 0 1px 2px rgba(23, 25, 30, 0.09);
 }
 
 /* ---------------------------------------------------------------- verdict */
@@ -1637,24 +2580,29 @@
   }
 }
 
+/* Same shape and weight as the overview's drift bar. */
 .banner {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border-radius: var(--radius-sm);
-  font-size: 13.5px;
+  gap: 11px;
+  padding: 13px 16px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 1.5;
   margin-bottom: 18px;
 }
 
 .banner--info {
   background: var(--thread-soft);
+  border-color: color-mix(in srgb, var(--thread) 22%, transparent);
   color: var(--thread);
 }
 
 .banner--warn {
   background: var(--warn-soft);
-  color: #7a5606;
+  border-color: color-mix(in srgb, var(--warn) 26%, transparent);
+  color: var(--warn-ink);
 }
 
 /* ----------------------------------------------------------------- graph */
@@ -2140,44 +3088,74 @@
 
 /* -------------------------------------------------------------- settings */
 
-.settings {
-  display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: 26px;
-  align-items: start;
-}
-
-@media (max-width: 900px) {
-  .settings {
-    grid-template-columns: 1fr;
-  }
-}
-
-.settings__nav {
-  position: sticky;
-  top: 20px;
+.settings__pane {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 18px;
 }
 
-.settings__nav a {
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  color: var(--ink-soft);
+/* The last element in a card should not add its own trailing margin on top of
+   the card's padding — that was the uneven bottom gap between panes. */
+.settings__pane .panel > *:last-child {
+  margin-bottom: 0;
 }
 
-.settings__nav a:hover {
-  background: color-mix(in srgb, var(--card) 70%, transparent);
-  color: var(--ink);
+/* auto-fill, not auto-fit: an empty track is kept, so one connector stays a
+   card-sized card instead of stretching the width of the pane and stranding
+   its status chip against the far edge. */
+.settings__pane .cgrid {
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
 }
 
-.settings__nav a[aria-current="page"] {
-  background: var(--card);
-  color: var(--ink);
-  font-weight: 500;
-  box-shadow: 0 1px 2px rgba(23, 25, 30, 0.05);
+/* Each pane card opens with a titled head over a hairline.
+   The rule has to close the WHOLE head, so it hangs off whichever element ends
+   it — the caption when there is one, the title when there is not. Putting it
+   on the title unconditionally dropped a line between the title and its own
+   caption, which is what made the spacing look broken. */
+.settings__pane .panel > .panel__title:first-child {
+  margin-bottom: 5px;
+}
+
+.settings__pane .panel > .panel__title:first-child + .panel__caption,
+.settings__pane .panel > .panel__title:first-child:not(:has(+ .panel__caption)),
+.settings__pane .panel > .panel__head:first-child {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 16px;
+}
+
+/* the head's caption already carries the rule; no doubled gap under it */
+.settings__pane .panel > .panel__head:first-child .panel__caption {
+  margin-bottom: 0;
+}
+
+/* the thread accent, so a stack of cards reads as one system */
+.settings__pane .panel__title::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 10px;
+  border-radius: 50%;
+  background: var(--thread);
+  vertical-align: middle;
+}
+
+/* tables sit flush to the card edge rather than floating inside its padding */
+.settings__pane .panel > .dtable {
+  width: calc(100% + 44px);
+  margin: 0 -22px -22px;
+}
+
+.settings__pane .panel > .dtable th:first-child,
+.settings__pane .panel > .dtable td:first-child {
+  padding-left: 22px;
+}
+
+.settings__pane .panel > .dtable th:last-child,
+.settings__pane .panel > .dtable td:last-child {
+  padding-right: 22px;
 }
 
 .scope-list li::before {
@@ -2295,19 +3273,21 @@
 .empty {
   padding: 46px 24px;
   text-align: center;
-  color: var(--ink-soft);
-  font-size: 14.5px;
-  border: 1.5px dashed var(--line);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--panel) 60%, transparent);
+  color: var(--ink-faint);
+  font-size: 13.5px;
+  line-height: 1.6;
+  border: 1px dashed var(--line);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--panel) 45%, transparent);
 }
 
 .empty strong {
   display: block;
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 18px;
+  letter-spacing: -0.02em;
   color: var(--ink);
-  margin-bottom: 6px;
+  margin-bottom: 7px;
 }
 
 .empty a {
@@ -2518,9 +3498,11 @@
    exists for on an empty account, and a dialog would hide it behind a click
    on exactly the screen where nobody has anything yet. */
 
+/* Symmetric either side of the rule, so the card above and the button below sit
+   the same distance from it. It was 4px above and 16px below. */
 .conn-add {
+  margin-top: 16px;
   padding-top: 16px;
-  margin-top: 4px;
   border-top: 1px solid var(--line-soft);
 }
 
@@ -2816,11 +3798,12 @@
 
 /* Two columns at most, not auto-fill. Connectors are few and detail-rich, and
    auto-fill on a wide panel put one narrow card beside a large empty gap. */
+/* No top margin: the card head's rule already sets the gap above this grid, and
+   the two stacked produced a wider gap above the cards than below them. */
 .cgrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
-  margin-top: 4px;
 }
 
 @media (max-width: 900px) {
@@ -3048,9 +4031,353 @@
   color: var(--ink);
 }
 
+/* The overview's card head: title on the left, action on the right, caption
+   underneath. Settings and the other panes now open the same way the dashboard
+   cards do. */
 .panel__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  margin-bottom: 4px;
+}
+
+.panel__head .panel__title,
+.panel__head .panel__caption {
+  margin-bottom: 0;
+}
+
+.panel__head .panel__caption {
+  margin-top: 4px;
+}
+
+/* An action sitting opposite a card title reads like the overview's "See all". */
+.panel__action {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line);
+  transition:
+    color 0.16s ease,
+    text-decoration-color 0.16s ease;
+}
+
+.panel__action:hover {
+  color: var(--thread);
+  text-decoration-color: var(--thread);
+}
+
+/* --------------------------------------------------------------- documents
+
+   Uploaded evidence. The form follows `.connect`'s shape because it is the
+   same kind of act — handing Sadhak something to read — and it is held to a
+   readable width for the same reason: a title input stretched across 1400px
+   of viewport is a line nobody's eye can track back from. */
+
+.docup {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 560px;
+}
+
+/* Nothing in the app styled a textarea before this page needed one, so it
+   inherits the input's treatment rather than the browser's. Declared before
+   the `.field` rules below, which are more specific and must win. */
+.docup textarea {
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  resize: vertical;
+  min-height: 130px;
+  transition: border-color 0.15s ease;
+}
+
+.docup .field input {
+  font-size: 14px;
+  padding: 11px 13px;
+}
+
+/* Matches `.connect select`, which is the only other form in the app that
+   asks the customer to pick from something Sadhak already knows about. */
+.docup select {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+}
+
+.docup select:focus-visible {
+  outline: none;
+  border-color: var(--thread);
+  box-shadow: 0 0 0 3px var(--thread-soft);
+}
+
+.docup textarea::placeholder {
+  color: var(--ink-faint);
+}
+
+.docup textarea:focus-visible,
+.docup input:focus-visible {
+  outline: none;
+  border-color: var(--thread);
+  box-shadow: 0 0 0 3px var(--thread-soft);
+}
+
+/* The native file control is unstyleable as a whole, so only its button is
+   dressed — enough that it stops reading as a foreign element on the page. */
+.docup input[type="file"] {
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.docup input[type="file"]::file-selector-button {
+  font: inherit;
+  font-size: 13.5px;
+  margin-right: 12px;
+  padding: 8px 14px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.docup input[type="file"]::file-selector-button:hover {
+  border-color: var(--ink-faint);
+}
+
+/* The two ways in are alternatives, so the rule says so rather than leaving
+   the reader to infer it from a label that begins with "Or". */
+.docup__or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.docup__or::before,
+.docup__or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line-soft);
+}
+
+.docup__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.docup__note {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+.doclist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.docrow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--card);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.docrow__body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.docrow__name {
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.docrow__name:hover {
+  color: var(--thread);
+}
+
+/* Counts and sizes are figures to compare down the column, so they line up
+   in mono rather than drifting with the proportional font. */
+.docrow__meta {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+/* ------------------------------------------------------- document detail */
+
+.docpage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 78ch;
+}
+
+/* A chunk is a quotable unit, so it is a block a reader can see the edges of
+   — the citation anchors at one of these, and the surrounding ones are the
+   context that makes confirming the quote possible. */
+.docchunk {
+  border: 1px solid transparent;
+  border-left: 2px solid var(--line-soft);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 10px 16px;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.docchunk[data-focused="true"] {
+  background: var(--thread-soft);
+  border-left-color: var(--thread);
+}
+
+.docchunk__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.docchunk__ordinal {
+  color: var(--ink-faint);
+}
+
+.docchunk__ordinal:hover {
+  color: var(--thread);
+}
+
+.docchunk__speaker {
+  color: var(--ink-soft);
+}
+
+.docchunk__body {
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+/* ---------------------------------------------------------------- loading */
+
+/* There was no loading state worth the name — just static grey boxes at fixed
+   opacity. These two do the work: the mark draws its own thread while the
+   skeletons breathe, so a slow API reads as "working" rather than "broken". */
+
+.loader {
+  display: grid;
+  place-items: center;
+  gap: 14px;
+  padding: 64px 0;
+  color: var(--ink);
+}
+
+.loader__mark {
+  animation: loader-pulse 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* the thread inside the mark, drawn and redrawn */
+.loader__mark path {
+  stroke-dasharray: 46;
+  animation: loader-thread 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes loader-thread {
+  0% {
+    stroke-dashoffset: 46;
+  }
+  55%,
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes loader-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  55% {
+    transform: scale(1.06);
+  }
+}
+
+.loader__label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* A skeleton is a real surface with light moving across it, not a faded card. */
+.skel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 20px;
+  background: var(--card);
+}
+
+.skel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--panel) 90%, transparent),
+    transparent
+  );
+  animation: skel-sweep 1.6s ease-in-out infinite;
+}
+
+@keyframes skel-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Reduced motion keeps the surfaces and drops the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .skel::after {
+    display: none;
+  }
 }

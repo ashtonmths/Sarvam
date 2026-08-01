@@ -25,7 +25,7 @@ export default function AccountPane() {
 
   return (
     <>
-      <section className="panel" style={{ marginBottom: 16 }}>
+      <section className="panel">
         <h2 className="panel__title">Profile</h2>
         <table className="dtable">
           <tbody>
@@ -47,7 +47,7 @@ export default function AccountPane() {
         </table>
       </section>
 
-      <section className="panel" style={{ marginBottom: 16 }}>
+      <section className="panel">
         <h2 className="panel__title">What you can do here</h2>
         <p className="panel__caption">
           Capabilities, not screens. Every route checks one of these; hiding a button in

@@ -39,6 +39,18 @@ export default function DocumentsPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Errors are kept apart by where the user was looking. A failed delete used
+   * to render in the upload form at the top of the page, next to inputs nobody
+   * had touched, while the row they clicked showed nothing.
+   */
+  const [listError, setListError] = useState<string | null>(null);
+  /**
+   * A file input is uncontrolled, so clearing the state around it leaves the
+   * browser still showing the old filename — it reads as "still attached" when
+   * nothing is. Changing the key remounts it empty.
+   */
+  const [fileKey, setFileKey] = useState(0);
 
   async function readFile(file: File) {
     setOriginalName(file.name);
@@ -46,7 +58,8 @@ export default function DocumentsPage() {
     setText(await file.text());
   }
 
-  async function upload() {
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -59,8 +72,8 @@ export default function DocumentsPage() {
         title,
         text,
         ...(originalName ? { originalName } : {}),
-        // datetime-local has no zone, so it is read as the browser's. That is
-        // the right reading here: the person typing it means their own clock.
+        // datetime-local carries no zone, so it reads as the browser's. That
+        // is the right reading: the person typing it means their own clock.
         ...(occurredAt ? { occurredAt: new Date(occurredAt).toISOString() } : {}),
       });
       setMessage(`${result.chunkCount} chunks. ${result.note}`);
@@ -68,6 +81,7 @@ export default function DocumentsPage() {
       setText("");
       setOriginalName(undefined);
       setOccurredAt("");
+      setFileKey((k) => k + 1);
       documents.reload();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Upload failed");
@@ -76,120 +90,159 @@ export default function DocumentsPage() {
     }
   }
 
-  async function remove(id: number) {
-    if (!confirm("Delete this document? Rationale already quoted from it is kept."))
-      return;
+  async function remove(id: number, name: string) {
+    if (!confirm(`Delete "${name}"? Rationale already quoted from it is kept.`)) return;
+    setListError(null);
     try {
       await api.delete(`/api/documents/${id}`);
       documents.reload();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Delete failed");
+      setListError(caught instanceof Error ? caught.message : "Delete failed");
     }
   }
 
   const items = documents.data?.items ?? [];
+  const maxKb = Math.round((documents.data?.maxBytes ?? 2 * 1024 * 1024) / 1024);
 
   return (
     <>
       <PageHead
         title="Documents"
-        sub="Meeting transcripts and notes. The Historian searches these alongside Slack and pull requests, and cites them the same way."
+        sub="Meeting transcripts and handover notes. The Historian searches these alongside Slack and pull requests, and cites them the same way."
       />
 
-      <section className="card" style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 15, marginBottom: 12 }}>Upload</h2>
+      <section className="panel" style={{ marginBottom: 18 }}>
+        <h2 className="panel__title">Upload a document</h2>
+        <p className="panel__caption">
+          Text and markdown, including subtitle exports. Up to {maxKb}KB.
+        </p>
 
-        <label className="field">
-          <span>Title</span>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Billing migration sync, 12 March"
-          />
-        </label>
+        <form className="docup" onSubmit={submit}>
+          <div className="field">
+            <label htmlFor="doc-title">Title</label>
+            <input
+              id="doc-title"
+              value={title}
+              required
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Billing migration sync"
+            />
+            <p className="field__help">
+              What this was, in the words your team would use.
+            </p>
+          </div>
 
-        <label className="field">
-          <span>When it happened</span>
-          <input
-            type="datetime-local"
-            value={occurredAt}
-            onChange={(e) => setOccurredAt(e.target.value)}
-          />
-        </label>
+          <div className="field">
+            <label htmlFor="doc-when">When it happened</label>
+            <input
+              id="doc-when"
+              type="datetime-local"
+              value={occurredAt}
+              onChange={(event) => setOccurredAt(event.target.value)}
+            />
+            <p className="field__help">
+              Optional. The date of the meeting, not of the upload, so a citation is
+              ordered against the decision it explains.
+            </p>
+          </div>
 
-        <label className="field">
-          <span>File</span>
-          <input
-            type="file"
-            accept={ACCEPT}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void readFile(file);
-            }}
-          />
-        </label>
+          <div className="field">
+            <label htmlFor="doc-file">File</label>
+            <input
+              id="doc-file"
+              key={fileKey}
+              type="file"
+              accept={ACCEPT}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                // A rejected read (moved file, denied permission) must say so
+                // rather than leave the form holding whatever it had before.
+                if (file) {
+                  void readFile(file).catch(() =>
+                    setError(`Could not read ${file.name}. Try choosing it again.`),
+                  );
+                }
+              }}
+            />
+          </div>
 
-        <label className="field">
-          <span>Or paste the transcript</span>
-          <textarea
-            rows={8}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={
-              "Priya Raman: We dropped vat_rate because the EU report computes it now."
-            }
-          />
-        </label>
+          <div className="docup__or">or</div>
 
-        <button
-          type="button"
-          className="btn btn--primary"
-          disabled={busy || !title.trim() || !text.trim()}
-          onClick={() => void upload()}
-        >
-          {busy ? "Uploading…" : "Upload"}
-        </button>
+          <div className="field">
+            <label htmlFor="doc-text">Paste the transcript</label>
+            <textarea
+              id="doc-text"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              placeholder="Priya Raman: We dropped vat_rate because the EU report computes it now."
+            />
+          </div>
 
-        {message && (
-          <p className="dim" style={{ marginTop: 10, fontSize: 13.5 }}>
-            {message}
-          </p>
+          <div className="docup__actions">
+            <button
+              type="submit"
+              className="btn btn--ink btn--small"
+              disabled={busy || !title.trim() || !text.trim()}
+            >
+              {busy ? "Uploading…" : "Upload"}
+            </button>
+            {message && <span className="docup__note">{message}</span>}
+          </div>
+
+          {error && (
+            <div className="banner banner--warn" role="status">
+              {error}
+            </div>
+          )}
+        </form>
+      </section>
+
+      <section className="panel">
+        <h2 className="panel__title">Uploaded</h2>
+        <p className="panel__caption">
+          Each document is split into quotable chunks. Semantic search waits on embedding;
+          text search works the moment it lands.
+        </p>
+
+        {listError && (
+          <div className="banner banner--warn" role="status" style={{ marginBottom: 12 }}>
+            {listError}
+          </div>
         )}
-        {error && (
-          <div className="banner banner--warn" role="status" style={{ marginTop: 10 }}>
-            {error}
+
+        {items.length === 0 ? (
+          <EmptyState
+            title="No documents yet"
+            body="Upload a meeting transcript and the Historian can cite what was said in it, the same way it cites a Slack thread."
+          />
+        ) : (
+          <div className="doclist">
+            {items.map((doc) => (
+              <div key={doc.id} className="docrow">
+                <div className="docrow__body">
+                  <a className="docrow__name" href={`/app/documents/${doc.id}`}>
+                    {doc.title}
+                  </a>
+                  <span className="docrow__meta">
+                    {doc.chunks} chunks · {Math.max(1, Math.round(doc.byteSize / 1024))}KB
+                    {doc.uploadedBy ? ` · ${doc.uploadedBy}` : ""}
+                  </span>
+                </div>
+                {doc.pending > 0 && (
+                  <span className="tag tag--amber">{doc.pending} embedding</span>
+                )}
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small"
+                  onClick={() => void remove(doc.id, doc.title)}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
           </div>
         )}
       </section>
-
-      {items.length === 0 ? (
-        <EmptyState
-          title="No documents yet"
-          body="Upload a meeting transcript and the Historian can cite what was said in it, the same way it cites a Slack thread."
-        />
-      ) : (
-        <div className="card">
-          {items.map((doc) => (
-            <div key={doc.id} className="conn-row">
-              <div className="conn-row__meta">
-                <strong>
-                  <a href={`/app/documents/${doc.id}`}>{doc.title}</a>
-                </strong>
-                <span>
-                  {doc.chunks} chunks
-                  {doc.pending > 0 ? ` · ${doc.pending} still embedding` : ""}
-                  {` · ${Math.max(1, Math.round(doc.byteSize / 1024))}KB`}
-                  {doc.uploadedBy ? ` · ${doc.uploadedBy}` : ""}
-                </span>
-              </div>
-              {doc.pending > 0 && <span className="tag tag--amber">embedding</span>}
-              <button type="button" className="btn" onClick={() => void remove(doc.id)}>
-                Delete
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
     </>
   );
 }

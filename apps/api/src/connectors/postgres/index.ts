@@ -63,7 +63,25 @@ async function connect(connectionString: string, signal?: AbortSignal) {
   if (!host) {
     throw new UserError("That Postgres connection string names no host", { status: 422 });
   }
-  await assertPublicHost(host);
+
+  /**
+   * A customer's database is often genuinely on a private network, so the
+   * refusal has to name its own remedy — otherwise the only signal is "crawl
+   * failed" against a connection string that is perfectly correct. The
+   * allowlist is operator-set on purpose: an org admin who could add to it
+   * could reach the cloud metadata endpoint.
+   */
+  try {
+    await assertPublicHost(host);
+  } catch (error) {
+    if (error instanceof UserError) {
+      throw new UserError(
+        `${error.message}. If this database really is on the deployment's private network, add "${host}" to EGRESS_ALLOW_PRIVATE_HOSTS on the platform and restart.`,
+        { status: 422 },
+      );
+    }
+    throw error;
+  }
 
   const sql = postgres(connectionString, {
     max: 1,

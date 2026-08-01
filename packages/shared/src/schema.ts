@@ -532,6 +532,204 @@ export const documentChunks = pgTable(
   ],
 );
 
+/* ------------------------------------------------------- change history */
+
+/**
+ * The change log, and the checkpoints that bound it.
+ *
+ * The graph says what depends on what. This says *what happened, when* — and
+ * the two are deliberately different stores. Commits are events: high volume,
+ * append-only, and every question asked of them is a time range. Modelling
+ * them as graph nodes would put a million rows into a table whose every query
+ * is a six-hop traversal, to answer a question that is really a btree scan.
+ *
+ * The pair exists so an investigation can start with the smallest window that
+ * could contain the cause — last known-good checkpoint to incident — and widen
+ * only when that window comes up empty.
+ */
+
+export const changeKind = pgEnum("change_kind", ["commit", "pull_request"]);
+
+export const repositories = pgTable(
+  "repositories",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** Which installation may read it. Null while only a shared token is set. */
+    installationId: bigint("installation_id", { mode: "number" }),
+    owner: text("owner").notNull(),
+    name: text("name").notNull(),
+    defaultBranch: text("default_branch").notNull().default("main"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("repositories_org_full_name_key").on(t.orgId, t.owner, t.name)],
+);
+
+/**
+ * One row per commit and per pull request, in one table rather than two.
+ *
+ * Every read is "what changed between these two instants", and that question
+ * does not care which kind it was — splitting them would make the primary
+ * query a union and cost the index that makes it fast.
+ */
+export const changes = pgTable(
+  "changes",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    repoId: bigint("repo_id", { mode: "number" })
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    kind: changeKind("kind").notNull(),
+    /** Commit SHA, or the pull request number as text. */
+    externalId: text("external_id").notNull(),
+    title: text("title").notNull(),
+    /** Commit body or PR description. Rationale in its own right, so it is kept. */
+    body: text("body"),
+    authorLogin: text("author_login"),
+    authorEmail: text("author_email"),
+    /**
+     * When the change happened at GitHub, never when Sadhak saw it. A backfill
+     * running days later would otherwise shift every window by its own lag,
+     * and the window is the entire point.
+     */
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    url: text("url").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Redelivery and an overlapping backfill must converge, not duplicate.
+    unique("changes_repo_kind_external_key").on(t.repoId, t.kind, t.externalId),
+    // The one index the whole feature rests on: a range scan per repo.
+    index("changes_repo_time_idx").on(t.repoId, t.occurredAt),
+    index("changes_org_time_idx").on(t.orgId, t.occurredAt),
+  ],
+);
+
+/**
+ * The files a change touched. This is what later lets a change be judged
+ * relevant to a particular service rather than merely to a repository — in a
+ * monorepo, without paths every change looks equally implicated in everything.
+ *
+ * Paths only. Diffs are source code, and storing them would trade away the
+ * promise that Sadhak reads structure rather than contents; the citation links
+ * to GitHub, which already renders the diff better than we would.
+ */
+export const changePaths = pgTable(
+  "change_paths",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    changeId: bigint("change_id", { mode: "number" })
+      .notNull()
+      .references(() => changes.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    status: text("status").notNull().default("modified"),
+  },
+  (t) => [
+    unique("change_paths_change_path_key").on(t.changeId, t.path),
+    index("change_paths_path_idx").on(t.path),
+  ],
+);
+
+/**
+ * The durable watermark, which the codebase otherwise has nowhere.
+ *
+ * Every other paginated crawl holds its cursor in a local variable and
+ * discards it on return, so a failure restarts from the beginning and a
+ * partial run leaves no record of how far it got. Committing this per page is
+ * what makes a backfill resumable rather than merely repeatable.
+ */
+export const repoCursors = pgTable(
+  "repo_cursors",
+  {
+    repoId: bigint("repo_id", { mode: "number" })
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    kind: changeKind("kind").notNull(),
+    /** Oldest instant walked back to so far. Null before the first page. */
+    backfilledTo: timestamp("backfilled_to", { withTimezone: true }),
+    /** Newest instant seen, so an incremental pass knows where to resume. */
+    caughtUpTo: timestamp("caught_up_to", { withTimezone: true }),
+    /**
+     * How many pages of an index-paged list have been walked.
+     *
+     * Pull requests need this because GitHub's list endpoint has no `until` to
+     * narrow, so the only way to resume is by page number. Without it the walk
+     * restarts at page one on every run and can never reach the tail.
+     */
+    pagesWalked: integer("pages_walked").notNull().default(0),
+    /**
+     * How far down an in-progress forward drain has reached.
+     *
+     * A catch-up walks newest-first from the newest commit down towards
+     * `caughtUpTo`, so until it reaches the bottom it holds "everything above
+     * X", which `caughtUpTo` — meaning "everything below Y" — cannot express.
+     * Advancing the watermark on a partial drain would jump it over the part
+     * not yet fetched. This is the resume point instead; null means no drain
+     * is in flight.
+     */
+    drainingTo: timestamp("draining_to", { withTimezone: true }),
+    /** Set when history is exhausted, so the job stops asking. */
+    complete: boolean("complete").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.repoId, t.kind] })],
+);
+
+/**
+ * A moment the system is believed to have been healthy.
+ *
+ * Confidence is explicit and varies by kind because these are not equally
+ * trustworthy: a human ticking "deployed and verified" is a stronger claim
+ * than a crawl that merely completed without error. The investigation starts
+ * at the most recent, most trusted checkpoint before the incident and walks
+ * backwards, so a wrong confidence costs a wasted round rather than a wrong
+ * answer.
+ */
+export const checkpointKind = pgEnum("checkpoint_kind", [
+  "manual",
+  "gate_approved",
+  "crawl_healthy",
+  "incident_recovered",
+  "release",
+]);
+
+export const checkpoints = pgTable(
+  "checkpoints",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    kind: checkpointKind("kind").notNull(),
+    /** Narrows the window when set; a null scope is org-wide. */
+    repoId: bigint("repo_id", { mode: "number" }).references(() => repositories.id, {
+      onDelete: "cascade",
+    }),
+    nodeId: bigint("node_id", { mode: "number" }).references(() => nodes.id, {
+      onDelete: "cascade",
+    }),
+    environment: text("environment"),
+    label: text("label").notNull(),
+    /** How much this point is trusted as known-good. 0..1. */
+    confidence: real("confidence").notNull().default(0.5),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    /** What made this a checkpoint, so the claim is inspectable. */
+    sourceUrl: text("source_url"),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull().default({}),
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("checkpoints_org_time_idx").on(t.orgId, t.occurredAt),
+    index("checkpoints_repo_time_idx").on(t.repoId, t.occurredAt),
+  ],
+);
+
 /* ------------------------------------------------- agent traces and jobs */
 
 /**
@@ -1094,6 +1292,13 @@ export type Document = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;
 export type DocumentChunk = typeof documentChunks.$inferSelect;
 export type NewDocumentChunk = typeof documentChunks.$inferInsert;
+export type Repository = typeof repositories.$inferSelect;
+export type NewRepository = typeof repositories.$inferInsert;
+export type Change = typeof changes.$inferSelect;
+export type NewChange = typeof changes.$inferInsert;
+export type ChangePath = typeof changePaths.$inferSelect;
+export type Checkpoint = typeof checkpoints.$inferSelect;
+export type NewCheckpoint = typeof checkpoints.$inferInsert;
 export type AgentTrace = typeof agentTraces.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type Crawl = typeof crawls.$inferSelect;

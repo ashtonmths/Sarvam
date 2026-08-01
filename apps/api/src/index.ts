@@ -28,6 +28,7 @@ import {
 import { requireAuth, requireOrg } from "./middleware/auth.js";
 import { openapiDocument } from "./openapi.js";
 import { authRoutes } from "./routes/auth.js";
+import { changeRoutes } from "./routes/changes.js";
 import { commsRoutes } from "./routes/comms.js";
 import { connectorRoutes } from "./routes/connectors.js";
 import { documentRoutes } from "./routes/documents.js";
@@ -198,6 +199,7 @@ api.route("/", reflexRoutes);
 api.route("/", reviewerRoutes);
 api.route("/", rationaleRoutes);
 api.route("/", documentRoutes);
+api.route("/", changeRoutes);
 api.route("/", historianRoutes);
 api.route("/", slackOauthRoutes);
 api.get("/jobs/stats", async (c) => c.json(await queueStats()));

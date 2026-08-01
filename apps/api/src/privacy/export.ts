@@ -1,5 +1,8 @@
 import {
   auditLog,
+  changePaths,
+  changes,
+  checkpoints,
   connectorInstances,
   criticalityOverrides,
   documentChunks,
@@ -13,6 +16,7 @@ import {
   rationale,
   rationaleLinks,
   reflexIncidents,
+  repositories,
   users,
   verdicts,
 } from "@sadhak/shared/schema";
@@ -74,6 +78,10 @@ export async function exportOrg(orgId: number) {
     auditRows,
     documentRows,
     documentChunkRows,
+    repositoryRows,
+    changeRows,
+    changePathRows,
+    checkpointRows,
   ] = await Promise.all([
     db
       .select({
@@ -159,6 +167,41 @@ export async function exportOrg(orgId: number) {
       })
       .from(documentChunks)
       .where(eq(documentChunks.orgId, orgId)),
+    // The change log is the org's own history of its own repositories, so it
+    // travels with them.
+    db.select().from(repositories).where(eq(repositories.orgId, orgId)),
+    // `id` is carried so change_paths below can be reattached. Without it the
+    // paths would be a bare table of ids nobody could reassemble — which is
+    // what the previous version's comment claimed to have solved by joining,
+    // while exporting no paths at all.
+    db
+      .select({
+        id: changes.id,
+        repoId: changes.repoId,
+        kind: changes.kind,
+        externalId: changes.externalId,
+        title: changes.title,
+        body: changes.body,
+        authorLogin: changes.authorLogin,
+        authorEmail: changes.authorEmail,
+        occurredAt: changes.occurredAt,
+        url: changes.url,
+      })
+      .from(changes)
+      .where(eq(changes.orgId, orgId)),
+    // Paths are the evidence the ranker actually runs on, so an export that
+    // omitted them would hand back the conclusions without the reasons.
+    // Scoped through the change, which is where the org lives.
+    db
+      .select({
+        changeId: changePaths.changeId,
+        path: changePaths.path,
+        status: changePaths.status,
+      })
+      .from(changePaths)
+      .innerJoin(changes, eq(changes.id, changePaths.changeId))
+      .where(eq(changes.orgId, orgId)),
+    db.select().from(checkpoints).where(eq(checkpoints.orgId, orgId)),
   ]);
 
   return {
@@ -168,6 +211,7 @@ export async function exportOrg(orgId: number) {
       "Connector credentials are deliberately excluded. They are encrypted and bound to this organisation and connector instance, so the ciphertext would not work anywhere else.",
       "Rationale embeddings are excluded. They are derived from the body text and recomputable.",
       "Sadhak never reads or stores the contents of your records. It reads structure — table, column and workflow names — so none of your row data appears here.",
+      "The change log records commit and pull request messages, authors and the file paths each touched. Diffs are never stored; a citation links to GitHub for those.",
       "Documents you uploaded are the one exception, and they appear in full: you gave Sadhak that text deliberately, and it is stored so a citation can be read in context. Chunk embeddings are excluded as recomputable.",
     ],
     organization: { id: org.id, name: org.name, createdAt: org.createdAt },
@@ -184,5 +228,9 @@ export async function exportOrg(orgId: number) {
     auditLog: auditRows,
     documents: documentRows,
     documentChunks: documentChunkRows,
+    repositories: repositoryRows,
+    changes: changeRows,
+    changePaths: changePathRows,
+    checkpoints: checkpointRows,
   };
 }

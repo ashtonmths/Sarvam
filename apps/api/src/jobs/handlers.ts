@@ -1,12 +1,25 @@
-import { connectorInstances, documentChunks, rationale } from "@sadhak/shared/schema";
+import {
+  connectorInstances,
+  documentChunks,
+  rationale,
+  repositories,
+} from "@sadhak/shared/schema";
 import type { ChangeDescriptor } from "@sadhak/shared/types";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { pruneExpiredSessions } from "../auth/session.js";
 import { runCrawl } from "../cartographer/index.js";
+import {
+  backfillCommits,
+  backfillPulls,
+  catchUpCommits,
+  catchUpPulls,
+} from "../changes/backfill.js";
+import { upsertRepository } from "../changes/store.js";
 import { sendWeeklyDigests } from "../comms/digest.js";
 import { getConnector } from "../connectors/registry.js";
 import { db } from "../db.js";
 import { embedAll } from "../embed.js";
+import { orgForInstallation } from "../github/checks.js";
 import { executeRun } from "../historian/runs.js";
 import { purgeStaleCounters } from "../http/rate-limit.js";
 import { log } from "../log.js";
@@ -38,6 +51,9 @@ const TRIAGE_PER_TICK = 5;
 
 /** One embed batch. The re-enqueue below compares against this, not a literal. */
 const EMBED_BATCH = 16;
+
+/** How often a fully-backfilled repository is re-checked for new commits. */
+const GITHUB_POLL_MS = 10 * 60_000;
 
 /**
  * The embed loop, shared by rationale and document chunks.
@@ -520,6 +536,112 @@ export function registerJobHandlers(): void {
       },
     );
   });
+
+  /**
+   * Live capture. A push or a merge landed, so catch that repository up.
+   *
+   * Runs the same incremental path a backfill uses, which is deliberate: one
+   * code path means a webhook we missed during a deploy is indistinguishable
+   * from one we received, because the next pass fetches by time window rather
+   * than trusting the delivery.
+   */
+  registerHandler(
+    "github.capture_changes",
+    async (payload, ctx) => {
+      const installationId = Number(payload.installationId);
+      const fullName = String(payload.fullName ?? "");
+      const [owner, name] = fullName.split("/");
+      if (!Number.isInteger(installationId) || !owner || !name) return;
+
+      const orgId = ctx.orgId ?? (await orgForInstallation(installationId));
+      // An unclaimed installation has no org to attribute changes to. Silence
+      // is correct here: the org links it later and the backfill catches up.
+      if (!orgId) return;
+
+      const repoId = await upsertRepository({
+        orgId,
+        owner,
+        name,
+        installationId,
+        defaultBranch: String(payload.defaultBranch ?? "main"),
+      });
+
+      await enqueue(
+        "github.backfill",
+        { repoId },
+        { orgId, dedupeKey: `github.backfill:${repoId}` },
+      );
+    },
+    { timeoutMs: 60_000, maxAttempts: 3 },
+  );
+
+  /**
+   * Walks a repository's history, a few pages per run, re-enqueueing itself
+   * until it reaches the end. Bounded per run so one large repository cannot
+   * hold a worker or spend the whole hourly rate limit in a single job.
+   */
+  registerHandler(
+    "github.backfill",
+    async (payload, ctx) => {
+      const repoId = Number(payload.repoId);
+      if (!ctx.orgId || !Number.isInteger(repoId)) return;
+
+      const [repo] = await db
+        .select()
+        .from(repositories)
+        .where(and(eq(repositories.id, repoId), eq(repositories.orgId, ctx.orgId)))
+        .limit(1);
+      if (!repo) return;
+
+      // Assumed true so a throw mid-walk reschedules promptly rather than
+      // dropping the repository to the slow poll interval.
+      let walking = true;
+      try {
+        // Forwards first. New commits matter more than old ones, and doing
+        // this before the historical walk means a repository is current within
+        // one interval even while its backfill still has years to go.
+        await catchUpCommits(repo, ctx.signal);
+        // Pull requests need their own forward pass. Their walk sets
+        // `complete` after a few hundred, and a small repository reaches that
+        // within minutes — after which nothing would record another one.
+        await catchUpPulls(repo, ctx.signal);
+
+        const commits = await backfillCommits(repo, ctx.signal);
+        const pulls = await backfillPulls(repo, ctx.signal);
+        /**
+         * A stuck walk is not walking. It cannot advance — more commits share
+         * one instant than a page holds — so rescheduling it every thirty
+         * seconds re-reads the same two pages forever. It drops to the slow
+         * poll instead, where a later commit may break the tie.
+         */
+        walking = (!commits.reachedEnd || !pulls.reachedEnd) && !commits.stuck;
+      } finally {
+        /**
+         * Always re-enqueued, in a finally.
+         *
+         * Stopping once history was exhausted left the store frozen at the day
+         * the repository was added — and webhooks cannot be relied on to cover
+         * that, since they need a GitHub App that many deployments never
+         * configure. A frozen store is the worst outcome available here: the
+         * search still runs, still looks confident, and searches a window
+         * containing none of the changes that caused the incident.
+         *
+         * Fast while walking history, slow once caught up.
+         */
+        await enqueue(
+          "github.backfill",
+          { repoId },
+          {
+            orgId: ctx.orgId,
+            runAfter: new Date(Date.now() + (walking ? 30_000 : GITHUB_POLL_MS)),
+            dedupeKey: `github.backfill:${repoId}`,
+            excludeJobId: ctx.jobId,
+          },
+        );
+      }
+    },
+    { timeoutMs: 10 * 60_000, maxAttempts: 3 },
+  );
 
   /** Exhaust, pruned on a schedule. Rationale is never touched by retention. */
   registerHandler("retention.prune_sessions", async (_payload, ctx) => {

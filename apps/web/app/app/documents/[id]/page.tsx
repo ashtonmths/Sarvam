@@ -93,48 +93,39 @@ export default function DocumentPage({ params }: { params: Promise<{ id: string 
         }
       />
 
-      {doc.sourceUrl && (
-        <p className="dim" style={{ fontSize: 13.5, marginBottom: 12 }}>
-          Original:{" "}
-          <a href={doc.sourceUrl} rel="noreferrer noopener" target="_blank">
-            {doc.sourceUrl}
-          </a>
-        </p>
-      )}
+      <section className="panel">
+        {doc.sourceUrl && (
+          <p className="panel__caption">
+            Original:{" "}
+            <a href={doc.sourceUrl} rel="noreferrer noopener" target="_blank">
+              {doc.sourceUrl}
+            </a>
+          </p>
+        )}
 
-      <div className="card">
-        {chunks.map((chunk) => (
-          <section
-            key={chunk.ordinal}
-            id={`chunk-${chunk.ordinal}`}
-            className="doc-chunk"
-            style={{
-              padding: "12px 14px",
-              borderRadius: 8,
-              marginBottom: 8,
+        <div className="docpage">
+          {chunks.map((chunk) => (
+            <section
+              key={chunk.ordinal}
+              id={`chunk-${chunk.ordinal}`}
+              className="docchunk"
               // The citation target is marked, not merely scrolled to.
-              background:
-                focused === chunk.ordinal ? "var(--accent-soft, #fff6d8)" : "transparent",
-              borderLeft:
-                focused === chunk.ordinal
-                  ? "3px solid var(--accent, #d9a300)"
-                  : "3px solid transparent",
-            }}
-          >
-            <div
-              className="dim"
-              style={{ fontSize: 12, marginBottom: 6, display: "flex", gap: 8 }}
+              data-focused={focused === chunk.ordinal}
             >
-              <a href={`#chunk-${chunk.ordinal}`}>#{chunk.ordinal}</a>
-              {chunk.speaker && <span>{chunk.speaker}</span>}
-              {!chunk.embedded && <span className="tag tag--amber">embedding</span>}
-            </div>
-            <p style={{ whiteSpace: "pre-wrap", margin: 0, lineHeight: 1.6 }}>
-              {chunk.body}
-            </p>
-          </section>
-        ))}
-      </div>
+              <div className="docchunk__head">
+                <a className="docchunk__ordinal" href={`#chunk-${chunk.ordinal}`}>
+                  #{chunk.ordinal}
+                </a>
+                {chunk.speaker && (
+                  <span className="docchunk__speaker">{chunk.speaker}</span>
+                )}
+                {!chunk.embedded && <span className="tag tag--amber">embedding</span>}
+              </div>
+              <p className="docchunk__body">{chunk.body}</p>
+            </section>
+          ))}
+        </div>
+      </section>
     </>
   );
 }

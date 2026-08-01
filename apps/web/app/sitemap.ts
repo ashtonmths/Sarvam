@@ -8,7 +8,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${base}/product/blast-radius`, changeFrequency: "monthly", priority: 0.8 },
     { url: `${base}/product/agents`, changeFrequency: "monthly", priority: 0.8 },
     { url: `${base}/product/gate`, changeFrequency: "monthly", priority: 0.8 },
-    { url: `${base}/pricing`, changeFrequency: "monthly", priority: 0.7 },
     { url: `${base}/signin`, changeFrequency: "yearly", priority: 0.3 },
     { url: `${base}/signup`, changeFrequency: "yearly", priority: 0.5 },
   ];

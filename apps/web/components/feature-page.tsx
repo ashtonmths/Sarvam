@@ -62,12 +62,9 @@ export function FeaturePage({
           <div className="container">
             <div className="cta__panel">
               <h2>Put a thread through your labyrinth</h2>
-              <p>
-                Connect three systems and watch the map draw itself. Early access is open
-                now.
-              </p>
+              <p>Connect three systems and watch the map draw itself.</p>
               <Link href="/signup" className="btn btn--paper">
-                Get early access <span className="btn__arrow">→</span>
+                Try the demo <span className="btn__arrow">→</span>
               </Link>
             </div>
           </div>

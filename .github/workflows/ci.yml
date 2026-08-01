@@ -227,6 +227,10 @@ jobs:
       DATABASE_URL: postgres://sadhak:sadhak@localhost:5432/sadhak
       CREDENTIAL_MASTER_KEY: v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       NEXT_PUBLIC_API_URL: http://localhost:3001
+      # The demo Postgres connector points at this job's own service container,
+      # and the egress guard covers connection strings. Vouching for localhost
+      # here is the operator saying so; an org admin cannot do it from config.
+      EGRESS_ALLOW_PRIVATE_HOSTS: n8n,db,localhost
       # No model provider in CI. The spine must not need one — the verdict path
       # imports no model, and this proves it rather than assuming it.
       LLM_DISABLED: "1"
@@ -392,7 +396,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/finite-loop-club-nmamit/sadhak-${{ matrix.app }}
+          images: ghcr.io/ashtonmths/sadhak-${{ matrix.app }}
           tags: |
             type=raw,value=latest
             type=sha

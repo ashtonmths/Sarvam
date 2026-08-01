@@ -189,11 +189,8 @@ export default function PrivacyPage() {
       footnote={
         <p>
           Every claim on this page describes code you can read:{" "}
-          <a href="https://github.com/Finite-Loop-Club-NMAMIT/Sadhak">
-            the repository is public
-          </a>
-          . If a claim and the code disagree, the code is the truth and the claim is a
-          bug.
+          <a href="https://github.com/ashtonmths/Sarvam">the repository is public</a>. If
+          a claim and the code disagree, the code is the truth and the claim is a bug.
         </p>
       }
     />

@@ -4,15 +4,43 @@
  * of stroke weight against the type.
  */
 
-export function LogoMark({ size = 26 }: { size?: number }) {
-  // The labyrinth mark. Served from public/logo.png at 192px, which stays crisp
-  // for every size the site renders it at, and decorative beside the wordmark.
-  //
-  // Deliberately not next/image: the optimizer needs sharp at runtime, which
-  // the standalone output does not trace into the container, and there is
-  // nothing to optimize about a 192px mark drawn at 26.
-  // biome-ignore lint/performance/noImgElement: a 26px static mark, no optimizer worth its runtime dependency
-  return <img src="/logo.png" alt="" width={size} height={size} aria-hidden="true" />;
+/**
+ * The labyrinth mark, drawn rather than fetched.
+ *
+ * It was a 192px PNG, which meant no network-free render, no currentColor, and
+ * nothing to animate. As vector it inherits the surrounding text colour, stays
+ * sharp at any size, and the spiral can be stroke-drawn — which is what the
+ * loading state uses.
+ *
+ * The form is the product's own metaphor: a square labyrinth you can only
+ * cross by following one continuous thread.
+ */
+export function LogoMark({
+  size = 26,
+  className,
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      className={className}
+      aria-hidden="true"
+      fill="none"
+    >
+      <rect x="0.5" y="0.5" width="31" height="31" rx="8" fill="currentColor" />
+      <path
+        d="M16 25.5V22M16 22a6 6 0 1 0-6-6v0a6 6 0 0 0 6 6ZM16 6.5a9.5 9.5 0 0 1 9.5 9.5M16 18.5A2.5 2.5 0 1 1 18.5 16"
+        stroke="var(--paper, #ebe9e2)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 type GlyphProps = { size?: number };
