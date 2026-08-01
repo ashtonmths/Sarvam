@@ -1,5 +1,5 @@
 import { ciFailures, repositories } from "@sadhak/shared/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { log } from "../log.js";
 
@@ -40,9 +40,25 @@ export async function orgForRepository(
   const [row] = await db
     .select({ orgId: repositories.orgId })
     .from(repositories)
-    .where(and(eq(repositories.owner, owner), eq(repositories.name, name)))
+    .where(matchesRepo(owner, name))
     .limit(1);
   return row?.orgId ?? null;
+}
+
+/**
+ * Case-insensitive, because GitHub is and we are not.
+ *
+ * A repository tracked through the UI is stored however it was typed, and the
+ * webhook reports `full_name` in the owner's canonical casing. This repository
+ * is `ashtonmths/sarvam` in our table and `ashtonmths/Sarvam` on GitHub, so an
+ * exact match found nothing and every CI failure was dropped before it reached
+ * a row — no error, no log line, just a feature that never fired.
+ */
+function matchesRepo(owner: string, name: string) {
+  return and(
+    sql`lower(${repositories.owner}) = lower(${owner})`,
+    sql`lower(${repositories.name}) = lower(${name})`,
+  );
 }
 
 /**
@@ -57,13 +73,7 @@ export async function recordCiFailure(run: CapturedRun): Promise<number | null> 
   const [repo] = await db
     .select({ id: repositories.id })
     .from(repositories)
-    .where(
-      and(
-        eq(repositories.orgId, run.orgId),
-        eq(repositories.owner, run.owner),
-        eq(repositories.name, run.name),
-      ),
-    )
+    .where(and(eq(repositories.orgId, run.orgId), matchesRepo(run.owner, run.name)))
     .limit(1);
   if (!repo) return null;
 
