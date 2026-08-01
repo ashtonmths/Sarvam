@@ -245,7 +245,27 @@ services:
 
 volumes:
   pgdata:
+
+  #
+  # n8n's data, with a name that can be changed from Dokploy.
+  #
+  # n8n writes a generated encryption key into this volume on first boot and
+  # then refuses to start against any other, so setting N8N_ENCRYPTION_KEY
+  # after that first boot bricks the container with "Mismatching encryption
+  # keys" and no way forward that does not involve a shell on the host.
+  #
+  # Naming the volume from an environment variable makes that recoverable from
+  # the Dokploy UI alone: bump N8N_DATA_VOLUME to any new value and the next
+  # deploy starts n8n on a fresh volume that adopts the configured key. The old
+  # volume is orphaned rather than deleted, so nothing is destroyed and the
+  # change is reversible by setting the name back.
+  #
+  # The alternative is reading the key out of the volume and matching it, which
+  # is correct when there is n8n data worth keeping and needs a terminal.
+  #
   n8ndata:
+    name: ${N8N_DATA_VOLUME:-sadhak-n8ndata}
+
   models:
 
 networks:
