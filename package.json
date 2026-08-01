@@ -2,21 +2,26 @@
   "name": "sadhak",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint": "biome ci .",
+    "lint:fix": "biome check --write .",
+    "seed": "pnpm --filter @sadhak/api seed",
     "db:generate": "pnpm --filter @sadhak/api db:generate",
     "db:push": "pnpm --filter @sadhak/api db:push",
     "db:migrate": "pnpm --filter @sadhak/api db:migrate",
     "db:studio": "pnpm --filter @sadhak/api db:studio"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.5",
     "@types/node": "^22.10.0",
-    "prettier": "^3.4.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"

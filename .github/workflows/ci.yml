@@ -9,14 +9,33 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  check:
+  lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
 
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint and format check
+        run: pnpm lint
+
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -34,11 +53,73 @@ jobs:
       - name: Build web
         run: pnpm --filter @sadhak/web build
 
-  images:
-    # Build once, on main only. Pull requests are covered by check.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: check
+  # Every migration, from zero, on real pgvector — so a bad migration is caught
+  # on a Tuesday rather than at container boot in production.
+  migrate-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: sadhak
+          POSTGRES_PASSWORD: sadhak
+          POSTGRES_DB: sadhak
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sadhak"
+          --health-interval 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://sadhak:sadhak@localhost:5432/sadhak
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply every migration from zero
+        run: pnpm db:migrate
+
+      # Drift guard: a schema.ts change without a generated migration fails here
+      # instead of silently diverging from what production runs.
+      - name: Schema and migrations are in step
+        run: |
+          pnpm db:generate
+          git diff --exit-code db/migrations
+
+  docker:
+    # The api image is otherwise never exercised before merge, so a broken
+    # Dockerfile would only surface on main.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        app: [api, web]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: false
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.sadhak.online
+
+  images:
+    # Build once, on main only. Pull requests are covered by check and docker.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check, lint, migrate-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -80,15 +161,35 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: images
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Trigger Dokploy
         env:
           HOOK: ${{ secrets.DOKPLOY_WEBHOOK_URL }}
         run: |
           if [ -z "$HOOK" ]; then
-            echo "DOKPLOY_WEBHOOK_URL secret is not set, skipping deploy trigger."
-            echo "Add it from the Dokploy compose service's deploy webhook to enable auto deploys."
-            exit 0
+            echo "DOKPLOY_WEBHOOK_URL is not set — refusing to report a deploy that did not happen."
+            exit 1
           fi
           curl -fsS -X POST "$HOOK"
           echo "Dokploy redeploy triggered."
+
+      # This proves the stack *responds*, not that it is correct — and there is
+      # no rollback for it to trigger. A red step means production is down, and
+      # the remediation is to revert the commit (docs/DEVELOPMENT.md).
+      - name: Smoke — wait for both origins to answer
+        run: |
+          deadline=$((SECONDS + 180))
+          api_ok=0; web_ok=0
+          while [ $SECONDS -lt $deadline ]; do
+            if [ $api_ok -eq 0 ] && curl -fsS https://api.sadhak.online/health | grep -q '"ok":true'; then
+              echo "api healthy"; api_ok=1
+            fi
+            if [ $web_ok -eq 0 ] && curl -fsS -o /dev/null https://sadhak.online/; then
+              echo "web healthy"; web_ok=1
+            fi
+            [ $api_ok -eq 1 ] && [ $web_ok -eq 1 ] && exit 0
+            sleep 5
+          done
+          echo "deploy did not come up within 180s (api=$api_ok web=$web_ok)"
+          exit 1
