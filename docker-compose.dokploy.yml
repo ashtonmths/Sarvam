@@ -162,6 +162,19 @@ services:
       - "3001"
     volumes:
       - models:/models
+    # Tell Traefik which of the three networks below to dial.
+    #
+    # This container is on `default`, `dokploy-network` and `sadhak-obs`. Traefik
+    # only reaches it over `dokploy-network`, but given several it picks one on
+    # its own, and picking either of the others produces a router that resolves
+    # and a backend that never answers: a 502 with no request ever reaching the
+    # app, so the api logs look perfectly healthy while the domain is down.
+    #
+    # `web` never hit this because it is on two networks and one of them is the
+    # only plausible choice. The api gained a third for Prometheus, and the
+    # ambiguity came with it.
+    labels:
+      - "traefik.docker.network=dokploy-network"
     networks:
       - default
       - dokploy-network
