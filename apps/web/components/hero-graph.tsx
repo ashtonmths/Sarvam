@@ -24,7 +24,7 @@ export function HeroGraph() {
       <div className="graph__col">
         <div className="graph__node">
           <span className="graph__node-dot" />
-          ariadne
+          sadhak
         </div>
         <span className="graph__cap">The gate</span>
       </div>

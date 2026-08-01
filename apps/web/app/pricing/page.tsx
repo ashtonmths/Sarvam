@@ -60,7 +60,7 @@ const TIERS = [
     per: "/client map",
     job: "White label maps and change reports as your audit deliverable.",
     features: [
-      "One Ariadne map per client",
+      "One Sadhak map per client",
       "White label graph and reports",
       "Monthly change and risk report",
       "Client handoff exports",
@@ -82,8 +82,8 @@ export default function PricingPage() {
               <h1 className="fpage-hero__title">The map is free. The gate is the product.</h1>
               <p className="fpage-hero__lede">
                 Seats punish adoption, and connector counts punish exactly the
-                graph growth that makes Ariadne useful. So tiers cut on
-                enforcement instead: pay when Ariadne stands in your change
+                graph growth that makes Sadhak useful. So tiers cut on
+                enforcement instead: pay when Sadhak stands in your change
                 path, not when your team looks at the map.
               </p>
             </div>

@@ -7,12 +7,12 @@ export function Footer() {
       <div className="container">
         <div className="footer__inner">
           <div>
-            <Link href="/" className="logo" aria-label="Ariadne home">
+            <Link href="/" className="logo" aria-label="Sadhak home">
               <LogoMark />
-              ariadne
+              sadhak
             </Link>
             <p className="footer__tagline">
-              Every company&apos;s operations are a labyrinth. Ariadne is the
+              Every company&apos;s operations are a labyrinth. Sadhak is the
               thread: it knows every passage, remembers why each wall was built,
               and stops you before you knock down a load bearing one.
             </p>
@@ -66,7 +66,7 @@ export function Footer() {
         </div>
 
         <div className="footer__legal">
-          <span>Ariadne, built by Finite Loop Club</span>
+          <span>Sadhak, built by Finite Loop Club</span>
           <span>Change intelligence for business operations</span>
         </div>
       </div>

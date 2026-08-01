@@ -12,19 +12,19 @@ const MODES = [
   {
     tag: "Mode 1 · Hard gate",
     title: "Block the merge",
-    body: "Ariadne runs as a GitHub Check on your n8n repo, SQL migrations and infra code. A change with a high blast radius fails the check, and the merge button goes grey. This is a true block: the change cannot ship.",
+    body: "Sadhak runs as a GitHub Check on your n8n repo, SQL migrations and infra code. A change with a high blast radius fails the check, and the merge button goes grey. This is a true block: the change cannot ship.",
     badge: { label: "True block", kind: "block" as const },
   },
   {
     tag: "Mode 2 · Proxy gate",
     title: "Make agents ask first",
-    body: "Changes made through Ariadne, over REST or MCP, are evaluated before they are forwarded. An AI agent that wants to mutate a connected system has to ask, and a refused mutation never happens at all.",
+    body: "Changes made through Sadhak, over REST or MCP, are evaluated before they are forwarded. An AI agent that wants to mutate a connected system has to ask, and a refused mutation never happens at all.",
     badge: { label: "True block", kind: "block" as const },
   },
   {
     tag: "Mode 3 · Reflex",
     title: "Detect and revert in seconds",
-    body: "Airtable and the Zapier editor have no pre-commit hook, so nothing can veto a GUI deletion. Ariadne hears the webhook two seconds later, computes the radius, alerts the owner in Slack, and offers a one click revert.",
+    body: "Airtable and the Zapier editor have no pre-commit hook, so nothing can veto a GUI deletion. Sadhak hears the webhook two seconds later, computes the radius, alerts the owner in Slack, and offers a one click revert.",
     badge: { label: "~11s to undo", kind: "warn" as const },
   },
 ];
@@ -34,7 +34,7 @@ export default function GatePage() {
     <FeaturePage
       eyebrow="The gate"
       title="We block what can be blocked, and make the rest reversible"
-      lede="Most tools in this space overclaim. Airtable and Zapier expose no pre-commit hook, so no product can veto a GUI deletion, whatever the demo implies. Ariadne ships three modes and labels each one honestly."
+      lede="Most tools in this space overclaim. Airtable and Zapier expose no pre-commit hook, so no product can veto a GUI deletion, whatever the demo implies. Sadhak ships three modes and labels each one honestly."
       visual={
         <div className="modes" style={{ width: "100%" }}>
           {MODES.map((mode) => (
@@ -62,7 +62,7 @@ export default function GatePage() {
             <h2>The gate other agents have to ask</h2>
             <p>
               Every team is shipping agents that act on production systems.
-              Almost nobody is shipping the layer that governs them. Ariadne
+              Almost nobody is shipping the layer that governs them. Sadhak
               exposes its verdict engine as an MCP tool, so any agent, from any
               vendor, must request permission before mutating a connected
               system.

@@ -1,4 +1,4 @@
--- Ariadne's own graph store.
+-- Sadhak's own graph store.
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- The seeded demo company. Cartographer crawls these the same way it would

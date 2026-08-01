@@ -21,12 +21,13 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://sadhak.online"),
   title: {
-    default: "Ariadne. See the blast radius before you break it.",
-    template: "%s | Ariadne",
+    default: "Sadhak. See the blast radius before you break it.",
+    template: "%s | Sadhak",
   },
   description:
-    "Ariadne keeps a living dependency graph of your automations, data and APIs, fused with the human reasoning behind every connection, and gates the changes that would break them.",
+    "Sadhak keeps a living dependency graph of your automations, data and APIs, fused with the human reasoning behind every connection, and gates the changes that would break them.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,5 +1,5 @@
 #!/bin/bash
-# The demo company's billing database. Ariadne reads information_schema here,
+# The demo company's billing database. Sadhak reads information_schema here,
 # exactly as it would against a customer's Postgres.
 set -e
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d demo_billing <<-'SQL'

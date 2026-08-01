@@ -1,4 +1,4 @@
-import type { BlastRow, Evidence, Verdict } from "@ariadne/shared/types";
+import type { BlastRow, Evidence, Verdict } from "@sadhak/shared/types";
 
 /**
  * The impact model. Pure functions, no I/O, so every threshold is unit

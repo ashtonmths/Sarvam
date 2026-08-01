@@ -31,9 +31,9 @@ export function Nav() {
   return (
     <header className={`nav${scrolled ? " nav--scrolled" : ""}`}>
       <div className="container nav__inner">
-        <Link href="/" className="logo" aria-label="Ariadne home">
+        <Link href="/" className="logo" aria-label="Sadhak home">
           <LogoMark />
-          ariadne
+          sadhak
         </Link>
 
         <nav

@@ -12,9 +12,9 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   return (
     <div className="auth">
       <div className="auth__form-side">
-        <Link href="/" className="logo" aria-label="Ariadne home">
+        <Link href="/" className="logo" aria-label="Sadhak home">
           <LogoMark />
-          ariadne
+          sadhak
         </Link>
 
         <div className="auth__form-wrap">
@@ -23,7 +23,7 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
               {isSignup ? "Early access" : "Welcome back"}
             </span>
             <h1 className="auth__title" style={{ marginTop: 12 }}>
-              {isSignup ? "Create your account" : "Sign in to Ariadne"}
+              {isSignup ? "Create your account" : "Sign in to Sadhak"}
             </h1>
             <p className="auth__sub">
               {isSignup ? (
@@ -96,7 +96,7 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
             &ldquo;The one person who knew why that field existed left in
             March.&rdquo;
           </p>
-          <cite>Every ops team, eventually. Ariadne remembers the why.</cite>
+          <cite>Every ops team, eventually. Sadhak remembers the why.</cite>
         </blockquote>
       </div>
     </div>

@@ -13,7 +13,7 @@ export default function BlastRadiusPage() {
     <FeaturePage
       eyebrow="Blast radius"
       title="Know what a change touches before it ships"
-      lede="Every impact tool assumes your change arrives as a pull request. The changes that break operations arrive as someone clicking delete in a browser tab. Ariadne watches that path."
+      lede="Every impact tool assumes your change arrives as a pull request. The changes that break operations arrive as someone clicking delete in a browser tab. Sadhak watches that path."
       visual={
         <div
           style={{
@@ -39,7 +39,7 @@ export default function BlastRadiusPage() {
             <p>
               Transitive closure reaches everything within six hops, so a tool
               that answers &ldquo;47 things are affected&rdquo; for every change
-              is noise. Ariadne scores each downstream node by how critical it
+              is noise. Sadhak scores each downstream node by how critical it
               is, how confident we are in the path, and how far away it sits.
             </p>
             <ul className="split__points">
@@ -103,7 +103,7 @@ export default function BlastRadiusPage() {
             <p>
               A graph alone tells you deleting the field breaks three flows. It
               cannot tell you whether breaking them is a disaster or a cleanup.
-              Ariadne pins the human reasoning to each edge: the Slack thread,
+              Sadhak pins the human reasoning to each edge: the Slack thread,
               the PR description, the commit message, with a link and an author.
             </p>
             <p>

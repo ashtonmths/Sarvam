@@ -15,7 +15,7 @@ app.get("/health", async (c) => {
 
 const port = Number(process.env.PORT ?? 3001);
 serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`ariadne api listening on :${info.port}`);
+  console.log(`sadhak api listening on :${info.port}`);
 });
 
 export { app };

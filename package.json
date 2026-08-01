@@ -1,5 +1,5 @@
 {
-  "name": "ariadne",
+  "name": "sadhak",
   "private": true,
   "type": "module",
   "engines": { "node": ">=22" },
@@ -9,9 +9,9 @@
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:generate": "pnpm --filter @ariadne/api db:generate",
-    "db:push": "pnpm --filter @ariadne/api db:push",
-    "db:studio": "pnpm --filter @ariadne/api db:studio"
+    "db:generate": "pnpm --filter @sadhak/api db:generate",
+    "db:push": "pnpm --filter @sadhak/api db:push",
+    "db:studio": "pnpm --filter @sadhak/api db:studio"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

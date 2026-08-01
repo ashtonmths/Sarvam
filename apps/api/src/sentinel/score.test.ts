@@ -1,4 +1,4 @@
-import type { BlastRow } from "@ariadne/shared/types";
+import type { BlastRow } from "@sadhak/shared/types";
 import { describe, expect, it } from "vitest";
 import { BLOCK_IMPACT, DECAY, decayedImpact, verdict } from "./score.js";
 

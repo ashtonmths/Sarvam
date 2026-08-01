@@ -63,7 +63,7 @@ export default function Home() {
                   See the blast radius <em>before</em> you break it
                 </h1>
                 <p className="hero__lede">
-                  Ariadne keeps a living map of your automations, data and APIs,
+                  Sadhak keeps a living map of your automations, data and APIs,
                   remembers why every connection exists, and gates the changes
                   that would take revenue down with them.
                 </p>
@@ -208,7 +208,7 @@ export default function Home() {
                 <span className="eyebrow eyebrow--thread">Agents that investigate</span>
                 <h2>Twelve investigations at once, none of them guessing</h2>
                 <p>
-                  When someone hands in notice, Ariadne finds every connection
+                  When someone hands in notice, Sadhak finds every connection
                   only they can explain and fans out an agent per edge. Each one
                   searches, reads, follows leads, and decides for itself when it
                   actually knows the answer.
@@ -254,7 +254,7 @@ export default function Home() {
                 <h2>Everyone ships agents that act. We ship the thing that tells them no.</h2>
                 <p>
                   AI agents are the fastest growing source of unreviewed
-                  production changes. Ariadne exposes its gate over MCP, so any
+                  production changes. Sadhak exposes its gate over MCP, so any
                   agent must ask before it mutates a connected system, and gets
                   refused with reasons when the blast radius says so.
                 </p>

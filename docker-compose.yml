@@ -1,21 +1,21 @@
 # Local development stack.
 #
-# Brings up everything Ariadne needs to observe: its own graph store, the demo
+# Brings up everything Sadhak needs to observe: its own graph store, the demo
 # company's billing database, and a real n8n instance to crawl. The API and web
 # app run on the host with hot reload (`pnpm dev`).
 #
-# For the VPS deployment see docker-compose.prod.yml.
+# For the production deployment see docker-compose.dokploy.yml.
 
-name: ariadne
+name: sadhak
 
 services:
   db:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ariadne
-      POSTGRES_PASSWORD: ariadne
-      POSTGRES_DB: ariadne
+      POSTGRES_USER: sadhak
+      POSTGRES_PASSWORD: sadhak
+      POSTGRES_DB: sadhak
     ports:
       - "5432:5432"
     volumes:
@@ -23,7 +23,7 @@ services:
       # Runs once, against an empty data volume. To re-run: docker compose down -v
       - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ariadne -d ariadne"]
+      test: ["CMD-SHELL", "pg_isready -U sadhak -d sadhak"]
       interval: 3s
       timeout: 3s
       retries: 20
@@ -41,8 +41,8 @@ services:
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: db
       DB_POSTGRESDB_DATABASE: n8n
-      DB_POSTGRESDB_USER: ariadne
-      DB_POSTGRESDB_PASSWORD: ariadne
+      DB_POSTGRESDB_USER: sadhak
+      DB_POSTGRESDB_PASSWORD: sadhak
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-dev-only-not-a-secret}
       N8N_HOST: localhost
       N8N_PORT: "5678"

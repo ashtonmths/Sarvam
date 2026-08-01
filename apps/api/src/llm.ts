@@ -78,7 +78,7 @@ export async function complete(opts: CompleteOptions): Promise<Completion> {
         headers: {
           Authorization: `Bearer ${key}`,
           "Content-Type": "application/json",
-          "X-Title": "Ariadne",
+          "X-Title": "Sadhak",
         },
         body: JSON.stringify({
           model: modelFor(tier),
