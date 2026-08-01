@@ -48,6 +48,13 @@ export function parseChunkPermalink(
   return { documentId, ordinal };
 }
 
+/** Null, a Date, or a timestamp string — always a Date or null out. */
+function toDate(value: Date | string | null): Date | null {
+  if (value === null) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export async function searchDocuments(
   orgId: number,
   query: string,
@@ -97,7 +104,13 @@ export async function searchDocuments(
     body: string;
     speaker: string | null;
     title: string;
-    occurred_at: Date | null;
+    // string, not Date. The driver hands back a Date for a plain timestamptz
+    // column, but this one arrives through a CTE and a union and comes back as
+    // text — and the `as unknown as` above is an assertion, so the compiler
+    // believed whatever was written here. It said Date, callers called
+    // .toISOString(), and the first one to do so got a 500 at runtime with
+    // nothing failing at build time.
+    occurred_at: Date | string | null;
     score: string | number;
   }>;
 
@@ -107,7 +120,10 @@ export async function searchDocuments(
     title: row.title,
     body: row.body,
     speaker: row.speaker,
-    occurredAt: row.occurred_at,
+    // Coerced here rather than at each call site, so DocumentHit.occurredAt is
+    // actually the Date its type promises. Fixing it in the route would have
+    // left the same trap set for the next caller.
+    occurredAt: toDate(row.occurred_at),
     permalink: chunkPermalink(Number(row.document_id), Number(row.ordinal)),
     score: Number(row.score),
   }));

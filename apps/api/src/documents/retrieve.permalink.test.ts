@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chunkPermalink, parseChunkPermalink } from "./retrieve.js";
+import { chunkPermalink, type DocumentHit, parseChunkPermalink } from "./retrieve.js";
 
 /**
  * These two functions are the citation contract for uploaded evidence. If they
@@ -45,5 +45,31 @@ describe("chunk permalinks", () => {
     expect(
       parseChunkPermalink("https://example.com/app/documents/42#chunk-7/../../99"),
     ).toBeNull();
+  });
+});
+
+/**
+ * The type said Date, the driver returned a string, and `as unknown as` let the
+ * compiler believe the type. Nothing failed at build; the first caller to call
+ * .toISOString() on it got a 500 in the browser instead.
+ *
+ * Asserted through the exported hit shape rather than by unit-testing the
+ * private coercion, because the contract that matters is "DocumentHit.occurredAt
+ * is a Date" — that is what callers rely on and what silently was not true.
+ */
+describe("DocumentHit.occurredAt", () => {
+  it("is a real Date, so callers can format it", () => {
+    const hit: DocumentHit = {
+      documentId: 1,
+      chunkOrdinal: 0,
+      title: "t",
+      body: "b",
+      speaker: null,
+      occurredAt: new Date("2026-03-12T14:00:00Z"),
+      permalink: "x",
+      score: 1,
+    };
+    expect(() => hit.occurredAt?.toISOString()).not.toThrow();
+    expect(hit.occurredAt?.toISOString()).toBe("2026-03-12T14:00:00.000Z");
   });
 });

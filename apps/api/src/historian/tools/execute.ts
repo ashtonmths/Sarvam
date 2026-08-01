@@ -37,13 +37,52 @@ export type ToolResult =
   | { terminal: false; output: Record<string, unknown> }
   | { terminal: true; outcome: LoopOutcome; output: Record<string, unknown> };
 
+/**
+ * Fields where a trailing full stop is never part of the value.
+ *
+ * A URL does not end in a period and neither does an ISO timestamp, so
+ * stripping one cannot destroy information. `text` and `reason` are excluded
+ * deliberately: those are prose, and a sentence is supposed to end in a stop.
+ */
+const NOT_PROSE = new Set(["source_url", "authored_at", "author", "query", "permalink"]);
+
+/**
+ * Removes trailing sentence punctuation the model glues onto string values.
+ *
+ * Nemotron ends every string it writes with a full stop, including URLs and
+ * timestamps: it proposed `"authored_at": "2026-08-01T18:06:00.000Z."` and
+ * `"source_url": ".../documents/1#chunk-3."`. Zod rejected the datetime and the
+ * citation check rejected the URL, because a URL with a period on the end is
+ * not the URL any tool returned.
+ *
+ * The cost of not doing this was the entire feature. The Historian searched,
+ * found the transcript that explained the edge, and then spent its whole step
+ * budget being rejected by its own tool — every one of seventeen edges came
+ * back "no written trace found, declining to guess", which reads as an honest
+ * negative and was in fact a punctuation bug.
+ *
+ * This belongs at the boundary rather than in a prompt. Telling a model not to
+ * punctuate is a request; normalising what it sends is a guarantee, and it
+ * holds for whatever model is configured next.
+ */
+function tidyArgs(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    out[key] =
+      typeof value === "string" && NOT_PROSE.has(key)
+        ? value.trim().replace(/[.,;:]+$/, "")
+        : value;
+  }
+  return out;
+}
+
 export async function executeTool(
   name: ToolName,
   rawArgs: Record<string, unknown>,
   ctx: LoopCtx,
 ): Promise<ToolResult> {
   const schema = toolArgSchemas[name];
-  const parsed = schema.safeParse(rawArgs);
+  const parsed = schema.safeParse(tidyArgs(rawArgs));
   if (!parsed.success) {
     return {
       terminal: false,

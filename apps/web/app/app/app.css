@@ -4472,7 +4472,7 @@
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--card);
   color: var(--ink-soft);
   font-size: 13px;
   font-weight: 550;
@@ -4483,7 +4483,7 @@
 }
 
 .topnav__ask:hover {
-  border-color: var(--line-strong);
+  border-color: var(--line);
   color: var(--ink);
 }
 
@@ -4516,8 +4516,10 @@
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow-lg, 0 18px 48px rgb(0 0 0 / 12%));
+  background: var(--card);
+  box-shadow:
+    0 1px 2px rgba(23, 25, 30, 0.05),
+    0 24px 64px -20px rgba(23, 25, 30, 0.35);
 }
 
 .ask__head {
@@ -4560,7 +4562,7 @@
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background: var(--panel);
   color: var(--ink);
   font-size: 14px;
 }
@@ -4757,7 +4759,7 @@
   overflow: auto;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background: var(--panel);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.55;
