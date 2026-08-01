@@ -66,7 +66,10 @@ export const api = {
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body ?? {}),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body ?? {}),
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body ?? {}),
-  delete: <T>(path: string) => request<T>("DELETE", path),
+  // A body on DELETE is unusual but correct here: deleting an organisation
+  // requires typing its name back, and that confirmation belongs in the
+  // request rather than in a query string that lands in access logs.
+  delete: <T>(path: string, body?: unknown) => request<T>("DELETE", path, body),
 };
 
 /* ------------------------------------------------------- response shapes */

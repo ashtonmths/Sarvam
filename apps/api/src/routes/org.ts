@@ -10,6 +10,8 @@ import { db } from "../db.js";
 import { ForbiddenError, NotFoundError, UserError } from "../errors.js";
 import { paginated, parsePagination } from "../http/pagination.js";
 import { actorRole, requireCapability } from "../middleware/auth.js";
+import { deleteOrg } from "../privacy/delete.js";
+import { exportOrg } from "../privacy/export.js";
 import { parseScopes } from "./auth.js";
 
 /**
@@ -223,6 +225,52 @@ orgRoutes.get("/audit", requireCapability("audit:read"), async (c) => {
   return c.json(
     paginated(rows, limit, (row) => ({ k: row.createdAt.toISOString(), i: row.id })),
   );
+});
+
+/* ------------------------------------------------ export and deletion */
+
+/**
+ * The whole org as one JSON document. Owner-only, because it is every decision
+ * anyone in the org ever made plus the full audit log — a member who can read
+ * the graph should not thereby be able to walk out with all of it.
+ */
+orgRoutes.get("/export", requireCapability("org:delete"), async (c) => {
+  const orgId = c.get("orgId");
+  const payload = await exportOrg(orgId);
+
+  await audit(c, "org.export", { kind: "org", id: String(orgId) });
+
+  // Content-Disposition so a browser saves it rather than rendering a wall of
+  // JSON in a tab, which is what someone asking for their data actually wants.
+  return c.body(JSON.stringify(payload, null, 2), 200, {
+    "Content-Type": "application/json",
+    "Content-Disposition": `attachment; filename="sadhak-export-org-${orgId}.json"`,
+  });
+});
+
+/**
+ * Deletes the organisation and everything in it. Irreversible, and gated on
+ * typing the org name back rather than on a second button.
+ */
+orgRoutes.delete("/", requireCapability("org:delete"), async (c) => {
+  const orgId = c.get("orgId");
+  const actor = c.get("actor");
+  const body = z
+    .object({ confirmName: z.string().min(1) })
+    .parse(await c.req.json().catch(() => ({})));
+
+  // Written before the delete: the audit row cascades away with the org, so
+  // this only survives in an export taken beforehand. Recorded anyway, because
+  // the alternative is an org that vanishes with no in-product trace at all.
+  await audit(c, "org.delete", { kind: "org", id: String(orgId) });
+
+  const result = await deleteOrg({
+    orgId,
+    confirmName: body.confirmName,
+    actor: actor.type === "user" ? actor.email : `api_key:${actor.id}`,
+  });
+
+  return c.json(result);
 });
 
 export function assertPositiveInt(value: string | undefined, label: string): number {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { Page } from "../../../../lib/api";
+import { api, type Page } from "../../../../lib/api";
+import { API_URL } from "../../../../lib/env";
 import { useQuery } from "../../../../lib/queries";
 import { useSession } from "../../../../lib/session";
 
@@ -17,8 +18,97 @@ interface AuditRow {
   createdAt: string;
 }
 
+/**
+ * Export and erasure, the two things a privacy policy is only allowed to
+ * promise if they exist. Owner-only, and the delete asks for the org name
+ * rather than a second confirm button — this is the one action in the product
+ * that cannot be undone.
+ */
+function DataControls({ orgName }: { orgName: string }) {
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const armed = confirm === orgName;
+
+  async function destroy() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.delete("/api/org", { confirmName: confirm });
+      // Everything this session could read is gone, including the session's
+      // own org. A hard reload is the honest response.
+      window.location.href = "/";
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Deletion failed.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel danger" style={{ marginTop: 16 }}>
+      <h2 className="panel__title">Your data</h2>
+      <p className="panel__caption">
+        Take it with you, or take it away. Neither needs a support ticket.
+      </p>
+
+      <div className="danger__row">
+        <div>
+          <strong>Export everything</strong>
+          <p className="dim" style={{ fontSize: 13, margin: "4px 0 0" }}>
+            One JSON file: graph, rationale, verdicts, decisions and the audit log.
+            Credentials are excluded — they are sealed to this organization and would not
+            work anywhere else.
+          </p>
+        </div>
+        <a
+          className="btn btn--ghost"
+          href={`${API_URL}/api/org/export`}
+          data-testid="export-org"
+        >
+          Download
+        </a>
+      </div>
+
+      <div className="danger__row danger__row--last">
+        <div>
+          <strong>Delete this organization</strong>
+          <p className="dim" style={{ fontSize: 13, margin: "4px 0 0" }}>
+            Removes the graph, every rationale, every verdict, all credentials and the
+            audit log. It cascades at the database and there is no grace period, so we
+            cannot bring it back for you afterwards.
+          </p>
+          <label className="danger__confirm">
+            <span>
+              Type <code>{orgName}</code> to confirm
+            </span>
+            <input
+              type="text"
+              value={confirm}
+              onChange={(event) => setConfirm(event.target.value)}
+              placeholder={orgName}
+              aria-label="Organization name confirmation"
+              data-testid="delete-confirm"
+            />
+          </label>
+          {error && <p className="danger__error">{error}</p>}
+        </div>
+        <button
+          type="button"
+          className="btn btn--danger"
+          disabled={!armed || busy}
+          onClick={destroy}
+          data-testid="delete-org"
+        >
+          {busy ? "Deleting…" : "Delete forever"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export default function OrganizationPane() {
-  const { org } = useSession();
+  const { org, capabilities } = useSession();
   const audit = useQuery<Page<AuditRow>>("/api/audit?limit=100");
   const [filter, setFilter] = useState("");
 
@@ -101,6 +191,11 @@ export default function OrganizationPane() {
           </p>
         )}
       </section>
+
+      {/* Hidden rather than disabled for anyone who cannot use it: the API is
+          the enforcement point, and showing an owner-only control to a viewer
+          only invites them to click it. */}
+      {capabilities.includes("org:delete") && org && <DataControls orgName={org.name} />}
     </>
   );
 }

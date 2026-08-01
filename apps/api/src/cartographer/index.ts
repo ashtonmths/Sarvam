@@ -10,6 +10,7 @@ import type { EdgeSpec, ExternalRef, NodeKey, NodeSpec } from "../connectors/typ
 import { db } from "../db.js";
 import { NotFoundError, UserError } from "../errors.js";
 import { enqueueUnexplainedEdges } from "../historian/enqueue.js";
+import { traced } from "../tracing.js";
 import { getReadCredential } from "../vault/vault.js";
 import { emptyCatalog, type FusionCatalog, placeholderFor, resolveRef } from "./fuse.js";
 import {
@@ -81,7 +82,11 @@ export async function runCrawl(
 
     const connector = getConnector(instance.connector);
     const ctx = makeReadContext(orgId, instance, secret, controller.signal);
-    const result = await connector.crawl(ctx);
+    const result = await traced(
+      "sadhak.crawl",
+      { "sadhak.connector": instance.connector, "sadhak.crawl.kind": kind },
+      () => connector.crawl(ctx),
+    );
 
     const { nodes, edges, skipped, unresolved } = await fuseAndNormalize(
       orgId,

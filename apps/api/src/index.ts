@@ -27,6 +27,14 @@ import { reflexRoutes } from "./routes/reflex.js";
 import { reviewerRoutes } from "./routes/reviewer.js";
 import { verdictRoutes } from "./routes/verdict.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { startTracing } from "./tracing.js";
+
+/**
+ * Before anything it should instrument is constructed. An SDK started after
+ * the server would trace nothing that happened during boot, which is exactly
+ * the window a slow start needs explaining.
+ */
+startTracing();
 
 const app = new Hono();
 

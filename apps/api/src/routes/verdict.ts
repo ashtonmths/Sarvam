@@ -6,6 +6,7 @@ import { NotFoundError } from "../errors.js";
 import { requireCapability } from "../middleware/auth.js";
 import { explainVerdict, explanationsAvailable } from "../sentinel/explain.js";
 import { blastRadius, getVerdict, renderVerdict } from "../sentinel/verdict.js";
+import { traced } from "../tracing.js";
 
 export const verdictRoutes = new Hono();
 
@@ -14,9 +15,19 @@ verdictRoutes.post("/verdicts", requireCapability("gate:invoke"), async (c) => {
   const actor = c.get("actor");
   const change = changeDescriptorSchema.parse(await c.req.json());
 
-  const result = await renderVerdict(orgId, change, {
-    createdBy: actor.type === "user" ? actor.email : `api_key:${actor.id}`,
-  });
+  // Span name matches the SLO vocabulary in docs/SLO.md, so a latency
+  // objective and the thing measuring it cannot drift apart.
+  const result = await traced(
+    "sadhak.verdict",
+    {
+      "sadhak.change.target": change.target,
+      "sadhak.change.operation": change.operation,
+    },
+    () =>
+      renderVerdict(orgId, change, {
+        createdBy: actor.type === "user" ? actor.email : `api_key:${actor.id}`,
+      }),
+  );
   return c.json(result);
 });
 
