@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  api,
   type Coverage,
   type DecisionRow,
   type DriftSummary,
   type GraphStats,
   type Page,
-  api,
 } from "../../lib/api";
 import { useSession } from "../../lib/session";
 import { T, timeAgo } from "../../lib/theme";
@@ -84,7 +84,11 @@ export default function Overview() {
       style={s.root}
       contentContainerStyle={[s.content, { paddingTop: insets.top + 16 }]}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.thread} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={T.thread}
+        />
       }
     >
       <Text style={s.hello}>{org?.name ?? "Overview"}</Text>
@@ -129,7 +133,9 @@ export default function Overview() {
                 </Text>
                 <Text style={s.driftNote}>
                   The live systems and the map disagree
-                  {drift.lastCheckedAt ? ` · checked ${timeAgo(drift.lastCheckedAt)}` : ""}
+                  {drift.lastCheckedAt
+                    ? ` · checked ${timeAgo(drift.lastCheckedAt)}`
+                    : ""}
                 </Text>
               </>
             ) : (

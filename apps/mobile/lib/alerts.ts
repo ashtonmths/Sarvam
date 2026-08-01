@@ -1,6 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import { type DecisionRow, type DriftSummary, type Page, api } from "./api";
+import { api, type DecisionRow, type DriftSummary, type Page } from "./api";
 
 /**
  * Alerts and pings.

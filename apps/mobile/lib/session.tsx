@@ -1,7 +1,14 @@
 import * as SecureStore from "expo-secure-store";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Platform } from "react-native";
-import { ApiError, api, setSessionToken, signIn as apiSignIn } from "./api";
+import { ApiError, api, signIn as apiSignIn, setSessionToken } from "./api";
 
 /**
  * The session lives in the device keychain, not in memory, so closing the app
@@ -115,7 +122,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     () => ({
       ready,
       user: me?.user ?? null,
-      org: me ? (me.orgs.find((o) => o.orgId === me.activeOrgId) ?? me.orgs[0] ?? null) : null,
+      org: me
+        ? (me.orgs.find((o) => o.orgId === me.activeOrgId) ?? me.orgs[0] ?? null)
+        : null,
       signIn,
       signOut,
     }),

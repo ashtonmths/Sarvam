@@ -9,7 +9,14 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { type Alert, POLL_MS, askPermission, fetchAlerts, newSince, ping } from "../../lib/alerts";
+import {
+  type Alert,
+  askPermission,
+  fetchAlerts,
+  newSince,
+  POLL_MS,
+  ping,
+} from "../../lib/alerts";
 import { API_URL } from "../../lib/api";
 import { useSession } from "../../lib/session";
 import { T, timeAgo } from "../../lib/theme";
@@ -89,7 +96,11 @@ export default function Alerts() {
       style={s.root}
       contentContainerStyle={[s.content, { paddingTop: insets.top + 16 }]}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.thread} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={T.thread}
+        />
       }
     >
       <Text style={s.title}>Alerts</Text>
@@ -144,7 +155,11 @@ export default function Alerts() {
       <Card title="Session">
         <Text style={s.acct}>{user?.email ?? ""}</Text>
         <Text style={s.host}>{API_URL.replace(/^https?:\/\//, "")}</Text>
-        <Pressable style={s.signout} onPress={() => void signOut()} accessibilityRole="button">
+        <Pressable
+          style={s.signout}
+          onPress={() => void signOut()}
+          accessibilityRole="button"
+        >
           <Text style={s.signoutText}>Sign out</Text>
         </Pressable>
       </Card>

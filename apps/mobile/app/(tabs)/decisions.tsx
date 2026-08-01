@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { type DecisionRow, type Page, type VerdictName, api } from "../../lib/api";
+import { api, type DecisionRow, type Page, type VerdictName } from "../../lib/api";
 import { T, timeAgo } from "../../lib/theme";
 import { Card, Empty, ErrorNote, Figure, Loading, VerdictChip } from "../../lib/ui";
 
@@ -65,7 +65,11 @@ export default function Decisions() {
       style={s.root}
       contentContainerStyle={[s.content, { paddingTop: insets.top + 16 }]}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.thread} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={T.thread}
+        />
       }
     >
       <Text style={s.title}>Decisions</Text>
@@ -99,7 +103,9 @@ export default function Decisions() {
       {!loading && (
         <Card>
           {shown.length === 0 ? (
-            <Empty text={rows.length === 0 ? "No decisions yet." : `No ${filter} verdicts.`} />
+            <Empty
+              text={rows.length === 0 ? "No decisions yet." : `No ${filter} verdicts.`}
+            />
           ) : (
             shown.map((d, i) => (
               <View key={d.id} style={[s.row, i === 0 && s.rowFirst]}>

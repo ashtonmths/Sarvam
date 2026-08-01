@@ -18,11 +18,19 @@
 -- Hand-written: a partial unique index is not expressible in the Drizzle schema.
 
 -- Existing duplicates would fail the index build, so they are resolved first:
--- keep the oldest queued row per key and dead-letter the rest, which is the
--- outcome the constraint would have produced had it always been there.
-UPDATE "jobs" j
-   SET "state" = 'dead_letter',
-       "last_error" = 'superseded by an identical queued job when the dedupe index was added'
+-- keep the oldest queued row per key and delete the rest, which is exactly the
+-- state the constraint would have produced had it always been there.
+--
+-- Deleted rather than moved to 'dead_letter', which is what this did first and
+-- which fails from a clean database. `dead_letter` is added to the enum by
+-- ALTER TYPE in 0001, drizzle runs every migration inside one transaction, and
+-- Postgres refuses an enum value in the same transaction that added it
+-- (55P04). It only ever showed up on a from-zero run, so it passed locally on
+-- an existing database and broke CI's fresh one.
+--
+-- Deleting is also the more honest outcome: a duplicate queued job is not a
+-- job that failed, it is a job that should never have been written.
+DELETE FROM "jobs" j
  WHERE j."dedupe_key" IS NOT NULL
    AND j."state" = 'queued'
    AND EXISTS (

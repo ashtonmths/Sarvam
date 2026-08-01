@@ -108,7 +108,10 @@ export async function signIn(email: string, password: string): Promise<SignInRes
   }
 
   if (!res.ok) {
-    throw new ApiError(res.status, res.status === 401 ? "Wrong email or password" : "Sign in failed");
+    throw new ApiError(
+      res.status,
+      res.status === 401 ? "Wrong email or password" : "Sign in failed",
+    );
   }
 
   const body = (await res.json()) as Omit<SignInResult, "token">;
@@ -122,7 +125,11 @@ export async function signIn(email: string, password: string): Promise<SignInRes
 /* ------------------------------------------------------------ API shapes */
 
 export interface GraphStats {
-  nodes: { total: number; byKind: Record<string, number>; byState: Record<string, number> };
+  nodes: {
+    total: number;
+    byKind: Record<string, number>;
+    byState: Record<string, number>;
+  };
   edges: { total: number; byProvenance: Record<string, number> };
   unresolvedRefs: number;
 }
