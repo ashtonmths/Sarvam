@@ -17,6 +17,8 @@ import {
 import { isProd } from "../config.js";
 import { db } from "../db.js";
 import { ConflictError, UnauthorizedError, UserError } from "../errors.js";
+import { enqueue } from "../jobs/queue.js";
+import { log } from "../log.js";
 import { requireAuth } from "../middleware/auth.js";
 import { slugify } from "../tenant.js";
 import { signinSchema, signupSchema } from "./auth.schemas.js";
@@ -91,6 +93,32 @@ authRoutes.post("/signup", async (c) => {
   c.set("actor", { type: "user", id: userId, sessionId: 0, email, role: "owner" });
   c.set("orgId", orgId);
   await audit(c, "auth.signup", { kind: "user", id: userId });
+
+  /**
+   * The user's n8n account, out of band.
+   *
+   * Enqueued rather than awaited, and the enqueue itself cannot fail the
+   * request: at this point the account, the org and the session all exist and
+   * the cookie is set, so throwing here would return a 500 for a registration
+   * that actually succeeded — and the client would reasonably retry it into a
+   * duplicate-email conflict.
+   */
+  try {
+    await enqueue(
+      "n8n.provision_account",
+      { userId },
+      { orgId, dedupeKey: `n8n.provision_account:${userId}` },
+    );
+  } catch (error) {
+    log().error(
+      {
+        event: "n8n_provision_enqueue_failed",
+        userId,
+        err: error instanceof Error ? error.message : String(error),
+      },
+      "n8n: could not enqueue account provisioning",
+    );
+  }
 
   return c.json({ user: { id: userId, email, name: body.name }, orgId }, 201);
 });

@@ -26,6 +26,8 @@ import { orgForInstallation } from "../github/checks.js";
 import { executeRun } from "../historian/runs.js";
 import { purgeStaleCounters } from "../http/rate-limit.js";
 import { log } from "../log.js";
+import { pollN8nExecutionFailures } from "../n8n/failures.js";
+import { provisionN8nAccount, refreshAccountState } from "../n8n/provision.js";
 import { pollN8nWorkflows } from "../reflex/detect-n8n.js";
 import { getIncident, recordVerdict } from "../reflex/incidents.js";
 import { rollupDaily } from "../reviewer/rollup.js";
@@ -339,6 +341,61 @@ export function registerJobHandlers(): void {
         excludeJobId: ctx.jobId,
       },
     );
+  });
+
+  /**
+   * Give a new user their n8n account.
+   *
+   * Retried further than most: the whole point of doing this out of band is
+   * that a registration succeeds while n8n is down, and giving up after two
+   * attempts would leave the account permanently un-provisioned for exactly
+   * the outage this indirection exists to survive.
+   */
+  registerHandler(
+    "n8n.provision_account",
+    async (payload) => {
+      const userId = Number(payload.userId);
+      if (!Number.isInteger(userId)) return;
+      await provisionN8nAccount(userId);
+    },
+    { timeoutMs: 60_000, maxAttempts: 8 },
+  );
+
+  /**
+   * Failed executions for one org.
+   *
+   * A minute rather than the workflow poll's thirty seconds: this one asks for
+   * `includeData`, so each page carries every node's run payload across the
+   * wire before we throw all but two fields of it away. Halving the interval
+   * would double that for no gain — a failed execution is not actionable in
+   * under a minute anyway.
+   */
+  registerHandler("n8n.poll_executions", async (_payload, ctx) => {
+    if (!ctx.orgId) return;
+    try {
+      await pollN8nExecutionFailures(ctx.orgId);
+    } finally {
+      // In `finally`, so a thrown poll still reschedules. Without this a
+      // single bad response ends failure detection for that org until the
+      // next boot.
+      await enqueue(
+        "n8n.poll_executions",
+        {},
+        {
+          orgId: ctx.orgId,
+          runAfter: new Date(Date.now() + 60_000),
+          dedupeKey: `n8n.poll_executions:${ctx.orgId}`,
+          excludeJobId: ctx.jobId,
+        },
+      );
+    }
+  });
+
+  /** Observes invite acceptance, which n8n never announces. */
+  registerHandler("n8n.refresh_account", async (payload) => {
+    const userId = Number(payload.userId);
+    if (!Number.isInteger(userId)) return;
+    await refreshAccountState(userId);
   });
 
   /**
@@ -774,6 +831,7 @@ export async function scheduleRecurringJobs(): Promise<number> {
   }
 
   scheduled += await scheduleReflexPolling();
+  scheduled += await scheduleN8nExecutionPolling();
   return scheduled;
 }
 
@@ -808,6 +866,37 @@ export async function scheduleDueCrawls(): Promise<number> {
       "connector.crawl",
       { instanceId: instance.id, kind: "full" },
       { orgId: instance.orgId, dedupeKey: `connector.crawl:${instance.id}` },
+    );
+    if (jobId !== null) scheduled += 1;
+  }
+  return scheduled;
+}
+
+/**
+ * Re-arms execution-failure polling for every org with n8n connected.
+ *
+ * Separate from `scheduleReflexPolling` despite the identical query, because
+ * the two answer different questions — one watches workflows being edited, the
+ * other watches them running — and an org can reasonably have one without the
+ * other once either becomes configurable.
+ */
+export async function scheduleN8nExecutionPolling(): Promise<number> {
+  const instances = await db
+    .select({ orgId: connectorInstances.orgId })
+    .from(connectorInstances)
+    .where(
+      and(
+        eq(connectorInstances.connector, "n8n"),
+        eq(connectorInstances.status, "active"),
+      ),
+    );
+
+  let scheduled = 0;
+  for (const orgId of new Set(instances.map((i) => i.orgId))) {
+    const jobId = await enqueue(
+      "n8n.poll_executions",
+      {},
+      { orgId, dedupeKey: `n8n.poll_executions:${orgId}` },
     );
     if (jobId !== null) scheduled += 1;
   }
