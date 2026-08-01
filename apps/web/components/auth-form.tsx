@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { DEMO_CREDENTIALS, signIn, signUp } from "../lib/session";
 import { ThreadLines } from "./hero-graph";
 import { LogoMark } from "./marks";
@@ -10,6 +10,10 @@ import { LogoMark } from "./marks";
 function AuthFormInner({ mode }: { mode: "signin" | "signup" }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // False during SSR and the first client render, true once mounted — which is
+  // exactly when the submit handler starts working.
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
   const router = useRouter();
   const searchParams = useSearchParams();
   const isSignup = mode === "signup";
@@ -46,6 +50,16 @@ function AuthFormInner({ mode }: { mode: "signin" | "signup" }) {
 
           <form
             className="auth__form"
+            // POST, even though the handler below always prevents it.
+            //
+            // Before React hydrates there is no handler, and a form with no
+            // method submits as a GET — which puts the password in the URL, and
+            // from there into browser history, the Referer header, and the
+            // access logs of every proxy in front of us. It is reachable by
+            // anyone who types fast on a slow connection. A POST fallback
+            // cannot leak the field values into a URL, so the worst case
+            // becomes an error page instead of a credential in three logs.
+            method="post"
             onSubmit={async (event) => {
               event.preventDefault();
               setBusy(true);
@@ -125,7 +139,11 @@ function AuthFormInner({ mode }: { mode: "signin" | "signup" }) {
               type="submit"
               className="btn btn--ink"
               style={{ justifyContent: "center" }}
-              disabled={busy}
+              // Also disabled until hydration, so a pre-hydration click does
+              // nothing at all rather than triggering the POST fallback above.
+              // The two together mean there is no window in which submitting
+              // this form does something surprising.
+              disabled={busy || !ready}
               data-testid="auth-submit"
             >
               {isSignup ? "Create account" : "Sign in"}

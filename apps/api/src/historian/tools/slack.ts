@@ -21,7 +21,13 @@ export interface SlackHit {
   permalink: string;
 }
 
-const SLACK_API = "https://slack.com/api";
+/**
+ * Overridable so the agent evals can serve planted evidence from a local
+ * fixture server. Goes through `config` rather than being read here, because
+ * the lint rule that confines `process.env` to one module is what makes the
+ * env schema trustworthy, and a seam worth having is a seam worth documenting.
+ */
+const SLACK_API = config.SLACK_API_BASE_URL;
 
 async function slackToken(
   orgId: number,

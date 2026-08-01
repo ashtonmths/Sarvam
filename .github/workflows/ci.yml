@@ -45,6 +45,51 @@ jobs:
       - name: API reference matches the routes
         run: pnpm check:api
 
+  # The monitoring stack is source too, and its failures are silent at deploy
+  # time: a dashboard pointing at a datasource that does not exist renders
+  # empty, and an alert with no next action is discovered at 2am.
+  observability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Dashboards parse, uids are unique, datasource references resolve, and
+      # every alert rule carries an action a responder can follow.
+      - name: Dashboards and alert rules are coherent
+        run: pnpm check:obs
+
+      # promtool and amtool judge the syntax check:obs cannot. Both caught real
+      # bugs: a credentials file that was never mounted, and a webhook url that
+      # Alertmanager takes literally because it does no variable expansion.
+      - name: Prometheus rules and config are valid
+        run: |
+          touch ops/observability/prometheus/metrics-token
+          docker run --rm -v "$PWD/ops/observability/prometheus:/etc/prometheus:ro" \
+            --entrypoint promtool prom/prometheus:v3.1.0 \
+            check config /etc/prometheus/prometheus.yml
+
+      - name: Alertmanager config is valid
+        run: |
+          touch ops/observability/alertmanager/slack-webhook-url
+          touch ops/observability/alertmanager/watchdog-url
+          docker run --rm -v "$PWD/ops/observability/alertmanager:/etc/alertmanager:ro" \
+            --entrypoint amtool prom/alertmanager:v0.28.0 \
+            check-config /etc/alertmanager/alertmanager.yml
+
+      - name: Compose projects are valid
+        run: |
+          GF_SECURITY_ADMIN_PASSWORD=ci POSTGRES_EXPORTER_DSN=postgres://ci \
+            docker compose -f ops/observability/docker-compose.observability.yml config >/dev/null
+
   # Supply chain. This repository holds read credentials to other people's
   # production systems, so a leaked key here is not a repository problem.
   security:

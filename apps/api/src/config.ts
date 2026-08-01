@@ -59,6 +59,14 @@ const Env = z.object({
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
 
   /**
+   * Where the Historian's Slack tools point. Defaults to the real API; the
+   * agent evals override it to a local fixture server serving planted
+   * evidence, which is the only way to score judgment against a known answer
+   * without a live workspace.
+   */
+  SLACK_API_BASE_URL: z.string().url().default("https://slack.com/api"),
+
+  /**
    * Sentry DSN. Absent ⇒ the SDK never initializes and every capture is a
    * no-op. Errors only; Tempo owns tracing.
    */

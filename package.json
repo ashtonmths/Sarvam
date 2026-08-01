@@ -28,7 +28,8 @@
     "check:docs": "tsx scripts/check-docs-honesty.ts",
     "docs:api": "tsx scripts/generate-api-reference.ts",
     "check:api": "tsx scripts/generate-api-reference.ts --check",
-    "check:obs": "tsx scripts/check-observability.ts"
+    "check:obs": "tsx scripts/check-observability.ts",
+    "eval:historian": "SLACK_API_BASE_URL=http://127.0.0.1:39517 pnpm --filter @sadhak/api exec tsx src/historian/evals/run.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",

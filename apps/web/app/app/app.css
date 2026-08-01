@@ -598,13 +598,19 @@
   color: var(--ink-faint);
 }
 
+/* Underlined at rest, not only on hover. This link sits inside a line of prose,
+   so colour alone is its only distinguishing mark — which is invisible to
+   anyone who cannot separate these two hues, and to anyone reading a
+   grayscale rendering. */
 .panel__foot a {
   color: var(--thread);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
 }
 
 .panel__foot a:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration-thickness: 2px;
 }
 
 .arun {
@@ -1161,17 +1167,17 @@
 
 .vbadge--block {
   background: var(--block-soft);
-  color: var(--block);
+  color: var(--block-ink);
 }
 
 .vbadge--warn {
   background: var(--warn-soft);
-  color: #7a5606; /* darkened for AA on the soft chip */
+  color: var(--warn-ink);
 }
 
 .vbadge--approve {
   background: var(--approve-soft);
-  color: var(--approve);
+  color: var(--approve-ink);
 }
 
 .vbadge--big {
@@ -1207,7 +1213,7 @@
 .tag--green {
   border-color: var(--approve-soft);
   background: var(--approve-soft);
-  color: var(--approve);
+  color: var(--approve-ink);
 }
 
 .tag--red {

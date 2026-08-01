@@ -6,7 +6,11 @@
   --card: #fdfcfa;
   --ink: #17191e;
   --ink-soft: #575c66;
-  --ink-faint: #8a8f99;
+  /* Darkened from #8a8f99, which measured 2.67:1 on --paper and failed WCAG AA
+     everywhere it was used — rail labels, chips, captions, table headers. This
+     is 4.6:1 on paper, 5.1 on panel, 5.5 on card, so the token is safe on every
+     surface rather than only on the lightest one. */
+  --ink-faint: #636872;
   --line: #d9d6cc;
   --line-soft: #e4e1d8;
   --thread: #4053c8;
@@ -17,6 +21,17 @@
   --warn-soft: #f6ecd6;
   --approve: #2f7a4d;
   --approve-soft: #e2efe6;
+
+  /* Text versions of the three verdict colours, for use on their own soft
+     chips. The vivid tokens above stay as they are: they colour graph edges,
+     dots and impact bars, and WCAG contrast governs text, not graphics — so
+     dulling them to satisfy a badge would flatten the map for no benefit.
+     Measured on their matching --*-soft background: block 5.7:1, warn 5.5:1,
+     approve 6.0:1. The verdict is the product's whole output; it has to be
+     legible to everyone reading it. */
+  --block-ink: #a5301a;
+  --warn-ink: #7d5708;
+  --approve-ink: #26643f;
 
   --font-display: var(--font-schibsted), "Helvetica Neue", sans-serif;
   --font-body: var(--font-instrument), "Helvetica Neue", sans-serif;
@@ -646,17 +661,17 @@ button {
 
 .verdict-tag--block {
   background: var(--block-soft);
-  color: var(--block);
+  color: var(--block-ink);
 }
 
 .verdict-tag--warn {
   background: var(--warn-soft);
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 
 .verdict-tag--approve {
   background: var(--approve-soft);
-  color: var(--approve);
+  color: var(--approve-ink);
 }
 
 .verdict-tag__dot {
@@ -971,8 +986,11 @@ button {
   color: var(--approve);
 }
 
+/* The ink token, not the vivid one: this is body text on the marketing page's
+   card, and it is the line that says the agent honestly found nothing — the
+   one sentence on that page most worth being able to read. */
 .trace__giveup {
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 
 /* ------------------------------------------------------------- tool grid */
@@ -1154,7 +1172,7 @@ button {
 }
 
 .scene-line--block strong {
-  color: var(--block);
+  color: var(--block-ink);
 }
 
 .scene-line--warn {
@@ -1163,7 +1181,7 @@ button {
 }
 
 .scene-line--warn strong {
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 
 /* value chips inside the impact model card */
@@ -1188,7 +1206,7 @@ button {
 .chiprow span.is-warn {
   background: var(--warn-soft);
   border-color: color-mix(in srgb, var(--warn) 30%, var(--line-soft));
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 
 /* ----------------------------------------------------------------- modes */

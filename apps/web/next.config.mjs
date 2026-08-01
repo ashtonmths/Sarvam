@@ -37,7 +37,13 @@ const sentryOrigin = (() => {
 
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  // `unsafe-eval` in development only. Next's Fast Refresh evaluates modules
+  // as strings, so the production policy blocks hydration outright and
+  // `next dev` renders a page whose buttons never become interactive — with
+  // nothing but a CSP violation in the console to explain it. Costing every
+  // developer that discovery is not a security win; the policy that ships is
+  // unchanged.
+  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",

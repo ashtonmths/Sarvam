@@ -24,6 +24,31 @@ test.describe("the session gate", () => {
     // rather than a login prompt.
     await expect(page).toHaveURL(/\/signin/);
   });
+
+  test("never puts the password in the URL, even before React hydrates", async ({
+    page,
+  }) => {
+    await page.goto("/signin");
+
+    // The bug this pins, found by driving the real form: a form with no
+    // `method` submits as a GET when there is no handler yet, and the handler
+    // only exists after hydration. A user who types fast on a slow connection
+    // sends their password as a query string — into browser history, the
+    // Referer header, and the access log of every proxy in front of us.
+    //
+    // Two defences, and this asserts both. The button is disabled until
+    // mounted, so the click does nothing; and the form is POST, so even if a
+    // submit escapes some other way it cannot put field values in a URL.
+    await expect(page.locator("form.auth__form")).toHaveAttribute("method", /post/i);
+
+    await page.getByLabel(/work email/i).fill("someone@example.com");
+    await page.getByLabel(/password/i).fill("hunter2-should-never-be-in-a-url");
+    await page.getByTestId("auth-submit").click();
+    await page.waitForTimeout(1500);
+
+    expect(page.url()).not.toContain("hunter2");
+    expect(page.url()).not.toContain("password=");
+  });
 });
 
 test.describe("the map", () => {
