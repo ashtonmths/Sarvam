@@ -1,4 +1,9 @@
-import Constants, { ExecutionEnvironment } from "expo-constants";
+import {
+  getPermissionsAsync,
+  requestPermissionsAsync,
+} from "expo-notifications/build/NotificationPermissions";
+import { setNotificationHandler } from "expo-notifications/build/NotificationsHandler";
+import scheduleNotificationAsync from "expo-notifications/build/scheduleNotificationAsync";
 import { Platform } from "react-native";
 import { api, type DecisionRow, type DriftSummary, type Page } from "./api";
 
@@ -17,42 +22,30 @@ import { api, type DecisionRow, type DriftSummary, type Page } from "./api";
 export const POLL_MS = 60_000;
 
 /**
- * Whether local pings can work at all here.
+ * Pings work anywhere but web, Expo Go included.
  *
- * Importing `expo-notifications` is not free: its entry module runs
- * DevicePushTokenAutoRegistration at import time, which registers a *push
- * token* listener whether or not the app ever asks for remote push. Expo Go on
- * Android removed remote push in SDK 53, so that side effect throws there — and
- * it threw during route load, because the Alerts screen imports this file. An
- * app that only schedules local notifications was crashing on a feature it
- * never used.
+ * The imports above reach the three modules directly instead of the package
+ * root, and that is load-bearing rather than a style choice. `index.js` pulls
+ * DevicePushTokenAutoRegistration, which registers a *push token* listener at
+ * import time whether or not the app ever asks for remote push. Expo Go on
+ * Android dropped remote push in SDK 53, so that side effect errored during
+ * route load — the Alerts screen imports this file — and an app that only
+ * schedules local notifications was falling over on a feature it never used.
  *
- * There is no way to import the module without the registration, so the check
- * has to happen before the import rather than around the calls.
+ * Local notifications were never the thing Expo Go removed. Skipping the entry
+ * module skips the registration and keeps them, so the switch works on the
+ * phone in your hand today rather than only in a future dev build.
+ *
+ * The cost is a deep import: no `exports` field in expo-notifications makes it
+ * legal, and the three modules pull only expo-modules-core and their own native
+ * wrappers. It is pinned to ~0.32.17 and would need rechecking on an SDK bump —
+ * a broken build, not a silent regression, since the paths simply stop
+ * resolving.
  */
-export const PINGS_SUPPORTED =
-  Platform.OS !== "web" &&
-  !(
-    Platform.OS === "android" &&
-    Constants.executionEnvironment === ExecutionEnvironment.StoreClient
-  );
+export const PINGS_SUPPORTED = Platform.OS !== "web";
 
 /** Why pings are off, for the screen to show instead of a dead switch. */
-export const PINGS_UNAVAILABLE_REASON =
-  Platform.OS === "web"
-    ? "Notifications are not available on web."
-    : "Expo Go dropped notification support on Android in SDK 53. Pings work in a development build or a release APK.";
-
-type NotificationsModule = typeof import("expo-notifications");
-
-let cached: NotificationsModule | null = null;
-
-/** Required on first use, never at module scope. Null where unsupported. */
-function notifications(): NotificationsModule | null {
-  if (!PINGS_SUPPORTED) return null;
-  if (!cached) cached = require("expo-notifications") as NotificationsModule;
-  return cached;
-}
+export const PINGS_UNAVAILABLE_REASON = "Notifications are not available on web.";
 
 export interface Alert {
   id: string;
@@ -65,11 +58,9 @@ export interface Alert {
 let configured = false;
 
 export function configureNotifications() {
-  if (configured) return;
-  const N = notifications();
-  if (!N) return;
+  if (configured || !PINGS_SUPPORTED) return;
   configured = true;
-  N.setNotificationHandler({
+  setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: false,
@@ -82,19 +73,17 @@ export function configureNotifications() {
 
 /** Asks once. A refusal is a valid answer — the in-app list still works. */
 export async function askPermission(): Promise<boolean> {
-  const N = notifications();
-  if (!N) return false;
-  const existing = await N.getPermissionsAsync();
+  if (!PINGS_SUPPORTED) return false;
+  const existing = await getPermissionsAsync();
   if (existing.granted) return true;
-  const asked = await N.requestPermissionsAsync();
+  const asked = await requestPermissionsAsync();
   return asked.granted;
 }
 
 export async function ping(alert: Alert) {
-  const N = notifications();
-  if (!N) return;
+  if (!PINGS_SUPPORTED) return;
   try {
-    await N.scheduleNotificationAsync({
+    await scheduleNotificationAsync({
       content: { title: alert.title, body: alert.body },
       trigger: null,
     });
