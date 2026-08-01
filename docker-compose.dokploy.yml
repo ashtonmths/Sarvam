@@ -11,8 +11,11 @@
 # Images are prebuilt by CI and pulled from GHCR, so a deploy is a pull and a
 # restart, not a build on the VPS. Set the environment in the Dokploy UI:
 # POSTGRES_PASSWORD, N8N_ENCRYPTION_KEY, OPENROUTER_API_KEY,
-# OPENROUTER_MODEL_STRONG, OPENROUTER_MODEL_BULK, GITHUB_TOKEN,
-# SLACK_BOT_TOKEN, AIRTABLE_TOKEN, N8N_API_KEY.
+# OPENROUTER_MODEL_STRONG, OPENROUTER_MODEL_BULK, SESSION_SECRET,
+# CREDENTIAL_MASTER_KEY.
+#
+# Connector tokens are no longer passed through: credentials are stored per org
+# in the encrypted vault (docs/connectors/README.md).
 
 services:
   db:
@@ -66,19 +69,27 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # Apply pending migrations, then serve. Migrations are idempotent, so a
-    # restart with nothing to apply is a no-op.
+    # Apply pending migrations, then serve. The runner takes an advisory lock,
+    # so two replicas booting together serialize instead of racing DDL.
     command: sh -c "pnpm --filter @sadhak/api db:migrate && pnpm --filter @sadhak/api start"
+    # Docker's default 10s SIGKILL would cut in-flight crawls on every deploy;
+    # the worker drains within 45s (JOBS_DRAIN_TIMEOUT_MS).
+    stop_grace_period: 60s
     environment:
+      NODE_ENV: production
       DATABASE_URL: postgres://sadhak:${POSTGRES_PASSWORD}@db:5432/sadhak
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+      WEB_ORIGIN: https://sadhak.online
+      # Losing this key does not lose graph data, but every stored connector
+      # credential becomes unreadable. Back it up outside Dokploy.
+      CREDENTIAL_MASTER_KEY: ${CREDENTIAL_MASTER_KEY:?set CREDENTIAL_MASTER_KEY}
+      CREDENTIAL_MASTER_KEY_PREVIOUS: ${CREDENTIAL_MASTER_KEY_PREVIOUS:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL_STRONG: ${OPENROUTER_MODEL_STRONG}
       OPENROUTER_MODEL_BULK: ${OPENROUTER_MODEL_BULK}
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
-      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
-      AIRTABLE_TOKEN: ${AIRTABLE_TOKEN}
+      # Connector credentials live in the per-org vault, not here. N8N_BASE_URL
+      # stays as the default base for instances that do not override it.
       N8N_BASE_URL: http://n8n:5678
-      N8N_API_KEY: ${N8N_API_KEY}
       PORT: "3001"
     expose:
       - "3001"
