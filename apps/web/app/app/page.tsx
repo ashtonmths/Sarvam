@@ -1,10 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { EmptyState, PageHead, Stat, VerdictBadge } from "../../components/app/ui";
-import { DECISIONS, timeAgo } from "../../lib/mock/data";
+import { EmptyState, PageHead, VerdictBadge } from "../../components/app/ui";
+import { AGENT_RUNS, DECISIONS, timeAgo } from "../../lib/mock/data";
+import { SIMULATABLE_NODES, traverse, verdict } from "../../lib/mock/verdict";
 import { useGraphStats } from "../../lib/queries";
 import { useSession } from "../../lib/session";
+
+// The three most dangerous things to touch right now, ranked by the same
+// arithmetic the gate uses. Mock graph until the engine lands (plans 7-8).
+const WATCHLIST = SIMULATABLE_NODES.map((n) => {
+  const rows = traverse(n.id);
+  const maxImpact = rows.reduce((m, r) => Math.max(m, r.impact), 0);
+  return { node: n, downstream: rows.length, maxImpact, verdict: verdict(rows).verdict };
+})
+  .filter((w) => w.downstream > 0)
+  .sort((a, b) => b.maxImpact - a.maxImpact)
+  .slice(0, 3);
+
+const TAPE = [...DECISIONS.slice(0, 6)].reverse();
+const RUNS = AGENT_RUNS.slice(0, 3);
+
+const OUTCOME_DOT: Record<string, string> = {
+  propose_rationale: "var(--approve)",
+  draft_correction: "var(--thread)",
+  give_up: "var(--warn)",
+  dismiss: "var(--ink-faint)",
+};
 
 export default function OverviewPage() {
   const { org } = useSession();
@@ -39,13 +61,14 @@ export default function OverviewPage() {
 
   const staleCount = stats?.nodes.byState.stale ?? 0;
   const connectors = Object.entries(stats?.nodes.byConnector ?? {});
-  const recent = DECISIONS.slice(0, 5);
+  const kinds = Object.entries(stats?.nodes.byKind ?? {}).sort((a, b) => b[1] - a[1]);
+  const maxKind = kinds[0]?.[1] ?? 1;
 
   return (
     <>
       <PageHead
         title="Overview"
-        sub="What has been crawled, what the gate has decided, and how much of the map is explained."
+        sub={`The gate's view of ${org?.name ?? "your org"}: what is mapped, what it decided, and what the agents are doing about the gaps.`}
       >
         <Link
           href="/app/graph"
@@ -56,91 +79,136 @@ export default function OverviewPage() {
         </Link>
       </PageHead>
 
-      <div className="panel-grid panel-grid--4" style={{ marginBottom: 16 }}>
-        <Stat
-          label="Nodes mapped"
-          value={nodeCount}
-          hint={`across ${connectors.length} connector${connectors.length === 1 ? "" : "s"}`}
-        />
-        <Stat
-          label="Dependencies"
-          value={stats?.edges.total ?? 0}
-          hint={`${stats?.edges.byProvenance.static_parse ?? 0} statically parsed`}
-        />
-        <Stat
-          label="Stale entities"
-          value={staleCount}
-          hint={
-            staleCount === 0 ? "nothing has disappeared" : "tombstoned, never deleted"
-          }
-        />
-        <Stat
-          label="Unresolved refs"
-          value={stats?.unresolvedRefs ?? 0}
-          hint="cross-connector references we refused to guess at"
-        />
+      {/* the last six verdicts, drawn as stations on the thread */}
+      <section className="tape" aria-label="Recent decisions" data-testid="overview-tape">
+        <div className="tape__track">
+          <span className="tape__gate">
+            <span className="tape__gate-dot" />
+            the gate
+          </span>
+          {TAPE.map((d) => (
+            <Link key={d.id} href="/app/decisions" className="tape__stop">
+              <span className="tape__row">
+                <VerdictBadge verdict={d.verdict} />
+                {d.dryRun && <span className="tag tag--ghost">dry</span>}
+              </span>
+              <span className="tape__change">{d.change}</span>
+              <span className="tape__when">
+                {timeAgo(d.at)} · {d.mode}
+              </span>
+            </Link>
+          ))}
+          <span className="tape__now">now</span>
+        </div>
+      </section>
+
+      <div className="ostats">
+        <div className="ostats__cell">
+          <strong>{nodeCount}</strong>
+          <span>Nodes mapped</span>
+          <em>
+            across {connectors.length} connector{connectors.length === 1 ? "" : "s"}
+          </em>
+        </div>
+        <div className="ostats__cell">
+          <strong>{stats?.edges.total ?? 0}</strong>
+          <span>Dependencies</span>
+          <em>{stats?.edges.byProvenance.static_parse ?? 0} statically parsed</em>
+        </div>
+        <div className="ostats__cell">
+          <strong>{staleCount}</strong>
+          <span>Stale entities</span>
+          <em>
+            {staleCount === 0 ? "nothing has disappeared" : "tombstoned, never deleted"}
+          </em>
+        </div>
+        <div className="ostats__cell">
+          <strong>{stats?.unresolvedRefs ?? 0}</strong>
+          <span>Unresolved refs</span>
+          <em>we refused to guess at these</em>
+        </div>
       </div>
 
-      <div className="panel-grid panel-grid--2">
+      <div className="ogrid">
         <section className="panel">
-          <h2 className="panel__title">Your graph</h2>
+          <h2 className="panel__title">Blast radius watchlist</h2>
           <p className="panel__caption">
-            Live counts from the last crawl of each connected system.
+            The most dangerous things to touch right now, ranked by the gate's own
+            arithmetic. Sample graph until plans 7 and 8 land.
           </p>
-          <table className="dtable">
-            <thead>
-              <tr>
-                <th>Kind</th>
-                <th>Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(stats?.nodes.byKind ?? {})
-                .sort((a, b) => b[1] - a[1])
-                .map(([kind, count]) => (
-                  <tr key={kind}>
-                    <td>{kind}</td>
-                    <td className="mono">{count}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+          {WATCHLIST.map((w, i) => (
+            <Link
+              key={w.node.id}
+              href="/app/simulate"
+              className="watch"
+              data-testid={`overview-watch-${i}`}
+            >
+              <span className="watch__rank">{String(i + 1).padStart(2, "0")}</span>
+              <span className="watch__id">
+                <strong>{w.node.name}</strong>
+                <span>
+                  {w.node.kind} · {w.downstream} downstream
+                </span>
+              </span>
+              <span className="watch__meter" aria-hidden="true">
+                <i
+                  style={{
+                    width: `${Math.round(w.maxImpact * 100)}%`,
+                    background: w.verdict === "BLOCK" ? "var(--block)" : "var(--warn)",
+                  }}
+                />
+              </span>
+              <span className="watch__impact">{w.maxImpact.toFixed(2)}</span>
+              <VerdictBadge verdict={w.verdict} />
+            </Link>
+          ))}
+          <p className="panel__foot">
+            impact = criticality × path confidence × 0.6^(hops−1) ·{" "}
+            <Link href="/app/simulate">simulate a change →</Link>
+          </p>
         </section>
 
-        <section className="panel">
-          <h2 className="panel__title">Recent decisions</h2>
-          <p className="panel__caption">
-            Sample data — the verdict engine and its gates land with plans 7 and 8.
-          </p>
-          <table className="dtable">
-            <thead>
-              <tr>
-                <th>Change</th>
-                <th>Verdict</th>
-                <th>When</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.map((d) => (
-                <tr key={d.id}>
-                  <td>
-                    {d.change}
-                    {d.dryRun && (
-                      <>
-                        {" "}
-                        <span className="tag tag--ghost">dry-run</span>
-                      </>
-                    )}
-                  </td>
-                  <td>
-                    <VerdictBadge verdict={d.verdict} />
-                  </td>
-                  <td className="dim">{timeAgo(d.at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+        <div className="ogrid__stack">
+          <section className="panel">
+            <h2 className="panel__title">Agents at work</h2>
+            <p className="panel__caption">
+              What the historians and reviewers did last, honest failures included.
+            </p>
+            {RUNS.map((run) => (
+              <div className="arun" key={run.id}>
+                <span
+                  className="arun__dot"
+                  style={{ background: OUTCOME_DOT[run.outcome] ?? "var(--ink-faint)" }}
+                  aria-hidden="true"
+                />
+                <span className="arun__body">
+                  <strong>{run.goal}</strong>
+                  <span>{run.outcomeDetail}</span>
+                </span>
+                <span className="arun__when">
+                  {Math.round(run.durationMs / 1000)}s · {timeAgo(run.startedAt)}
+                </span>
+              </div>
+            ))}
+            <p className="panel__foot">
+              <Link href="/app/agents">All runs →</Link>
+            </p>
+          </section>
+
+          <section className="panel">
+            <h2 className="panel__title">What the map is made of</h2>
+            <p className="panel__caption">Live counts from the last crawl.</p>
+            {kinds.map(([kind, count]) => (
+              <div className="kindbar" key={kind}>
+                <span className="kindbar__label">{kind}</span>
+                <span className="kindbar__track" aria-hidden="true">
+                  <i style={{ width: `${Math.round((count / maxKind) * 100)}%` }} />
+                </span>
+                <span className="kindbar__count">{count}</span>
+              </div>
+            ))}
+          </section>
+        </div>
       </div>
     </>
   );

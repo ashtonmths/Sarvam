@@ -7,7 +7,6 @@ import {
   ChevronsUpDown,
   Inbox,
   LayoutDashboard,
-  PanelLeft,
   Play,
   Settings,
   ShieldCheck,
@@ -19,8 +18,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CORRECTIONS, EDGES, RATIONALE } from "../../lib/mock/data";
-import { signOut, switchOrg, useSession } from "../../lib/session";
+import { switchOrg, useSession } from "../../lib/session";
 import { LogoMark } from "../marks";
+import { Topbar } from "./topbar";
 
 type NavItem = {
   href: string;
@@ -107,13 +107,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!ready || !user) return null;
 
-  const initials = user.name
-    .split(/\s+/)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-
   const isCurrent = (href: string) =>
     href === "/app" ? pathname === "/app" : pathname.startsWith(href);
 
@@ -131,15 +124,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <LogoMark />
             <span className="rail__text">sadhak</span>
           </Link>
-          <button
-            type="button"
-            className="rail__toggle"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!collapsed}
-            onClick={toggleRail}
-          >
-            <PanelLeft size={15} strokeWidth={1.6} aria-hidden="true" />
-          </button>
         </div>
 
         <div className="rail__org-wrap">
@@ -228,31 +212,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="rail__foot">
           <RailLink item={SETTINGS} current={isCurrent(SETTINGS.href)} />
-          <div className="rail__user">
-            <span className="rail__avatar" aria-hidden="true" title={user.name}>
-              {initials}
-            </span>
-            <span className="rail__user-meta">
-              <strong>{user.name}</strong>
-              <span>{org?.role ?? user.role}</span>
-            </span>
-            <button
-              type="button"
-              className="rail__signout"
-              data-testid="shell-signout"
-              onClick={async () => {
-                await signOut();
-                router.push("/");
-                router.refresh();
-              }}
-            >
-              Sign out
-            </button>
-          </div>
         </div>
       </aside>
 
-      <main className="shell__main">{children}</main>
+      <div className="shell__col">
+        <Topbar railCollapsed={collapsed} onToggleRail={toggleRail} />
+        <main className="shell__main">{children}</main>
+      </div>
     </div>
   );
 }

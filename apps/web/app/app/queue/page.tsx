@@ -27,6 +27,14 @@ const UNDO_MS = 15000;
 /** Whitespace-normalized containment — the §10.2 rule the recite re-check runs. */
 const normalize = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
 export default function QueuePage() {
   const { org } = useSession();
   const { hasGraph } = useHasGraph(org?.id ?? null);
@@ -258,27 +266,35 @@ export default function QueuePage() {
                   onFocusCapture={() => setCursor(i)}
                   data-testid={`queue-draft-${r.id}`}
                 >
-                  <div>
-                    <blockquote className="queue__quote">
-                      &ldquo;{r.body}&rdquo;
-                    </blockquote>
-                    <div className="queue__meta">
-                      <span className="tag tag--thread">
-                        {nodeById(edge.source).name} → {nodeById(edge.target).name}
-                      </span>
+                  <div className="queue__head">
+                    <span className="queue__avatar" aria-hidden="true">
+                      {initials(r.author)}
+                    </span>
+                    <span className="queue__who">
+                      <strong>{r.author}</strong>
                       <span>
-                        {r.author} · {r.sourceKind}
+                        mined from {r.sourceKind} · {timeAgo(r.createdAt)}
                       </span>
-                      <span className="mono">confidence {r.confidence?.toFixed(2)}</span>
-                      <span className="dim">{timeAgo(r.createdAt)}</span>
-                      <Link
-                        href="/app/graph"
-                        className="dim"
-                        style={{ textDecoration: "underline" }}
-                      >
-                        view edge
-                      </Link>
-                    </div>
+                    </span>
+                    <span className="queue__conf" title="Historian's confidence">
+                      <i>
+                        <b style={{ width: `${(r.confidence ?? 0) * 100}%` }} />
+                      </i>
+                      {r.confidence?.toFixed(2)}
+                    </span>
+                  </div>
+                  <blockquote className="queue__quote">&ldquo;{r.body}&rdquo;</blockquote>
+                  <div className="queue__meta">
+                    <span className="tag tag--thread">
+                      {nodeById(edge.source).name} → {nodeById(edge.target).name}
+                    </span>
+                    <Link
+                      href="/app/graph"
+                      className="dim"
+                      style={{ textDecoration: "underline" }}
+                    >
+                      view edge
+                    </Link>
                   </div>
                   <div className="queue__actions">
                     <a
@@ -345,30 +361,34 @@ export default function QueuePage() {
                 onFocusCapture={() => setCursor(i)}
                 data-testid={`queue-correction-${c.id}`}
               >
-                <div>
-                  <strong style={{ fontSize: 15 }}>{c.summary}</strong>
-                  <div
-                    style={{ display: "grid", gap: 6, margin: "10px 0", fontSize: 13.5 }}
+                <div className="queue__head">
+                  <span className="queue__avatar" aria-hidden="true">
+                    RV
+                  </span>
+                  <span className="queue__who">
+                    <strong>{c.summary}</strong>
+                    <span>Reviewer caught drift · {timeAgo(c.createdAt)}</span>
+                  </span>
+                </div>
+                <div className="queue__diff">
+                  <div>
+                    <span>documented</span>
+                    <em>{c.documented}</em>
+                  </div>
+                  <div>
+                    <span>live</span>
+                    <em>{c.live}</em>
+                  </div>
+                </div>
+                <div className="queue__meta">
+                  <span className="tag tag--thread">{nodeById(c.nodeId).name}</span>
+                  <Link
+                    href={`/app/agents/${c.agentRunId}`}
+                    className="dim"
+                    style={{ textDecoration: "underline" }}
                   >
-                    <div>
-                      <span className="tag tag--ghost">documented</span>{" "}
-                      <span className="dim">{c.documented}</span>
-                    </div>
-                    <div>
-                      <span className="tag tag--amber">live</span> {c.live}
-                    </div>
-                  </div>
-                  <div className="queue__meta">
-                    <span className="tag tag--thread">{nodeById(c.nodeId).name}</span>
-                    <Link
-                      href={`/app/agents/${c.agentRunId}`}
-                      className="dim"
-                      style={{ textDecoration: "underline" }}
-                    >
-                      Reviewer&rsquo;s trace
-                    </Link>
-                    <span className="dim">{timeAgo(c.createdAt)}</span>
-                  </div>
+                    Reviewer&rsquo;s trace
+                  </Link>
                 </div>
                 <div className="queue__actions">
                   <button

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, type GraphEdge, type GraphNode, type Page } from "../../lib/api";
 import { useQuery } from "../../lib/queries";
 import { Select } from "./select";
@@ -21,17 +22,19 @@ const CONNECTOR_COLOR: Record<string, string> = {
   http: "#8a8f99",
 };
 
-const KIND_RADIUS: Record<string, number> = {
-  table: 15,
-  report: 15,
-  workflow: 16,
-  service: 15,
-  field: 9,
-  step: 10,
-  credential: 11,
-  endpoint: 12,
-  person: 12,
-};
+/** Kinds that read as systems rather than members of one. */
+const MAJOR_KINDS = new Set(["table", "report", "workflow", "service", "endpoint"]);
+
+/** Chip geometry, derived from the label so anchors and halos line up. */
+function pillMetrics(node: GraphNode) {
+  const major = MAJOR_KINDS.has(node.kind);
+  const label = node.name.length > 26 ? `${node.name.slice(0, 25)}…` : node.name;
+  const fontSize = major ? 11.5 : 10.5;
+  const padX = major ? 13 : 10;
+  const w = Math.round(label.length * fontSize * 0.62 + padX * 2 + 13);
+  const h = major ? 30 : 23;
+  return { label, major, fontSize, padX, w, h };
+}
 
 const DASH: Record<string, string | undefined> = {
   static_parse: undefined,
@@ -41,15 +44,47 @@ const DASH: Record<string, string | undefined> = {
 
 const CRIT_STOPS = [1.0, 0.7, 0.4, 0.1];
 
-export function LiveGraph() {
+const VB_HOME = { x: 0, y: 0, w: 1120, h: 700 };
+
+export function LiveGraph({ initialQuery = "" }: { initialQuery?: string }) {
   const [view, setView] = useState<"map" | "list">("map");
   const [selected, setSelected] = useState<number | null>(null);
-  const [q, setQ] = useState("");
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [q, setQ] = useState(initialQuery);
   const [kind, setKind] = useState("all");
   const [critReason, setCritReason] = useState("");
   const [pendingCrit, setPendingCrit] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // The camera. Wheel zooms toward the pointer, dragging the canvas pans.
+  const [vb, setVb] = useState(VB_HOME);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const drag = useRef<{ px: number; py: number; vx: number; vy: number } | null>(null);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setVb((prev) => {
+        const rect = svg.getBoundingClientRect();
+        const fx = (e.clientX - rect.left) / rect.width;
+        const fy = (e.clientY - rect.top) / rect.height;
+        const scale = e.deltaY > 0 ? 1.12 : 1 / 1.12;
+        const w = Math.min(2400, Math.max(360, prev.w * scale));
+        const h = w * (VB_HOME.h / VB_HOME.w);
+        return {
+          x: prev.x + (prev.w - w) * fx,
+          y: prev.y + (prev.h - h) * fy,
+          w,
+          h,
+        };
+      });
+    };
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+  }, []);
 
   const nodesQuery = useQuery<Page<GraphNode>>("/api/graph/nodes?limit=200");
   const edgesQuery = useQuery<Page<GraphEdge>>("/api/graph/edges?limit=200");
@@ -84,18 +119,59 @@ export function LiveGraph() {
     }
 
     const layers = [...byLayer.keys()].sort((a, b) => a - b);
-    const out = new Map<number, { x: number; y: number }>();
-    const height = 640;
+    const height = 620;
 
-    layers.forEach((layer, layerIndex) => {
+    // Neighbors across both edge directions, for barycenter ordering.
+    const neighbors = new Map<number, number[]>();
+    for (const edge of edges) {
+      (neighbors.get(edge.srcId) ?? neighbors.set(edge.srcId, []).get(edge.srcId))?.push(
+        edge.dstId,
+      );
+      (neighbors.get(edge.dstId) ?? neighbors.set(edge.dstId, []).get(edge.dstId))?.push(
+        edge.srcId,
+      );
+    }
+
+    // Start alphabetical, then pull each node toward the average height of
+    // what it touches. Three sweeps untangles a graph this size completely.
+    const y = new Map<number, number>();
+    const ordered = new Map<number, GraphNode[]>();
+    for (const layer of layers) {
       const members = (byLayer.get(layer) ?? [])
         .slice()
         .sort((a, b) => a.name.localeCompare(b.name));
-      const x = 90 + layerIndex * (940 / Math.max(1, layers.length - 1 || 1));
+      ordered.set(layer, members);
       members.forEach((node, i) => {
-        const y = ((i + 1) / (members.length + 1)) * height + 30;
-        out.set(node.id, { x: layers.length === 1 ? 520 : x, y });
+        y.set(node.id, (i + 1) / (members.length + 1));
       });
+    }
+    for (let sweep = 0; sweep < 3; sweep += 1) {
+      for (const layer of sweep % 2 === 0 ? layers : [...layers].reverse()) {
+        const members = ordered.get(layer) ?? [];
+        members.sort((a, b) => {
+          const bary = (n: GraphNode) => {
+            const ns = neighbors.get(n.id) ?? [];
+            const known = ns.filter((id) => y.has(id));
+            if (known.length === 0) return y.get(n.id) ?? 0.5;
+            return known.reduce((s, id) => s + (y.get(id) ?? 0.5), 0) / known.length;
+          };
+          return bary(a) - bary(b);
+        });
+        members.forEach((node, i) => {
+          y.set(node.id, (i + 1) / (members.length + 1));
+        });
+      }
+    }
+
+    const out = new Map<number, { x: number; y: number }>();
+    layers.forEach((layer, layerIndex) => {
+      const x = 150 + layerIndex * (820 / Math.max(1, layers.length - 1 || 1));
+      for (const node of ordered.get(layer) ?? []) {
+        out.set(node.id, {
+          x: layers.length === 1 ? 560 : x,
+          y: (y.get(node.id) ?? 0.5) * height + 40,
+        });
+      }
     });
 
     return out;
@@ -269,29 +345,67 @@ export function LiveGraph() {
         <div className="graph-wrap">
           <div className="graph-canvas">
             <svg
-              viewBox="0 0 1120 700"
+              ref={svgRef}
+              viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
               aria-label="Dependency graph. Use the list view for keyboard navigation."
+              onPointerDown={(e) => {
+                if ((e.target as Element).closest(".graph-node")) return;
+                drag.current = { px: e.clientX, py: e.clientY, vx: vb.x, vy: vb.y };
+                (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId);
+              }}
+              onPointerMove={(e) => {
+                const d = drag.current;
+                if (!d) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const perPx = vb.w / rect.width;
+                setVb((prev) => ({
+                  ...prev,
+                  x: d.vx - (e.clientX - d.px) * perPx,
+                  y: d.vy - (e.clientY - d.py) * perPx,
+                }));
+              }}
+              onPointerUp={() => {
+                drag.current = null;
+              }}
             >
               {edges
                 .filter((e) => visibleIds.has(e.srcId) && visibleIds.has(e.dstId))
                 .map((e) => {
-                  const s = positions.get(e.srcId);
-                  const t = positions.get(e.dstId);
-                  if (!s || !t) return null;
+                  const s = positions.get(e.dstId);
+                  const t = positions.get(e.srcId);
+                  const sNode = nodeById.get(e.dstId);
+                  const tNode = nodeById.get(e.srcId);
+                  if (!s || !t || !sNode || !tNode) return null;
+                  // The dependency sits left, so the thread leaves its right
+                  // edge and lands on the dependent's left edge.
+                  const sw = pillMetrics(sNode).w / 2;
+                  const tw = pillMetrics(tNode).w / 2;
+                  const flip = s.x > t.x;
+                  const x1 = flip ? s.x - sw : s.x + sw;
+                  const x2 = flip ? t.x + tw : t.x - tw;
+                  const mid = (x1 + x2) / 2;
                   const inRipple =
                     selected !== null &&
                     (e.dstId === selected || impacted.has(e.dstId)) &&
                     impacted.has(e.srcId);
+                  const nearHover =
+                    hovered !== null && (e.srcId === hovered || e.dstId === hovered);
                   return (
-                    <line
+                    <path
                       key={e.id}
-                      x1={s.x}
-                      y1={s.y}
-                      x2={t.x}
-                      y2={t.y}
-                      stroke={inRipple ? "var(--block)" : "var(--ink-faint)"}
-                      strokeWidth={inRipple ? 2 : 1.2}
-                      strokeOpacity={inRipple ? 0.8 : e.confidence * 0.45}
+                      d={`M ${x1} ${s.y} C ${mid} ${s.y}, ${mid} ${t.y}, ${x2} ${t.y}`}
+                      fill="none"
+                      stroke={
+                        inRipple
+                          ? "var(--block)"
+                          : nearHover
+                            ? "var(--thread)"
+                            : "var(--ink-faint)"
+                      }
+                      strokeWidth={inRipple || nearHover ? 1.8 : 1.2}
+                      strokeOpacity={
+                        inRipple ? 0.85 : nearHover ? 0.8 : 0.2 + e.confidence * 0.3
+                      }
                       strokeDasharray={DASH[e.provenance]}
                     />
                   );
@@ -300,9 +414,11 @@ export function LiveGraph() {
               {visible.map((n) => {
                 const pos = positions.get(n.id);
                 if (!pos) return null;
-                const r = KIND_RADIUS[n.kind] ?? 11;
+                const pill = pillMetrics(n);
                 const hop = impacted.get(n.id);
                 const color = CONNECTOR_COLOR[n.connector] ?? "#8a8f99";
+                const dimmed =
+                  selected !== null && hop === undefined && selected !== n.id;
                 return (
                   // The map is the primary way into a node's dependents, so it
                   // is reachable without a pointer: tab to a node, Enter or
@@ -315,7 +431,12 @@ export function LiveGraph() {
                     tabIndex={0}
                     aria-pressed={selected === n.id}
                     aria-label={`${n.name} — ${n.kind} on ${n.connector}`}
+                    opacity={dimmed ? 0.28 : 1}
                     onClick={() => setSelected(n.id)}
+                    onMouseEnter={() => setHovered(n.id)}
+                    onMouseLeave={() => setHovered(null)}
+                    onFocus={() => setHovered(n.id)}
+                    onBlur={() => setHovered(null)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
@@ -325,11 +446,13 @@ export function LiveGraph() {
                   >
                     {/* The locked visual: opacity is the impact score. */}
                     {hop !== undefined && (
-                      <circle
+                      <rect
                         className="graph-ripple"
-                        cx={pos.x}
-                        cy={pos.y}
-                        r={r + 9}
+                        x={pos.x - pill.w / 2 - 7}
+                        y={pos.y - pill.h / 2 - 7}
+                        width={pill.w + 14}
+                        height={pill.h + 14}
+                        rx={pill.h / 2 + 7}
                         fill="var(--block)"
                         style={{
                           opacity: n.criticality * 0.6 ** (hop - 1),
@@ -337,29 +460,74 @@ export function LiveGraph() {
                         }}
                       />
                     )}
-                    <circle
-                      cx={pos.x}
-                      cy={pos.y}
-                      r={r}
+                    <rect
+                      className="gpill"
+                      x={pos.x - pill.w / 2}
+                      y={pos.y - pill.h / 2}
+                      width={pill.w}
+                      height={pill.h}
+                      rx={pill.h / 2}
                       fill="var(--card)"
-                      stroke={color}
-                      strokeWidth={2}
-                      strokeDasharray={n.state === "stale" ? "3 3" : undefined}
-                      opacity={
-                        selected !== null && hop === undefined && selected !== n.id
-                          ? 0.3
-                          : 1
-                      }
+                      stroke="var(--line)"
+                      strokeWidth={1}
+                      strokeDasharray={n.state === "stale" ? "4 3" : undefined}
                     />
-                    <text x={pos.x} y={pos.y + r + 12} textAnchor="middle">
-                      {n.name.length > 22 ? `${n.name.slice(0, 21)}…` : n.name}
+                    <circle
+                      cx={pos.x - pill.w / 2 + pill.padX + 2}
+                      cy={pos.y}
+                      r={3.2}
+                      fill={color}
+                    />
+                    <text
+                      x={pos.x - pill.w / 2 + pill.padX + 11}
+                      y={pos.y + pill.fontSize * 0.36}
+                      className={pill.major ? "gtext gtext--major" : "gtext"}
+                    >
+                      {pill.label}
                     </text>
                   </g>
                 );
               })}
             </svg>
 
+            <div className="graph-controls" aria-hidden="true">
+              <button
+                type="button"
+                title="Zoom in"
+                onClick={() =>
+                  setVb((p) => {
+                    const w = Math.max(360, p.w / 1.25);
+                    const h = w * (VB_HOME.h / VB_HOME.w);
+                    return { x: p.x + (p.w - w) / 2, y: p.y + (p.h - h) / 2, w, h };
+                  })
+                }
+              >
+                +
+              </button>
+              <button
+                type="button"
+                title="Zoom out"
+                onClick={() =>
+                  setVb((p) => {
+                    const w = Math.min(2400, p.w * 1.25);
+                    const h = w * (VB_HOME.h / VB_HOME.w);
+                    return { x: p.x + (p.w - w) / 2, y: p.y + (p.h - h) / 2, w, h };
+                  })
+                }
+              >
+                −
+              </button>
+              <button type="button" title="Reset view" onClick={() => setVb(VB_HOME)}>
+                ⌂
+              </button>
+            </div>
+
             <div className="graph-legend" aria-hidden="true">
+              {[...new Set(nodes.map((n) => n.connector))].sort().map((c) => (
+                <span key={c}>
+                  <b style={{ background: CONNECTOR_COLOR[c] ?? "#8a8f99" }} /> {c}
+                </span>
+              ))}
               <span>
                 <i /> static
               </span>
@@ -375,11 +543,43 @@ export function LiveGraph() {
 
           <aside className="node-panel panel" aria-live="polite">
             {!selNode ? (
-              <p style={{ fontSize: 14, color: "var(--ink-soft)" }}>
-                Select a node to see what depends on it. The ripple&rsquo;s opacity is the
-                impact score — darker is worse. Dependencies sink left, dependents rise
-                right.
-              </p>
+              <>
+                <p style={{ fontSize: 14, color: "var(--ink-soft)" }}>
+                  Select a node to see what depends on it. The ripple&rsquo;s opacity is
+                  the impact score — darker is worse. Dependencies sink left, dependents
+                  rise right.
+                </p>
+                <div className="node-panel__section">
+                  <h3>Start with the heavy ones</h3>
+                  {nodes
+                    .slice()
+                    .sort(
+                      (a, b) =>
+                        b.criticality - a.criticality || a.name.localeCompare(b.name),
+                    )
+                    .slice(0, 3)
+                    .map((n) => (
+                      <button
+                        key={n.id}
+                        type="button"
+                        className="node-suggest"
+                        onClick={() => setSelected(n.id)}
+                        data-testid={`graph-suggest-${n.id}`}
+                      >
+                        <span
+                          className="node-suggest__dot"
+                          style={{
+                            background: CONNECTOR_COLOR[n.connector] ?? "#8a8f99",
+                          }}
+                        />
+                        <span className="node-suggest__name">{n.name}</span>
+                        <span className="node-suggest__crit">
+                          {n.criticality.toFixed(1)}
+                        </span>
+                      </button>
+                    ))}
+                </div>
+              </>
             ) : (
               <>
                 <div className="node-panel__kind">
@@ -421,6 +621,14 @@ export function LiveGraph() {
                           </div>
                         );
                       })}
+                    <Link
+                      href="/app/simulate"
+                      className="btn btn--ink btn--small"
+                      style={{ marginTop: 12, width: "100%", justifyContent: "center" }}
+                      data-testid="graph-simulate-cta"
+                    >
+                      Dry-run a change here
+                    </Link>
                   </div>
                 )}
 
