@@ -137,6 +137,14 @@ function AuthFormInner({ mode }: { mode: "signin" | "signup" }) {
               </p>
             )}
 
+            {isSignup && (
+              <p className="auth__legal">
+                Creating an account means you accept our <a href="/legal/terms">Terms</a>{" "}
+                and <a href="/legal/privacy">Privacy policy</a>. Sadhak is free during
+                beta, and both pages say plainly what has not been reviewed yet.
+              </p>
+            )}
+
             {!isSignup && (
               <p className="auth__notice" role="note">
                 Seeded demo account (<code>pnpm seed</code>):{" "}

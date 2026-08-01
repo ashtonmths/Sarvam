@@ -1953,3 +1953,473 @@ button {
     border-bottom: none;
   }
 }
+
+/* ---------------------------------------------------------------- legal
+   The four legal pages. Long-form prose, read once, carefully, by someone
+   deciding whether to trust us with credentials — so the priorities here are
+   a comfortable measure and scannable structure, not visual interest. */
+
+.legal__hero {
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  padding: 72px 0 44px;
+}
+
+.legal__title {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4.6vw, 3rem);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  margin: 14px 0 0;
+}
+
+.legal__summary {
+  max-width: 62ch;
+  margin: 14px 0 0;
+  color: var(--ink-soft);
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.legal__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.legal__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--ink-faint);
+}
+
+.legal__chip strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.legal__chip--link {
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.legal__chip--link:hover {
+  border-color: var(--thread);
+  color: var(--thread);
+}
+
+.legal__grid {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 56px;
+  align-items: start;
+  padding-top: 52px;
+  padding-bottom: 88px;
+}
+
+.legal__toc {
+  position: sticky;
+  top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.legal__toc nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-left: 1px solid var(--line);
+}
+
+.legal__toc-title {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.legal__toc-link {
+  padding: 6px 0 6px 14px;
+  margin-left: -1px;
+  border-left: 1px solid transparent;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  line-height: 1.35;
+  text-decoration: none;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.legal__toc-link:hover {
+  color: var(--ink);
+  border-left-color: var(--thread);
+}
+
+.legal__body {
+  max-width: 68ch;
+}
+
+/* The review status. Deliberately not styled as an error — a beta publishing
+   templates with counsel review pending is honest, and dressing it up as a
+   warning would misrepresent it in the other direction. */
+.legal__notice {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+  margin-bottom: 40px;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.legal__notice strong {
+  font-weight: 600;
+}
+
+.legal__section + .legal__section {
+  margin-top: 40px;
+}
+
+.legal__h2 {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin: 0 0 14px;
+  scroll-margin-top: 24px;
+}
+
+.legal__section {
+  scroll-margin-top: 24px;
+}
+
+.legal__anchor {
+  position: absolute;
+  left: -22px;
+  color: var(--line);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.legal__anchor:focus-visible {
+  opacity: 1;
+}
+
+.legal__h2:hover .legal__anchor {
+  opacity: 1;
+}
+
+.legal__body p {
+  margin: 0 0 14px;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  line-height: 1.68;
+}
+
+.legal__body p strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.legal__body ul {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  line-height: 1.68;
+}
+
+.legal__body li {
+  margin-bottom: 8px;
+}
+
+.legal__body li::marker {
+  color: var(--ink-faint);
+}
+
+.legal__body a {
+  color: var(--thread);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.legal__body code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.legal__table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  margin: 0 0 20px;
+}
+
+.legal__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  min-width: 560px;
+}
+
+.legal__table th {
+  text-align: left;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.legal__table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-soft);
+  line-height: 1.55;
+  vertical-align: top;
+}
+
+.legal__table tr:last-child td {
+  border-bottom: none;
+}
+
+.legal__table td strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.legal__footnote {
+  margin-top: 48px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+/* A claim that mirrors a specific guarantee in the code. Kept visually
+   distinct because these are the lines a security review will test. */
+.legal__pledge {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--approve);
+  background: var(--approve-soft);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin: 0 0 20px;
+  font-size: 0.94rem;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+@media (max-width: 900px) {
+  .legal__grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+    padding-top: 36px;
+  }
+
+  .legal__toc {
+    position: static;
+  }
+
+  .legal__hero {
+    padding: 52px 0 36px;
+  }
+
+  .legal__anchor {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------- danger zone
+   Export and erasure. Set apart from the panels above it because the second
+   control here is the only irreversible action in the product. */
+
+.panel.danger {
+  border-color: color-mix(in srgb, var(--block) 26%, var(--line));
+}
+
+.danger__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.danger__row--last {
+  border-bottom: none;
+  padding-bottom: 4px;
+}
+
+.danger__row > div {
+  max-width: 62ch;
+}
+
+.danger__row strong {
+  font-size: 0.95rem;
+}
+
+.danger__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  max-width: 340px;
+}
+
+.danger__confirm span {
+  font-size: 0.8rem;
+  color: var(--ink-faint);
+}
+
+.danger__confirm code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--ink);
+}
+
+.danger__confirm input {
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.danger__confirm input:focus {
+  outline: none;
+  border-color: var(--block);
+}
+
+.danger__error {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  color: var(--block);
+}
+
+.btn--danger {
+  flex-shrink: 0;
+  background: var(--block);
+  border: 1px solid var(--block);
+  color: #fff;
+  cursor: pointer;
+}
+
+.btn--danger:disabled {
+  background: var(--line);
+  border-color: var(--line);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+@media (max-width: 700px) {
+  .danger__row {
+    flex-direction: column;
+    gap: 14px;
+  }
+}
+
+/* Consent line under the signup button. Small, but it is the first place
+   anyone is asked to accept terms, so it links rather than merely asserts. */
+.auth__legal {
+  margin: 14px 0 0;
+  font-size: 0.79rem;
+  line-height: 1.55;
+  color: var(--ink-faint);
+}
+
+.auth__legal a {
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.auth__legal a:hover {
+  color: var(--thread);
+}
+
+/* ------------------------------------------------------------ beta note
+   On the pricing page, above the tiers. Prices are indicative and the tier
+   limits are not enforced, and the page has to say so where the prices are
+   read rather than in a footnote under them. */
+
+.beta-note {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+  background: var(--warn-soft);
+  border-radius: var(--radius-md);
+  padding: 20px 24px;
+  max-width: 820px;
+}
+
+.beta-note__tag {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.beta-note p {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.beta-note p:last-child {
+  margin-bottom: 0;
+}
+
+.beta-note strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Repeated per column, because someone scanning the grid reads one card and
+   not the paragraph above it. */
+.tier__beta {
+  display: block;
+  margin-top: 10px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}

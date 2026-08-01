@@ -63,6 +63,21 @@ export function Footer() {
                   Create account
                 </Link>
               </div>
+              <div className="footer__col">
+                <span className="footer__col-title">Legal</span>
+                <Link className="footer__link" href="/legal/privacy">
+                  Privacy
+                </Link>
+                <Link className="footer__link" href="/legal/terms">
+                  Terms
+                </Link>
+                <Link className="footer__link" href="/legal/subprocessors">
+                  Subprocessors
+                </Link>
+                <Link className="footer__link" href="/legal/dpa">
+                  DPA
+                </Link>
+              </div>
             </div>
           </div>
 

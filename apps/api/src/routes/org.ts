@@ -234,7 +234,7 @@ orgRoutes.get("/audit", requireCapability("audit:read"), async (c) => {
  * anyone in the org ever made plus the full audit log — a member who can read
  * the graph should not thereby be able to walk out with all of it.
  */
-orgRoutes.get("/export", requireCapability("org:delete"), async (c) => {
+orgRoutes.get("/org/export", requireCapability("org:delete"), async (c) => {
   const orgId = c.get("orgId");
   const payload = await exportOrg(orgId);
 
@@ -252,7 +252,7 @@ orgRoutes.get("/export", requireCapability("org:delete"), async (c) => {
  * Deletes the organisation and everything in it. Irreversible, and gated on
  * typing the org name back rather than on a second button.
  */
-orgRoutes.delete("/", requireCapability("org:delete"), async (c) => {
+orgRoutes.delete("/org", requireCapability("org:delete"), async (c) => {
   const orgId = c.get("orgId");
   const actor = c.get("actor");
   const body = z

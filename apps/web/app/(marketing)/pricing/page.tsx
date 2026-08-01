@@ -91,7 +91,31 @@ export default function PricingPage() {
             </div>
           </section>
 
-          <section style={{ paddingTop: 40 }}>
+          {/* The page names prices nothing can charge and tier limits nothing
+              withholds — billing and entitlements are deliberately not built.
+              Leaving that unsaid would be the marketing outrunning the product,
+              on the one page where that does the most damage. */}
+          <section style={{ paddingTop: 28 }}>
+            <div className="beta-note">
+              <span className="beta-note__tag">Open beta</span>
+              <p>
+                <strong>
+                  Everything below is free right now, and the tiers are not enforced.
+                </strong>{" "}
+                There is no billing in the product — no checkout, no card, nothing that
+                could charge you. Every capability listed in every column is available to
+                every account today, including the gate and unlimited critical nodes.
+              </p>
+              <p>
+                The prices are <strong>indicative</strong>: what we intend to charge when
+                enforcement ships, published early so you can tell us now if the shape is
+                wrong. Nobody is grandfathered into a plan that does not exist yet, and we
+                will not start charging an existing account without asking first.
+              </p>
+            </div>
+          </section>
+
+          <section style={{ paddingTop: 12 }}>
             <div className="tiers">
               {TIERS.map((tier) => (
                 <div
@@ -116,6 +140,7 @@ export default function PricingPage() {
                   >
                     {tier.cta.label}
                   </Link>
+                  <span className="tier__beta">Free during beta</span>
                 </div>
               ))}
             </div>

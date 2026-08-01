@@ -37,7 +37,17 @@ import { NotFoundError } from "../errors.js";
  * while helping nobody reading it.
  */
 
-/** Reads the whole org. Not paginated — this is a deliberate one-shot dump. */
+/**
+ * Reads the whole org. Not paginated — this is a deliberate one-shot dump.
+ *
+ * It buffers everything in memory and serializes in one pass, which is fine at
+ * the scale this runs at today and will not be forever: the demo org alone
+ * returns eight thousand verdicts, and verdicts are the table that grows
+ * without bound. When an export starts costing real memory the fix is to
+ * stream it as NDJSON per section rather than to paginate it, because a
+ * portability export that arrives in pages is not one document and stops being
+ * useful for the thing people want it for.
+ */
 export async function exportOrg(orgId: number) {
   const [org] = await db
     .select()
