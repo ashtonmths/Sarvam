@@ -141,8 +141,15 @@ export async function getCredential(
  * Reflex keeps the Airtable webhook MAC secret and the n8n hook secret on the
  * same instance and the same scope as the API key. They are secrets we verify
  * *incoming* signatures with, never something to authenticate outbound with.
+ *
+ * `n8n_user_password` is here for a sharper reason. Auto-provisioning stores
+ * the generated n8n login next to that instance's API key, and both are read
+ * scope on the same instance. Without this entry the precedence sort could
+ * hand the crawler the password — which it would then send as
+ * `X-N8N-API-KEY`, putting a live password in an upstream header and failing
+ * the crawl while looking like an auth error.
  */
-const NON_AUTH_KINDS: string[] = ["webhook_secret", "hook_secret"];
+const NON_AUTH_KINDS: string[] = ["webhook_secret", "hook_secret", "n8n_user_password"];
 
 /**
  * Preferred order when an instance legitimately holds more than one way to
