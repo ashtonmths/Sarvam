@@ -3,6 +3,8 @@ import { z } from "zod";
 import { verifyApiKey } from "../auth/api-keys.js";
 import { ForbiddenError, UnauthorizedError, UserError } from "../errors.js";
 import {
+  askDocs,
+  askDocsInput,
   getNode,
   type McpContext,
   nodeRefInput,
@@ -66,6 +68,25 @@ const TOOLS = [
         externalId: { type: "string" },
       },
       required: ["connector", "externalId"],
+    },
+  },
+  {
+    // The other three tools need an exact node identifier, which is the wrong
+    // shape for "why did we do it this way" — the questions whose answer is in
+    // a meeting note nobody can name. This one takes the question itself.
+    name: "ask_docs",
+    description:
+      "Ask a question in plain English about this organisation's decisions, systems and history, and get an answer drawn only from its own documents — meeting notes, transcripts and handovers — with a citation link for every claim. Use this when you need context you do not have, when you need to know why something is the way it is, or before assuming an answer. Says so plainly when the documents do not cover it; treat that as the answer rather than filling the gap yourself.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        question: {
+          type: "string",
+          description:
+            'A specific question in prose, e.g. "why did we stop syncing the vat_rate field?". Retrieval is hybrid lexical and semantic, so exact identifiers and descriptions of them both work.',
+        },
+      },
+      required: ["question"],
     },
   },
 ];
@@ -165,6 +186,13 @@ async function callTool(name: string, args: Record<string, unknown>, ctx: McpCon
     case "get_node": {
       requireScope(ctx, "graph:read");
       return getNode(ctx, nodeRefInput.parse(args));
+    }
+    case "ask_docs": {
+      // The same capability `POST /ask` requires, and for the same reason: it
+      // answers only from chunks a `graph:read` caller could already open by
+      // hand, and every claim carries the link to do so.
+      requireScope(ctx, "graph:read");
+      return askDocs(ctx, askDocsInput.parse(args));
     }
     default:
       throw new UserError(`Unknown tool: ${name}`);

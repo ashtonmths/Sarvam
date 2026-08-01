@@ -8,6 +8,7 @@ import { changeDescriptorSchema, type VerdictResult } from "@sadhak/shared/types
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db.js";
+import { type AskAnswer, askDocuments } from "../documents/ask.js";
 import { decide } from "../gate/decide.js";
 import { blastRadius, resolveNode } from "../sentinel/verdict.js";
 
@@ -25,6 +26,13 @@ export const proposeChangeInput = z.object({
 export const nodeRefInput = z.object({
   connector: z.enum(["n8n", "airtable", "postgres", "github", "slack"]),
   externalId: z.string().min(1),
+});
+
+/** The same bounds as `POST /ask`, for the same reasons: below three
+ * characters there is nothing to retrieve on, and above five hundred the
+ * caller is pasting a document rather than asking about one. */
+export const askDocsInput = z.object({
+  question: z.string().min(3).max(500),
 });
 
 export interface McpContext {
@@ -76,6 +84,82 @@ export function renderVerdictText(result: VerdictResult, dryRun: boolean): strin
   }
 
   return lines.join("\n");
+}
+
+/**
+ * The answer as an agent reads it.
+ *
+ * The permalinks are the load-bearing part. An agent relaying this to a human
+ * is the only thing standing between "the notes say X" and a person able to
+ * check whether they do, and a summary of a summary with the links stripped is
+ * unfalsifiable by the time it reaches them. So every source is listed with its
+ * URL, whether or not the model cited it — the same rule the REST route
+ * follows.
+ *
+ * The unsupported and no-sources cases are stated as answers rather than
+ * errors, because they are. An agent handed "no sources" as a tool failure
+ * retries, then starts filling the gap from its own background knowledge about
+ * organisations in general, which is precisely the fabrication the grounding
+ * prompt exists to prevent.
+ */
+export function renderAskText(answer: AskAnswer, question: string): string {
+  if (answer.sources.length === 0) return answer.answer;
+
+  const lines: string[] = [];
+  if (answer.unavailable) {
+    lines.push(answer.unavailable);
+    lines.push(
+      "",
+      `No answer was written. Read the passages below and answer from them, or tell your human the model is unavailable. Do not answer "${question}" from your own knowledge.`,
+    );
+  } else {
+    lines.push(answer.answer);
+  }
+
+  lines.push("", "Sources:");
+  for (const source of answer.sources) {
+    const when = source.occurredAt
+      ? source.occurredAt.toISOString().slice(0, 10)
+      : "undated";
+    const who = source.speaker ? `, ${source.speaker}` : "";
+    lines.push(`  [${source.n}] ${source.title} (${when}${who}) ${source.permalink}`);
+    lines.push(`      ${source.excerpt.replace(/\s+/g, " ")}`);
+  }
+
+  lines.push(
+    "",
+    "Every claim above comes from these passages and nothing else. Keep the citations when you relay this.",
+  );
+
+  return lines.join("\n");
+}
+
+/**
+ * Ask a question in prose and get an answer grounded in this org's documents.
+ *
+ * Hybrid retrieval — lexical and vector, fused by rank — then a model that is
+ * only allowed to speak from what it retrieved. The agent gets prose plus the
+ * links, so it never has to guess and its human never has to take its word.
+ */
+export async function askDocs(ctx: McpContext, input: z.infer<typeof askDocsInput>) {
+  const answer = await askDocuments(ctx.orgId, input.question);
+
+  return {
+    structured: {
+      answer: answer.answer,
+      grounded: answer.grounded,
+      unavailable: answer.unavailable ?? null,
+      sources: answer.sources.map((source) => ({
+        n: source.n,
+        title: source.title,
+        speaker: source.speaker,
+        permalink: source.permalink,
+        occurred_at: source.occurredAt?.toISOString() ?? null,
+        excerpt: source.excerpt,
+      })),
+    },
+    text: renderAskText(answer, input.question),
+  };
 }
 
 export async function proposeChange(
