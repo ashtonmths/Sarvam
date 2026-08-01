@@ -79,6 +79,16 @@ export const GOLDEN_CASES: GoldenCase[] = [
     ],
   },
   {
+    name: "total-exactly-at-warn",
+    pins:
+      "Total impact exactly at WARN_TOTAL_IMPACT warns. The boundary is " +
+      "inclusive, and mutation testing found nothing pinned it — >= and > " +
+      "behaved identically against the whole suite. One row, not two summing " +
+      "to 0.3: 0.2 + 0.1 is 0.30000000000000004, which is already past the " +
+      "boundary, so the first attempt at this case did not test it either.",
+    rows: [row({ nodeId: 1, impact: 0.3 })],
+  },
+  {
     name: "total-just-below-warn",
     pins: "0.29 total stays APPROVE. Warning on everything is warning on nothing.",
     rows: [row({ nodeId: 1, impact: 0.15 }), row({ nodeId: 2, impact: 0.14 })],

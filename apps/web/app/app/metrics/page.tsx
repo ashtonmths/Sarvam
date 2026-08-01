@@ -1,8 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { StackedSeries } from "../../../components/app/series";
 import { PageHead } from "../../../components/app/ui";
-import type { GraphStats, MetricsSummary, Percentiles } from "../../../lib/api";
+import type {
+  GraphStats,
+  MetricsSummary,
+  Percentiles,
+  SeriesResponse,
+} from "../../../lib/api";
 import { useQuery } from "../../../lib/queries";
 
 /**
@@ -67,6 +73,9 @@ function Latency({
 export default function MetricsPage() {
   const metrics = useQuery<MetricsSummary>("/api/metrics/summary");
   const stats = useQuery<GraphStats>("/api/graph/stats");
+  const blocked = useQuery<SeriesResponse>("/api/metrics/series/gate_blocked");
+  const warned = useQuery<SeriesResponse>("/api/metrics/series/gate_warned");
+  const approved = useQuery<SeriesResponse>("/api/metrics/series/gate_approved");
 
   const m = metrics.data;
   const confirmedPct = Math.round((m?.coverageConfirmed ?? 0) * 100);
@@ -157,6 +166,30 @@ export default function MetricsPage() {
           </em>
         </div>
       </div>
+
+      <section className="panel" style={{ marginBottom: 16 }}>
+        <h2 className="panel__title">What the gate decided, by day</h2>
+        <p className="panel__caption">
+          Enforced decisions only — a dry run is a question, not an enforcement, and
+          counting simulations here would inflate every bar.
+        </p>
+        <StackedSeries
+          emptyLabel="No decisions recorded yet. Bars appear once the gate has been asked something and the nightly rollup has run."
+          bands={[
+            {
+              label: "blocked",
+              color: "var(--block)",
+              points: blocked.data?.points ?? [],
+            },
+            { label: "warned", color: "var(--warn)", points: warned.data?.points ?? [] },
+            {
+              label: "approved",
+              color: "var(--approve)",
+              points: approved.data?.points ?? [],
+            },
+          ]}
+        />
+      </section>
 
       <div className="panel-grid panel-grid--2">
         <section className="panel">

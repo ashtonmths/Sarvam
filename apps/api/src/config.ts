@@ -51,6 +51,21 @@ const Env = z.object({
    * limit rejections are not things to publish to anyone who asks.
    */
   METRICS_TOKEN: z.string().min(16).optional(),
+  /**
+   * OTLP collector base URL, e.g. `http://tempo:4318`. Absent ⇒ the tracing
+   * SDK never starts and every span is a no-op, rather than batching into a
+   * socket nobody is holding.
+   */
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+
+  /**
+   * The image's commit sha, baked in at build time. Absent in dev, where the
+   * running code is whatever is on disk and no sha would describe it honestly.
+   * Tags log lines and trace spans, so "which build produced this" is
+   * answerable from a single line rather than by matching timestamps against a
+   * deploy log.
+   */
+  GIT_SHA: z.string().optional(),
 
   // boot-required
   DATABASE_URL: z.string().url(),

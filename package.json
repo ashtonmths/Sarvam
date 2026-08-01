@@ -14,7 +14,9 @@
     "test:int": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "test:goldens": "vitest run apps/api/src/sentinel/score.goldens.test.ts",
+    "test:mutation": "stryker run",
     "test:load": "node tests/load/gate.mjs",
+    "eval:triage": "pnpm --filter @sadhak/api exec tsx src/reviewer/evals/run.ts",
     "lint": "biome ci .",
     "lint:fix": "biome check --write .",
     "seed": "pnpm --filter @sadhak/api seed",
@@ -23,11 +25,15 @@
     "db:migrate": "pnpm --filter @sadhak/api db:migrate",
     "db:studio": "pnpm --filter @sadhak/api db:studio",
     "check:env": "tsx scripts/check-env-example.ts",
-    "check:docs": "tsx scripts/check-docs-honesty.ts"
+    "check:docs": "tsx scripts/check-docs-honesty.ts",
+    "docs:api": "tsx scripts/generate-api-reference.ts",
+    "check:api": "tsx scripts/generate-api-reference.ts --check"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",
     "@playwright/test": "^1.62.0",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/node": "^22.10.0",
     "fast-check": "^4.9.0",
     "tsx": "^4.19.0",

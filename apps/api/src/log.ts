@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { type Logger, pino } from "pino";
 import { config, isProd } from "./config.js";
+import { currentTraceId } from "./tracing.js";
 
 /**
  * One logger, JSON on stdout, correlated by request id.
@@ -20,6 +21,7 @@ import { config, isProd } from "./config.js";
 
 export interface LogContext {
   requestId?: string;
+  /** Present only when a collector is configured. Joins logs to spans. */
   orgId?: number;
   jobId?: number;
   actor?: string;
@@ -69,7 +71,9 @@ export const baseLogger = pino({
   // `time` over pino's default epoch `t`: these lines are read by humans in a
   // terminal at least as often as by a log shipper.
   timestamp: pino.stdTimeFunctions.isoTime,
-  base: isProd ? { service: "sadhak-api" } : {},
+  base: isProd
+    ? { service: "sadhak-api", ...(config.GIT_SHA ? { version: config.GIT_SHA } : {}) }
+    : {},
   formatters: {
     level: (label) => ({ level: label }),
   },
@@ -81,7 +85,14 @@ export const baseLogger = pino({
  */
 export function log(): Logger {
   const context = store.getStore();
-  return context ? baseLogger.child(context) : baseLogger;
+  // Resolved here rather than stored: the active span changes over the life of
+  // a request, and a trace id captured when the context opened would name
+  // whatever was active then — usually nothing, since the request context is
+  // opened before the server span exists. Read at write time it is always the
+  // span the line is actually about.
+  const traceId = currentTraceId();
+  if (!context && !traceId) return baseLogger;
+  return baseLogger.child({ ...context, ...(traceId ? { traceId } : {}) });
 }
 
 /** Runs `fn` with `context` attached to every log line it produces. */

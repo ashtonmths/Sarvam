@@ -956,6 +956,33 @@ export const driftFindings = pgTable(
   ],
 );
 
+/**
+ * Daily metric snapshots, so a series survives the events that produced it
+ * being pruned — and so a dashboard reads one row per day rather than
+ * re-aggregating every incident on every page load.
+ *
+ * Recomputed idempotently over a trailing window rather than appended: every
+ * input is an immutable event table, so a late-arriving webhook self-heals on
+ * the next run instead of leaving a permanently wrong day.
+ */
+export const metricRollups = pgTable(
+  "metric_rollups",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** UTC date. Local days would shift the series when a customer travels. */
+    day: date("day").notNull(),
+    metric: text("metric").notNull(),
+    value: numeric("value").notNull(),
+    /** p95 beside a median, sample counts — whatever the metric needs. */
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("metric_rollups_identity").on(t.orgId, t.day, t.metric)],
+);
+
 /* ------------------------------------------------------- inferred types */
 
 /** The persisted row. `Verdict` in types.ts is the APPROVE|WARN|BLOCK union. */
@@ -984,4 +1011,5 @@ export type Job = typeof jobs.$inferSelect;
 export type Crawl = typeof crawls.$inferSelect;
 export type StructuralHash = typeof structuralHashes.$inferSelect;
 export type DriftFinding = typeof driftFindings.$inferSelect;
+export type MetricRollup = typeof metricRollups.$inferSelect;
 export type NewDriftFinding = typeof driftFindings.$inferInsert;

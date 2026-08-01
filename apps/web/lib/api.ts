@@ -318,6 +318,19 @@ export interface MetricsSummary {
   incidentsAvoidedModelled: { value: number; modelled: true } | null;
 }
 
+export interface SeriesPoint {
+  day: string;
+  value: number;
+  meta: Record<string, unknown> | null;
+}
+
+export interface SeriesResponse {
+  metric: string;
+  from: string;
+  to: string;
+  points: SeriesPoint[];
+}
+
 export interface DriftSummary {
   open: number;
   investigating: number;

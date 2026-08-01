@@ -10,6 +10,7 @@ import { purgeStaleCounters } from "../http/rate-limit.js";
 import { log } from "../log.js";
 import { pollN8nWorkflows } from "../reflex/detect-n8n.js";
 import { getIncident, recordVerdict } from "../reflex/incidents.js";
+import { rollupDaily } from "../reviewer/rollup.js";
 import { runDriftTick } from "../reviewer/run-tick.js";
 import { triageFinding } from "../reviewer/triage.js";
 import {
@@ -396,6 +397,26 @@ export function registerJobHandlers(): void {
     },
     { timeoutMs: 120_000, maxAttempts: 1 },
   );
+
+  /**
+   * Nightly metric snapshots. Recomputes a trailing window rather than
+   * appending one day, so a late-arriving webhook self-heals instead of
+   * leaving a permanently wrong point on the chart.
+   */
+  registerHandler("metrics.rollup_daily", async (_payload, ctx) => {
+    if (!ctx.orgId) return;
+    await rollupDaily(ctx.orgId);
+    await enqueue(
+      "metrics.rollup_daily",
+      {},
+      {
+        orgId: ctx.orgId,
+        runAfter: new Date(Date.now() + 24 * 60 * 60_000),
+        dedupeKey: `metrics.rollup_daily:${ctx.orgId}`,
+        excludeJobId: ctx.jobId,
+      },
+    );
+  });
 
   /** Exhaust, pruned on a schedule. Rationale is never touched by retention. */
   registerHandler("retention.prune_sessions", async () => {

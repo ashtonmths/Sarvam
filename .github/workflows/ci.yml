@@ -40,6 +40,11 @@ jobs:
       - name: Docs make no claim this product cannot support
         run: pnpm check:docs
 
+      # A reference that lies is worse than none: a caller builds against it
+      # and finds out at runtime.
+      - name: API reference matches the routes
+        run: pnpm check:api
+
   # Supply chain. This repository holds read credentials to other people's
   # production systems, so a leaked key here is not a repository problem.
   security:
@@ -190,6 +195,30 @@ jobs:
 
       - name: E2E
         run: pnpm test:e2e
+
+      # DAST against the stack this job already stands up. A baseline scan
+      # (passive: it crawls and inspects responses, it does not attack) is the
+      # honest level for a pipeline gate — an active scan against an ephemeral
+      # container mostly produces findings about the container.
+      #
+      # Non-blocking on purpose, for now. A scanner wired to fail the build on
+      # its first run is a scanner someone disables that afternoon; the report
+      # is uploaded so the findings get read and triaged into the threat model
+      # before it is given teeth.
+      - name: DAST baseline scan
+        continue-on-error: true
+        run: |
+          docker run --rm --network host \
+            -v "$PWD/dast:/zap/wrk/:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://localhost:3000 -I -r report.html || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dast-report
+          path: dast/
+          retention-days: 14
 
       - uses: actions/upload-artifact@v4
         if: failure()

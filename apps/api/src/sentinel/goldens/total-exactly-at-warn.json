@@ -1,0 +1,12 @@
+{
+  "pins": "Total impact exactly at WARN_TOTAL_IMPACT warns. The boundary is inclusive, and mutation testing found nothing pinned it — >= and > behaved identically against the whole suite. One row, not two summing to 0.3: 0.2 + 0.1 is 0.30000000000000004, which is already past the boundary, so the first attempt at this case did not test it either.",
+  "verdict": "WARN",
+  "evidence": [
+    {
+      "rule": "total impact 0.30 >= 0.3",
+      "nodeId": -1,
+      "name": "1 downstream nodes",
+      "impact": 0.3
+    }
+  ]
+}

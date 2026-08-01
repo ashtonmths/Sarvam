@@ -13,6 +13,7 @@ import { parsePagination } from "../http/pagination.js";
 import { requireCapability } from "../middleware/auth.js";
 import { backtest } from "../reviewer/backtest.js";
 import { computeMetrics } from "../reviewer/metrics.js";
+import { series } from "../reviewer/rollup.js";
 
 export const reviewerRoutes = new Hono();
 
@@ -126,6 +127,24 @@ reviewerRoutes.get("/metrics/summary", requireCapability("graph:read"), async (c
 reviewerRoutes.get("/metrics/backtest", requireCapability("graph:read"), async (c) => {
   return c.json(await backtest(c.get("orgId")));
 });
+
+/** One metric over a window, oldest first. Empty until a rollup has run. */
+reviewerRoutes.get(
+  "/metrics/series/:metric",
+  requireCapability("graph:read"),
+  async (c) => {
+    const to = c.req.query("to") ?? new Date().toISOString().slice(0, 10);
+    const fromDefault = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);
+    const from = c.req.query("from") ?? fromDefault;
+
+    return c.json({
+      metric: c.req.param("metric"),
+      from,
+      to,
+      points: await series(c.get("orgId"), c.req.param("metric"), from, to),
+    });
+  },
+);
 
 const resolvable = ["open", "investigating"] as const;
 

@@ -12,3 +12,12 @@ next-env.d.ts
 # Playwright
 test-results/
 playwright-report/
+
+# DAST output — the README is tracked, the reports are artifacts
+dast/*.html
+dast/*.json
+dast/*.md.bak
+
+# Stryker
+reports/
+.stryker-tmp/
