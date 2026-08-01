@@ -96,7 +96,7 @@ export default function DriftPage() {
         title="Drift"
         sub={
           stats ? (
-            <>
+            <span data-testid="drift-summary">
               <strong>
                 {stats.open} finding{stats.open === 1 ? "" : "s"} to review
               </strong>{" "}
@@ -105,7 +105,7 @@ export default function DriftPage() {
               {stats.lastCheckedAt
                 ? ` · last checked ${timeAgo(stats.lastCheckedAt)}`
                 : ""}
-            </>
+            </span>
           ) : (
             "What the live systems say, against what the map recorded."
           )

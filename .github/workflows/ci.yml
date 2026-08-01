@@ -129,6 +129,70 @@ jobs:
       - name: Integration tests
         run: pnpm test:int
 
+  # The product spine through a real browser. Slow and the flakiest tier, so it
+  # stays small: only the joins no lower layer can see — a route that renders
+  # but never fetches, a session the browser rejects, a verdict that returns
+  # 200 and paints nothing.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: sadhak
+          POSTGRES_PASSWORD: sadhak
+          POSTGRES_DB: sadhak
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sadhak"
+          --health-interval 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://sadhak:sadhak@localhost:5432/sadhak
+      CREDENTIAL_MASTER_KEY: v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      # No model provider in CI. The spine must not need one — the verdict path
+      # imports no model, and this proves it rather than assuming it.
+      LLM_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the browser
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Migrate and seed
+        run: |
+          pnpm db:migrate
+          pnpm seed
+
+      - name: Build web
+        run: pnpm --filter @sadhak/web build
+
+      - name: Start the stack
+        run: |
+          pnpm --filter @sadhak/api start &
+          pnpm --filter @sadhak/web start &
+          npx --yes wait-on http://localhost:3001/healthz http://localhost:3000 -t 90000
+
+      - name: E2E
+        run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
+
   # Every migration, from zero, on real pgvector — so a bad migration is caught
   # on a Tuesday rather than at container boot in production.
   migrate-check:
@@ -193,7 +257,7 @@ jobs:
   images:
     # Build once, on main only. Pull requests are covered by check and docker.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [check, lint, security, migrate-check, integration]
+    needs: [check, lint, security, migrate-check, integration, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

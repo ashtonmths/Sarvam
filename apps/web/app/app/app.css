@@ -2435,3 +2435,70 @@
 .spark-strip i.hot {
   background: var(--thread);
 }
+
+/* ------------------------------------------------------------- latency */
+
+/* Three across on desktop, stacking rather than shrinking below 720px: these
+   are numbers people read, and a squeezed numeral is worse than a scroll. */
+.lat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin: 16px 0 4px;
+}
+
+@media (max-width: 720px) {
+  .lat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+
+.lat__label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.lat__value {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* An unmeasured latency is set in the body face at body size, so it reads as
+   a sentence rather than as a number. Styling "not yet measured" like a
+   measurement is how a dashboard implies data it does not have. */
+.lat__value--empty {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+.lat__hint {
+  font-size: 12px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.lat__hint strong {
+  font-weight: 600;
+  color: var(--ink-soft);
+}

@@ -38,7 +38,16 @@ export interface PinnedFetchInit {
   method?: string;
   body?: string;
   signal?: AbortSignal;
+  /** Hard ceiling for this call. No outbound request inherits "wait forever". */
+  timeoutMs?: number;
 }
+
+/**
+ * Default ceiling for a provider call. Generous, because a large Airtable base
+ * genuinely takes time to enumerate, and low enough that a hung provider costs
+ * a crawl rather than a worker slot held until the process restarts.
+ */
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
  * Validates the URL, then fetches it against the validated addresses. The
@@ -57,12 +66,21 @@ export async function pinnedFetch(
   // than by the agent: a redirect is a second URL that the guard never saw.
   const agent = new Agent({ connect: { lookup: pinnedLookup(addresses) } });
 
+  /**
+   * The caller's signal and the timeout both have to be able to abort this,
+   * so they are combined rather than one winning. Without the timeout a
+   * provider that accepts a connection and never answers holds a job slot
+   * until the process restarts.
+   */
+  const timeout = AbortSignal.timeout(init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+
   try {
     const response = await undiciFetch(target, {
       ...(init.method ? { method: init.method } : {}),
       ...(init.headers ? { headers: init.headers } : {}),
       ...(init.body ? { body: init.body } : {}),
-      ...(init.signal ? { signal: init.signal } : {}),
+      signal,
       dispatcher: agent,
       redirect: "error",
     });

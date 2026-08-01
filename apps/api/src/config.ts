@@ -100,6 +100,12 @@ const Env = z.object({
   JOBS_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(4),
   JOBS_POLL_MS: z.coerce.number().int().min(200).max(60_000).default(2_000),
   JOBS_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(45_000),
+  /**
+   * How long to keep serving after readiness flips to 503, so the proxy has
+   * time to notice and stop routing. Must exceed two of its health intervals
+   * or a redeploy drops the requests still in flight toward us.
+   */
+  DRAIN_DELAY_MS: z.coerce.number().int().min(0).max(30_000).default(8_000),
 
   // pools (plan 3)
   PG_POOL_WEB: z.coerce.number().int().min(1).max(50).default(10),

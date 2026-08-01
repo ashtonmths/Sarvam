@@ -1,4 +1,5 @@
 import type { Context, MiddlewareHandler } from "hono";
+import { SESSION_COOKIE } from "../auth/session.js";
 import { config } from "../config.js";
 import { sql } from "../db.js";
 import { RateLimitedError } from "../errors.js";
@@ -151,17 +152,56 @@ function deny(decision: LimitDecision): never {
 }
 
 /**
- * Per-IP, before authentication. Auth routes get the tighter budget because
- * that is where guessing a password is worth someone's time.
+ * Routes where a request *offers a credential*, and where guessing is worth an
+ * attacker's time. These get the tight budget.
+ *
+ * Scoped to exact paths rather than the `/api/auth/` prefix, because the prefix
+ * also contains session *reads*. `/api/auth/me` is called on every page load,
+ * so putting it on a 10/min budget logged a real user out after eleven page
+ * views — a lockout caused by the defence, not by an attack. Found by the e2e
+ * suite, which was the first thing to navigate like a person does.
+ */
+/**
+ * How much more per-IP headroom a request presenting a credential gets. Ten is
+ * enough that a person clicking through the app never notices, and low enough
+ * that forged cookies remain a bounded way to buy budget.
+ */
+const CREDENTIALED_IP_MULTIPLIER = 10;
+
+export const CREDENTIAL_ROUTES = new Set(["/api/auth/signin", "/api/auth/signup"]);
+
+/**
+ * Per-IP, before authentication. Credential attempts get the tighter budget;
+ * everything else, session reads included, gets the general one.
  */
 export const ipRateLimit: MiddlewareHandler = async (c, next) => {
   if (!config.RATE_LIMIT_ENABLED || isExempt(c)) return next();
 
-  const isAuthRoute = c.req.path.startsWith("/api/auth/");
-  const limit = isAuthRoute
+  const isCredentialAttempt = CREDENTIAL_ROUTES.has(c.req.path);
+
+  /**
+   * The per-IP tier exists to refuse *unauthenticated* floods without paying a
+   * database round trip. A caller presenting a credential is governed by the
+   * per-key and per-org tiers below, which are the budgets we actually quote —
+   * holding them to 60/min as well meant one signed-in person browsing quickly
+   * was throttled at a twentieth of their org's stated 1,200/min.
+   *
+   * Presenting a credential is not the same as having a valid one, so this is
+   * a raised ceiling rather than an exemption: garbage credentials still cost
+   * an attacker the IP budget, just a larger one, and `requireAuth` rejects
+   * them a moment later.
+   */
+  const presentsCredential =
+    c.req.header("x-api-key") !== undefined ||
+    c.req.header("authorization") !== undefined ||
+    c.req.header("cookie")?.includes(SESSION_COOKIE) === true;
+
+  const limit = isCredentialAttempt
     ? config.RATE_LIMIT_AUTH_PER_MIN
-    : config.RATE_LIMIT_IP_PER_MIN;
-  const tier = isAuthRoute ? "auth" : "ip";
+    : presentsCredential
+      ? config.RATE_LIMIT_IP_PER_MIN * CREDENTIALED_IP_MULTIPLIER
+      : config.RATE_LIMIT_IP_PER_MIN;
+  const tier = isCredentialAttempt ? "auth" : presentsCredential ? "ip_authed" : "ip";
 
   const decision = hitMemory(`${tier}:${clientIp(c)}`, limit);
   record(tier, decision);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { hitMemory, resetMemoryBuckets } from "./rate-limit.js";
+import { CREDENTIAL_ROUTES, hitMemory, resetMemoryBuckets } from "./rate-limit.js";
 
 /**
  * The in-process tier, which is the one that can be tested without a database.
@@ -72,5 +72,26 @@ describe("hitMemory", () => {
   it("treats a limit of one as one request, not two", () => {
     expect(hitMemory("ip:1.2.3.4", 1).allowed).toBe(true);
     expect(hitMemory("ip:1.2.3.4", 1).allowed).toBe(false);
+  });
+});
+
+describe("which routes get the tight credential budget", () => {
+  it("covers the routes that accept a password", () => {
+    expect(CREDENTIAL_ROUTES.has("/api/auth/signin")).toBe(true);
+    expect(CREDENTIAL_ROUTES.has("/api/auth/signup")).toBe(true);
+  });
+
+  it("excludes session reads, which a normal user hits on every page", () => {
+    // /api/auth/me on a 10/min budget logs a real user out after eleven page
+    // views. That is a lockout caused by the defence rather than by an attack,
+    // and it is the reason this is an exact-path set and not a prefix match.
+    expect(CREDENTIAL_ROUTES.has("/api/auth/me")).toBe(false);
+    expect(CREDENTIAL_ROUTES.has("/api/auth/signout")).toBe(false);
+    expect(CREDENTIAL_ROUTES.has("/api/auth/orgs/switch")).toBe(false);
+  });
+
+  it("matches exactly, so a suffix cannot slip past the tight budget", () => {
+    expect(CREDENTIAL_ROUTES.has("/api/auth/signin/../me")).toBe(false);
+    expect(CREDENTIAL_ROUTES.has("/api/auth/signin2")).toBe(false);
   });
 });

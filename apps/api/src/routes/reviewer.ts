@@ -11,6 +11,7 @@ import { db } from "../db.js";
 import { ConflictError, NotFoundError } from "../errors.js";
 import { parsePagination } from "../http/pagination.js";
 import { requireCapability } from "../middleware/auth.js";
+import { computeMetrics } from "../reviewer/metrics.js";
 
 export const reviewerRoutes = new Hono();
 
@@ -107,6 +108,14 @@ reviewerRoutes.get("/drift/summary", requireCapability("graph:read"), async (c) 
     instancesWatched: watched?.n ?? 0,
     lastCheckedAt: lastChecked?.at ?? null,
   });
+});
+
+/**
+ * The metrics summary. Observable facts only — no counterfactual, no blended
+ * MTTD, and coverage always as two numbers.
+ */
+reviewerRoutes.get("/metrics/summary", requireCapability("graph:read"), async (c) => {
+  return c.json(await computeMetrics(c.get("orgId")));
 });
 
 const resolvable = ["open", "investigating"] as const;

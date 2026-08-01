@@ -292,6 +292,31 @@ export interface DriftFinding {
   instanceName: string;
 }
 
+export interface Percentiles {
+  median: number;
+  p95: number;
+  /** A p95 over three rows is not a p95, so the count travels with it. */
+  samples: number;
+}
+
+/**
+ * Mirrors `Metrics` in @sadhak/shared. Two shapes are deliberate: `mttdMs` is
+ * keyed by detection path so a blended figure cannot be rendered, and anything
+ * modelled carries `modelled: true` so it cannot be shown as an observation.
+ */
+export interface MetricsSummary {
+  revertsExecuted: number;
+  mttdMs: { push: Percentiles | null; poll: Percentiles | null };
+  mttdSkewExcluded: number;
+  mttrMs: Percentiles | null;
+  highImpactReviewed: number;
+  coverageConfirmed: number;
+  coveragePending: number;
+  totalEdges: number;
+  correctionsCaptured: number;
+  incidentsAvoidedModelled: { value: number; modelled: true } | null;
+}
+
 export interface DriftSummary {
   open: number;
   investigating: number;

@@ -148,12 +148,55 @@ export type GateMode = (typeof GATE_MODES)[number];
 
 /* --------------------------------------------------------------- metrics */
 
+export interface Percentiles {
+  median: number;
+  p95: number;
+  /** How many observations back this. A p95 over three rows is not a p95. */
+  samples: number;
+}
+
+/**
+ * Observable facts, with two honesty rules pushed into the type so breaking
+ * them is a compile error rather than a code review someone has to catch.
+ *
+ * 1. **MTTD is per detection path.** Push (a webhook, ~2s) and poll (an
+ *    interval, ~30s) are different mechanisms, and averaging them produces a
+ *    headline number that describes neither. `Record<DetectPath, …>` makes a
+ *    blended figure unrepresentable rather than merely discouraged.
+ *
+ * 2. **Anything modelled says so in its own type.** `modelled: true` is a
+ *    literal, so a surface cannot render `incidentsAvoidedModelled` while
+ *    pretending it is an observation — the label travels with the value.
+ *
+ * Nothing here is self-reported by a model, and nothing improves when the
+ * product degrades.
+ */
+export type DetectPath = "push" | "poll";
+
 export interface Metrics {
+  /** Reverts that ran and the connector confirmed. Not reverts offered. */
   revertsExecuted: number;
-  meanDetectToRevertMs: number | null;
-  highImpactChangesReviewed: number;
-  /** Human authored and source linked only. LLM drafts are counted separately. */
+  /**
+   * detected_at − change_at, per path. `change_at` is the *vendor's* clock, so
+   * this is approximate by construction; rows where the vendor clock is ahead
+   * of ours are skew-flagged and excluded rather than silently swallowed.
+   */
+  mttdMs: Record<DetectPath, Percentiles | null>;
+  /** Rows dropped from mttdMs for clock skew. Reported, never hidden. */
+  mttdSkewExcluded: number;
+  /** reverted_at − alerted_at: how long a human took plus how long we took. */
+  mttrMs: Percentiles | null;
+  /** Non-dry-run WARN or BLOCK decisions: impact surfaced to a human. */
+  highImpactReviewed: number;
+  /** Human authored and source linked only. Never summed with pending. */
   coverageConfirmed: number;
   coveragePending: number;
   totalEdges: number;
+  /** Approved drift corrections and criticality overrides — the compounding asset. */
+  correctionsCaptured: number;
+  /**
+   * The only modelled number. Null until a backtest harness exists to ground
+   * it — an unbacked estimate is worse than an absent one.
+   */
+  incidentsAvoidedModelled: { value: number; modelled: true } | null;
 }

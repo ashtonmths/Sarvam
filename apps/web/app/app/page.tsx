@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { EmptyState, PageHead, VerdictBadge } from "../../components/app/ui";
-import type { DecisionRow, HistorianRun, Page, VerdictName } from "../../lib/api";
+import type {
+  DecisionRow,
+  DriftSummary,
+  HistorianRun,
+  Page,
+  VerdictName,
+} from "../../lib/api";
 import { useGraphStats, useQuery } from "../../lib/queries";
 import { useSession } from "../../lib/session";
 
@@ -45,6 +51,10 @@ export default function OverviewPage() {
   const runs = useQuery<{ items: HistorianRun[] }>(org ? "/api/historian/runs" : null, [
     org?.id,
   ]);
+  // Drift is the other source of work the gate generates, and it is the one
+  // that means the map itself is in dispute — so it belongs beside the agents
+  // rather than only on its own page.
+  const drift = useQuery<DriftSummary>(org ? "/api/drift/summary" : null, [org?.id]);
 
   if (loading) {
     return (
@@ -206,6 +216,52 @@ export default function OverviewPage() {
         </section>
 
         <div className="ogrid__stack">
+          <section className="panel">
+            <h2 className="panel__title">Is the map still true?</h2>
+            <p className="panel__caption">
+              Structure is re-checked every ten minutes per connector, and the check costs
+              no model requests — so it keeps running on a day the quota is spent.
+            </p>
+            {drift.loading ? (
+              <div style={{ height: 56, opacity: 0.4 }} />
+            ) : (drift.data?.open ?? 0) === 0 ? (
+              <p className="dim" style={{ fontSize: 13.5 }}>
+                Nothing in dispute
+                {drift.data?.lastCheckedAt
+                  ? ` — last checked ${timeAgo(drift.data.lastCheckedAt)}`
+                  : ""}
+                .{" "}
+                {(drift.data?.autoDismissed ?? 0) > 0 &&
+                  `${drift.data?.autoDismissed} muted by a judgment you already made.`}
+              </p>
+            ) : (
+              <Link href="/app/drift" className="watch" data-testid="overview-drift">
+                <span className="watch__rank">!</span>
+                <span className="watch__id">
+                  <strong>
+                    {drift.data?.open} finding{drift.data?.open === 1 ? "" : "s"} to
+                    review
+                  </strong>
+                  <span>
+                    the live systems and the map disagree
+                    {drift.data?.lastCheckedAt
+                      ? ` · checked ${timeAgo(drift.data.lastCheckedAt)}`
+                      : ""}
+                  </span>
+                </span>
+                <span
+                  className="tag"
+                  style={{ color: "var(--warn)", borderColor: "var(--warn)" }}
+                >
+                  drift
+                </span>
+              </Link>
+            )}
+            <p className="panel__foot">
+              <Link href="/app/drift">Open the correction queue →</Link>
+            </p>
+          </section>
+
           <section className="panel">
             <h2 className="panel__title">Agents at work</h2>
             <p className="panel__caption">

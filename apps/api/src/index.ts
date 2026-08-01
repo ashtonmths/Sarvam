@@ -2,8 +2,9 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { config } from "./config.js";
 import { constantTimeEqual } from "./crypto/compare.js";
-import { closePools, sql } from "./db.js";
+import { closePools } from "./db.js";
 import { NotFoundError } from "./errors.js";
+import { beginDraining, readiness } from "./http/health.js";
 import { notFound, onError, requestId, requestLog } from "./http/middleware.js";
 import { identityRateLimit, ipRateLimit, webhookRateLimit } from "./http/rate-limit.js";
 import { bodyGuard, corsMiddleware, securityHeaders } from "./http/security.js";
@@ -50,13 +51,29 @@ app.use("*", ipRateLimit);
 app.onError(onError);
 app.notFound(notFound);
 
+/**
+ * Liveness: process only, never the database. A Postgres blip must not get
+ * every API container killed — restarting containers is exactly what does not
+ * help a database under load.
+ */
+app.get("/healthz", (c) => c.json({ ok: true }));
+
+/** Readiness: should traffic route here. 503 drains without killing. */
+app.get("/readyz", async (c) => {
+  const result = await readiness();
+  return c.json(result, result.ready ? 200 : 503);
+});
+
+/**
+ * Deprecated alias for `/readyz`, kept until the Dokploy and Traefik configs
+ * move. Removing it before they do would silently mark the container unhealthy.
+ */
 app.get("/health", async (c) => {
-  try {
-    await sql`SELECT 1`;
-    return c.json({ ok: true, db: "up" });
-  } catch {
-    return c.json({ ok: false, db: "down" }, 503);
-  }
+  const result = await readiness();
+  return c.json(
+    { ok: result.ready, db: result.checks.db === "ok" ? "up" : "down" },
+    result.ready ? 200 : 503,
+  );
 });
 
 /**
@@ -127,11 +144,32 @@ if (isEntrypoint) {
     void scheduleDueCrawls().catch(() => undefined);
   }
 
+  /**
+   * Ordered, because the order is the whole mechanism. Readiness flips first
+   * so the proxy stops routing here, and only then does the socket close —
+   * closing first would refuse requests the proxy was still sending, which
+   * presents to a user as a failed deploy.
+   *
+   * The dead-man timer force-exits inside the compose stop_grace_period, so a
+   * handler that will not finish costs a slow shutdown rather than a SIGKILL
+   * mid-write.
+   */
   const shutdown = async () => {
-    log().info({ event: "shutdown_started" }, "shutting down: draining jobs");
+    log().info({ event: "shutdown_started" }, "draining: readiness now 503");
+    beginDraining();
+
+    const deadline = setTimeout(() => {
+      log().error({ event: "shutdown_forced" }, "drain did not finish, exiting");
+      process.exit(1);
+    }, 55_000);
+    deadline.unref();
+
+    await new Promise((resolve) => setTimeout(resolve, config.DRAIN_DELAY_MS));
+
     server.close();
     await stopWorker();
     await closePools();
+    log().info({ event: "shutdown_complete" });
     process.exit(0);
   };
 

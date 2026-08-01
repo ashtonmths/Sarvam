@@ -32,3 +32,9 @@ RUN mkdir -p /models && chown -R node:node /models
 USER node
 EXPOSE 3001
 CMD ["pnpm", "--filter", "@sadhak/api", "start"]
+
+# Liveness, not readiness: a database blip must not get this container killed,
+# because restarting containers is exactly what does not help a database under
+# load. node:22-slim ships no curl, so the probe is node itself.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT??3001)+'/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
