@@ -144,8 +144,18 @@ export async function rollupDaily(
  * show up as a step in the chart at the boundary between them.
  */
 export async function backfill(orgId: number, from: Date): Promise<RollupResult> {
-  const today = new Date();
-  const days = Math.floor((today.getTime() - from.getTime()) / 86_400_000) + 1;
+  /**
+   * Counted in calendar days, matching how rollupDaily walks backwards.
+   * Dividing elapsed milliseconds instead disagreed whenever `from` was later
+   * in the day than now: backfilling from Jan 1st 18:00 at Jan 8th 09:00 gave
+   * six-and-a-bit days, so Jan 1st was never computed. Rollups are upserted
+   * rather than swept, so that gap was permanent and indistinguishable from a
+   * day the product did not exist.
+   */
+  const startOfDay = (date: Date) =>
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  const days =
+    Math.round((startOfDay(new Date()) - startOfDay(from)) / 86_400_000) + 1;
   return rollupDaily(orgId, Math.max(1, days));
 }
 

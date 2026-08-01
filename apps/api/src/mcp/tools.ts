@@ -5,7 +5,7 @@ import {
   rationaleLinks,
 } from "@sadhak/shared/schema";
 import { changeDescriptorSchema, type VerdictResult } from "@sadhak/shared/types";
-import { and, eq, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db.js";
 import { decide } from "../gate/decide.js";
@@ -180,7 +180,18 @@ export async function getNode(ctx: McpContext, input: z.infer<typeof nodeRefInpu
           })
           .from(rationale)
           .innerJoin(rationaleLinks, eq(rationaleLinks.rationaleId, rationale.id))
-          .where(and(eq(rationale.orgId, ctx.orgId), eq(rationale.state, "confirmed")))
+          .where(
+            and(
+              eq(rationale.orgId, ctx.orgId),
+              eq(rationale.state, "confirmed"),
+              // The join was unconstrained, so this returned any confirmed
+              // rationale in the org and the caller presented it as the
+              // rationale for *this* node: a real author and a real permalink
+              // attached to a claim they never made about it.
+              inArray(rationaleLinks.edgeId, edgeIds),
+            ),
+          )
+          .orderBy(desc(rationale.confirmedAt))
           .limit(10);
 
   return {

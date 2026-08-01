@@ -57,6 +57,10 @@ describe("rule 2 — connection metadata", () => {
       postgresTablesByName: new Map([
         ["public.invoices", ["7/db/demo_billing/table/public.invoices"]],
       ]),
+      // The column has to be a crawled node, not just a string we can build.
+      known: new Map([
+        ["postgres", new Set(["7/db/demo_billing/column/public.invoices.vat_rate"])],
+      ]),
     });
     const result = resolveRef(
       { system: "postgres", schema: "public", table: "invoices", column: "vat_rate" },
@@ -65,6 +69,47 @@ describe("rule 2 — connection metadata", () => {
     expect(result).toMatchObject({
       key: { externalId: "7/db/demo_billing/column/public.invoices.vat_rate" },
     });
+  });
+
+  /**
+   * The column id is derived from the table's by substitution, so without a
+   * catalog check a step still selecting a dropped column re-invented a node
+   * for it every crawl — one no sweep could reach, seeded from a name that
+   * often scores 1.0.
+   */
+  it("falls back to the table when the named column was never crawled", () => {
+    const catalog = catalogWith({
+      postgresTablesByName: new Map([
+        ["public.invoices", ["7/db/demo_billing/table/public.invoices"]],
+      ]),
+    });
+    const result = resolveRef(
+      { system: "postgres", schema: "public", table: "invoices", column: "dropped_col" },
+      catalog,
+    );
+    expect(result).toMatchObject({
+      status: "resolved",
+      key: { externalId: "7/db/demo_billing/table/public.invoices" },
+    });
+  });
+
+  it("will not fuse a table across databases when the reference names one", () => {
+    const catalog = catalogWith({
+      postgresTablesByName: new Map([
+        ["public.invoices", ["7/db/prod/table/public.invoices"]],
+        ["prod::public.invoices", ["7/db/prod/table/public.invoices"]],
+      ]),
+    });
+    const result = resolveRef(
+      {
+        system: "postgres",
+        database: "staging",
+        schema: "public",
+        table: "invoices",
+      },
+      catalog,
+    );
+    expect(result.status).toBe("unresolved");
   });
 
   it("refuses when the same table exists in two crawled instances", () => {
@@ -108,6 +153,41 @@ describe("rule 3 — unambiguous name, and rule 4 — refuse", () => {
 
   it("refuses a name nothing has been crawled for", () => {
     const result = resolveRef({ system: "airtable", tableName: "Ghost" }, emptyCatalog());
+    expect(result.status).toBe("unresolved");
+  });
+
+  it("matches within the base the reference names", () => {
+    const catalog = catalogWith({
+      airtableTablesByName: new Map([
+        ["orders", ["table/tblProd", "table/tblStaging"]],
+        ["appprod::orders", ["table/tblProd"]],
+        ["appstaging::orders", ["table/tblStaging"]],
+      ]),
+    });
+    const result = resolveRef(
+      { system: "airtable", baseId: "appStaging", tableName: "Orders" },
+      catalog,
+    );
+    expect(result).toMatchObject({ key: { externalId: "table/tblStaging" } });
+  });
+
+  /**
+   * The false merge this prevents: only one table org-wide carries the name,
+   * so a bare-name lookup resolves it — into the wrong base. A staging
+   * workflow then shows a dependency on the production table, and the gate
+   * blocks a production change citing staging as an affected dependent.
+   */
+  it("will not fall back to the bare name when the base has no such table", () => {
+    const catalog = catalogWith({
+      airtableTablesByName: new Map([
+        ["orders", ["table/tblProd"]],
+        ["appprod::orders", ["table/tblProd"]],
+      ]),
+    });
+    const result = resolveRef(
+      { system: "airtable", baseId: "appStaging", tableName: "Orders" },
+      catalog,
+    );
     expect(result.status).toBe("unresolved");
   });
 });

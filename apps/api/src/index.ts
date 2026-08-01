@@ -10,7 +10,11 @@ import { beginDraining, readiness } from "./http/health.js";
 import { notFound, onError, requestId, requestLog } from "./http/middleware.js";
 import { identityRateLimit, ipRateLimit, webhookRateLimit } from "./http/rate-limit.js";
 import { bodyGuard, corsMiddleware, securityHeaders } from "./http/security.js";
-import { registerJobHandlers, scheduleDueCrawls } from "./jobs/handlers.js";
+import {
+  registerJobHandlers,
+  scheduleDueCrawls,
+  scheduleRecurringJobs,
+} from "./jobs/handlers.js";
 import { queueStats } from "./jobs/queue.js";
 import { startWorker, stopWorker } from "./jobs/worker.js";
 import { requestsInCurrentWindow } from "./llm.js";
@@ -26,6 +30,7 @@ import { openapiDocument } from "./openapi.js";
 import { authRoutes } from "./routes/auth.js";
 import { commsRoutes } from "./routes/comms.js";
 import { connectorRoutes } from "./routes/connectors.js";
+import { documentRoutes } from "./routes/documents.js";
 import { gateRoutes } from "./routes/gate.js";
 import { githubRoutes } from "./routes/github.js";
 import { graphRoutes } from "./routes/graph.js";
@@ -192,6 +197,7 @@ api.route("/", githubRoutes);
 api.route("/", reflexRoutes);
 api.route("/", reviewerRoutes);
 api.route("/", rationaleRoutes);
+api.route("/", documentRoutes);
 api.route("/", historianRoutes);
 api.route("/", slackOauthRoutes);
 api.get("/jobs/stats", async (c) => c.json(await queueStats()));
@@ -212,6 +218,9 @@ if (isEntrypoint) {
   if (config.JOBS_ENABLED) {
     startWorker();
     void scheduleDueCrawls().catch(() => undefined);
+    // Everything periodic that only ever re-enqueues itself needs a first
+    // cause, or it never runs at all on a fresh deploy.
+    void scheduleRecurringJobs().catch(() => undefined);
   }
 
   /**

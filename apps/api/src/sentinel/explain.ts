@@ -64,12 +64,20 @@ export async function retrieveForVerdict(
         ne(rationale.state, "rejected"),
       ),
     )
+    /**
+     * NULLS LAST is load-bearing. Every producer inserts with a null embedding
+     * and lets the worker fill it in, so a freshly captured rationale has one
+     * for as long as the embed queue takes. The cosine term is then NULL, the
+     * whole expression is NULL, and Postgres sorts NULL first under DESC — so
+     * the newest, least-scored row outranked every relevant one and evicted
+     * them under the limit.
+     */
     .orderBy(
       raw`(${rationale.state} = 'confirmed') DESC`,
       vectorLiteral
         ? raw`0.5 * ts_rank(to_tsvector('english', ${rationale.body}), plainto_tsquery('english', ${queryText}))
-             + 0.5 * (1 - (${rationale.embedding} <=> ${vectorLiteral}::vector)) DESC`
-        : raw`ts_rank(to_tsvector('english', ${rationale.body}), plainto_tsquery('english', ${queryText})) DESC`,
+             + 0.5 * COALESCE(1 - (${rationale.embedding} <=> ${vectorLiteral}::vector), 0) DESC NULLS LAST`
+        : raw`ts_rank(to_tsvector('english', ${rationale.body}), plainto_tsquery('english', ${queryText})) DESC NULLS LAST`,
     )
     .limit(8);
 

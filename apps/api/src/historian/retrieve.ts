@@ -46,6 +46,13 @@ export async function retrieveRationale(
 
   const rows = (await raw`
     WITH lex AS (
+      /**
+       * The ORDER BY belongs to the outer query, not just the window.
+       * Postgres evaluates window functions before the statement's own
+       * ordering, so a bare LIMIT took an arbitrary 40 rows carrying
+       * arbitrary rank values — the strongest lexical match could be absent
+       * entirely, and which rows came back changed with the plan.
+       */
       SELECT id, row_number() OVER (
         ORDER BY ts_rank_cd(to_tsvector('english', body),
                             websearch_to_tsquery('english', ${query})) DESC) AS r
@@ -53,6 +60,8 @@ export async function retrieveRationale(
       WHERE org_id = ${orgId}
         AND state = ANY(${states})
         AND to_tsvector('english', body) @@ websearch_to_tsquery('english', ${query})
+      ORDER BY ts_rank_cd(to_tsvector('english', body),
+                          websearch_to_tsquery('english', ${query})) DESC
       LIMIT 40
     ), sem AS (
       SELECT id, row_number() OVER (ORDER BY embedding <=> ${vector}::vector) AS r
@@ -70,7 +79,9 @@ export async function retrieveRationale(
     LEFT JOIN lex ON lex.id = rat.id
     LEFT JOIN sem ON sem.id = rat.id
     WHERE (lex.id IS NOT NULL OR sem.id IS NOT NULL)
-    ORDER BY score DESC
+    -- id breaks ties so equal RRF scores come back in a stable order rather
+    -- than whatever the plan happens to produce.
+    ORDER BY score DESC, rat.id
     LIMIT ${limit}
   `) as unknown as Array<{
     id: string | number;

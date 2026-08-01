@@ -13,12 +13,19 @@ import { NotFoundError, UserError } from "../errors.js";
 import { enqueueUnexplainedEdges } from "../historian/enqueue.js";
 import { traced } from "../tracing.js";
 import { getReadCredential } from "../vault/vault.js";
-import { emptyCatalog, type FusionCatalog, placeholderFor, resolveRef } from "./fuse.js";
+import {
+  emptyCatalog,
+  type FusionCatalog,
+  placeholderFor,
+  resolveRef,
+  scopedNameKey,
+} from "./fuse.js";
 import {
   type NormalizedEdge,
   type NormalizedNode,
   normalizeEdge,
   normalizeNode,
+  type ResolvedBy,
 } from "./normalize.js";
 import { reconcile } from "./reconcile.js";
 
@@ -262,6 +269,7 @@ async function fuseAndNormalize(
           dst: dst.key,
           kind: spec.kind,
           provenance: spec.provenance,
+          resolvedBy: [src.resolvedBy, dst.resolvedBy],
         }),
       );
     } catch {
@@ -275,11 +283,20 @@ async function fuseAndNormalize(
 function resolveEndpoint(
   endpoint: NodeKey | ExternalRef,
   catalog: FusionCatalog,
-): { key: NodeKey | null; ref?: ExternalRef; candidates?: unknown[] } {
+): {
+  key: NodeKey | null;
+  resolvedBy?: ResolvedBy;
+  ref?: ExternalRef;
+  candidates?: unknown[];
+} {
   if ("connector" in endpoint) return { key: endpoint };
 
   const resolution = resolveRef(endpoint, catalog);
-  if (resolution.status === "resolved") return { key: resolution.key };
+  if (resolution.status === "resolved") {
+    // Carried, not dropped: this is what tells a name guess from a vendor id
+    // once the edge is a row.
+    return { key: resolution.key, resolvedBy: resolution.resolvedBy };
+  }
   return { key: null, ref: endpoint, candidates: resolution.candidates };
 }
 
@@ -291,6 +308,7 @@ async function loadCatalog(orgId: number): Promise<FusionCatalog> {
       externalId: nodesTable.externalId,
       kind: nodesTable.kind,
       name: nodesTable.name,
+      metadata: nodesTable.metadata,
     })
     .from(nodesTable)
     .where(eq(nodesTable.orgId, orgId));
@@ -303,7 +321,13 @@ async function loadCatalog(orgId: number): Promise<FusionCatalog> {
 
 function registerInCatalog(
   catalog: FusionCatalog,
-  node: { connector: string; externalId: string; kind: string; name: string },
+  node: {
+    connector: string;
+    externalId: string;
+    kind: string;
+    name: string;
+    metadata?: unknown;
+  },
 ): void {
   let known = catalog.known.get(node.connector);
   if (!known) {
@@ -314,10 +338,48 @@ function registerInCatalog(
 
   if (node.connector === "airtable" && node.externalId.startsWith("table/")) {
     push(catalog.airtableTablesByName, node.name.toLowerCase(), node.externalId);
+
+    // Also under base::name, which is the key a reference carrying a baseId
+    // resolves against. Written by the Airtable crawler; a placeholder has no
+    // baseId and is therefore only ever reachable by the bare name.
+    const baseId = (node.metadata as { baseId?: unknown } | null)?.baseId;
+    if (typeof baseId === "string" && baseId) {
+      push(
+        catalog.airtableTablesByName,
+        scopedNameKey(baseId, node.name),
+        node.externalId,
+      );
+    }
   }
-  if (node.connector === "postgres" && node.externalId.includes("/table/")) {
-    const qualified = node.externalId.split("/table/")[1]?.toLowerCase();
-    if (qualified) push(catalog.postgresTablesByName, qualified, node.externalId);
+
+  /**
+   * Views count. Registering only `/table/` left every n8n step that reads a
+   * view permanently unresolvable, which pushed a row into unresolved_refs on
+   * every crawl and counted toward the 5% skip ceiling that fails a crawl
+   * outright.
+   */
+  if (node.connector === "postgres") {
+    const separator = node.externalId.includes("/table/")
+      ? "/table/"
+      : node.externalId.includes("/view/")
+        ? "/view/"
+        : null;
+    if (separator) {
+      const qualified = node.externalId.split(separator)[1]?.toLowerCase();
+      if (qualified) {
+        push(catalog.postgresTablesByName, qualified, node.externalId);
+
+        // `<instanceId>/db/<database>/table/<schema.name>`
+        const database = node.externalId.split("/db/")[1]?.split("/")[0];
+        if (database) {
+          push(
+            catalog.postgresTablesByName,
+            scopedNameKey(database, qualified),
+            node.externalId,
+          );
+        }
+      }
+    }
   }
 }
 

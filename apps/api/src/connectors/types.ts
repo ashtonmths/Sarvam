@@ -21,6 +21,16 @@ export interface ConnectorDescriptor {
   writeScopes: ScopeSpec[];
   webhooks: boolean;
   revertible: boolean;
+  /**
+   * Whether `crawl` actually maps anything yet.
+   *
+   * Slack and GitHub are connected, healthy and useful — the Historian mines
+   * them on demand — but neither has a crawler. The scheduler enqueued one
+   * anyway, so every connected Slack workspace failed a crawl every half hour,
+   * climbed to the failure threshold and displayed as `error` in settings on a
+   * connection that was working fine.
+   */
+  crawls: boolean;
 }
 
 /* ------------------------------------------------------- crawl output */

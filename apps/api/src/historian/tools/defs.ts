@@ -34,6 +34,14 @@ export const toolArgSchemas = {
     text: z.string().min(10).max(1000),
     source_url: z.string().url(),
     author: z.string().min(1).max(200),
+    /**
+     * When the words were written, from the `authored_at` the search tool
+     * returned. Mined rationale had no timestamp at all because there was
+     * nowhere in this schema to put one, so the review queue ordered a 2023
+     * decision as though it happened today. Optional, because a source that
+     * cannot tell us stays honestly null rather than borrowing crawl time.
+     */
+    authored_at: z.string().datetime({ offset: true }).optional(),
     confidence: z.number().min(0).max(1).default(0.7),
   }),
   give_up: z.object({ reason: z.string().min(3).max(300) }),
@@ -103,6 +111,11 @@ export const TOOL_DEFS: ToolDef[] = [
           text: { type: "string" },
           source_url: { type: "string" },
           author: { type: "string" },
+          authored_at: {
+            type: "string",
+            description:
+              "The authored_at the search or thread tool gave for this message, copied verbatim. Omit it if the tool did not return one. Never invent it.",
+          },
           confidence: { type: "number" },
         },
         required: ["text", "source_url", "author"],

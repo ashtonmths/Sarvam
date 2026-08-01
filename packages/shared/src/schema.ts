@@ -456,6 +456,82 @@ export const rationaleLinks = pgTable(
   (t) => [primaryKey({ columns: [t.rationaleId, t.edgeId] })],
 );
 
+/* -------------------------------------------------------------- documents */
+
+/**
+ * Uploaded evidence: meeting transcripts, design notes, anything written down
+ * outside a system Sadhak can crawl.
+ *
+ * This is the one place Sadhak keeps an archive rather than a pointer, and it
+ * is deliberate. Everywhere else a permalink belongs to a vendor who will
+ * still serve it; here there is no vendor, so if we do not store the text
+ * there is nothing for a reviewer to click through to and no way to check that
+ * a quoted span really appears in its source.
+ */
+export const documents = pgTable(
+  "documents",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    /** The filename as uploaded, kept for recognisability in the list. */
+    originalName: text("original_name"),
+    /** Normalized text. Offsets in document_chunks index into this exactly. */
+    content: text("content").notNull(),
+    /** sha256 of `content`. Makes a retried upload idempotent, not duplicated. */
+    contentHash: text("content_hash").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    /** When the meeting happened, if the uploader knows. Not the upload time. */
+    occurredAt: timestamp("occurred_at", { withTimezone: true }),
+    /** Where it came from, for provenance. Citations never point here. */
+    sourceUrl: text("source_url"),
+    uploadedBy: text("uploaded_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("documents_org_hash_key").on(t.orgId, t.contentHash),
+    index("documents_org_idx").on(t.orgId, t.createdAt),
+  ],
+);
+
+/**
+ * One retrievable span. `ordinal` is the `#chunk-N` anchor a citation carries,
+ * and the offsets are what let the document page highlight the quoted span in
+ * its surrounding context — which is what makes the citation reviewable rather
+ * than merely resolvable.
+ */
+export const documentChunks = pgTable(
+  "document_chunks",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    documentId: bigint("document_id", { mode: "number" })
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    ordinal: integer("ordinal").notNull(),
+    body: text("body").notNull(),
+    /** Set when the chunk is a single speaker's turn in a transcript. */
+    speaker: text("speaker"),
+    startOffset: integer("start_offset").notNull(),
+    endOffset: integer("end_offset").notNull(),
+    tokenEstimate: integer("token_estimate").notNull(),
+    /** bge-small-en, computed on the worker. See apps/api/src/embed.ts */
+    embedding: vector("embedding", { dimensions: 384 }),
+  },
+  (t) => [
+    unique("document_chunks_doc_ordinal_key").on(t.documentId, t.ordinal),
+    index("document_chunks_embedding_idx").using(
+      "hnsw",
+      t.embedding.op("vector_cosine_ops"),
+    ),
+    index("document_chunks_org_idx").on(t.orgId),
+  ],
+);
+
 /* ------------------------------------------------- agent traces and jobs */
 
 /**
@@ -1014,6 +1090,10 @@ export type Edge = typeof edges.$inferSelect;
 export type NewEdge = typeof edges.$inferInsert;
 export type Rationale = typeof rationale.$inferSelect;
 export type NewRationale = typeof rationale.$inferInsert;
+export type Document = typeof documents.$inferSelect;
+export type NewDocument = typeof documents.$inferInsert;
+export type DocumentChunk = typeof documentChunks.$inferSelect;
+export type NewDocumentChunk = typeof documentChunks.$inferInsert;
 export type AgentTrace = typeof agentTraces.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type Crawl = typeof crawls.$inferSelect;

@@ -4,14 +4,71 @@
  * humans make on top are the compounding proprietary data.
  */
 
-/** First match wins. */
+/**
+ * Node names are snake_case, dotted and spaced — `vat_rate`, `public.invoices`,
+ * `Stripe Sandbox Sync` — so `\b` is the wrong boundary: `_` is a word
+ * character, and `\bvat\b` therefore fails on `vat_rate`, the single most
+ * important name in the fixture set. Letters and digits are the only things
+ * that count as "inside a word" here.
+ */
+function term(...alternatives: string[]): RegExp {
+  return new RegExp(`(^|[^a-z0-9])(${alternatives.join("|")})([^a-z0-9]|$)`, "i");
+}
+
+/**
+ * First match wins, and revenue stays ahead of sandbox deliberately: a name
+ * like `invoices_test` is ambiguous, and on a merge gate the safe reading of
+ * an ambiguous name is the high one. A false BLOCK costs an argument; a false
+ * APPROVE costs the payment flow.
+ *
+ * Matching whole terms is the fix that belongs here. Unanchored, `vat` matched
+ * `private_data`, `tax` matched `syntax` and `charge` matched `recharge_cache`,
+ * each seeding routine tooling as revenue-touching — accidents, not the
+ * conservative choice above.
+ */
 const NAME_RULES: [RegExp, number][] = [
   [
-    /invoic|billing|payment|payout|refund|charge|subscription|vat|tax|stripe|ledger/i,
+    term(
+      "invoice",
+      "invoices",
+      "billing",
+      "payment",
+      "payments",
+      "payout",
+      "payouts",
+      "refund",
+      "refunds",
+      "charge",
+      "charges",
+      "subscription",
+      "subscriptions",
+      "vat",
+      "tax",
+      "taxes",
+      "stripe",
+      "ledger",
+      "ledgers",
+    ),
     1.0,
   ],
-  [/customer|crm|onboard|order|email|notif/i, 0.7],
-  [/test|sandbox|demo|scratch|tmp|playground/i, 0.1],
+  [
+    term(
+      "customer",
+      "customers",
+      "crm",
+      "onboarding",
+      "onboard",
+      "order",
+      "orders",
+      "email",
+      "emails",
+      "notification",
+      "notifications",
+      "notify",
+    ),
+    0.7,
+  ],
+  [term("test", "tests", "sandbox", "demo", "scratch", "tmp", "temp", "playground"), 0.1],
 ];
 
 /** A blandly-named flow that touches one of these is not internal tooling. */

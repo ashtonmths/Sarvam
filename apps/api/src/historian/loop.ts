@@ -40,6 +40,12 @@ interface ParsedCall {
 }
 
 /**
+ * Backstop only. Sits above executeTool's own per-result budget so that in
+ * normal operation nothing reaches it.
+ */
+const MAX_TOOL_RESULT_BYTES = 8000;
+
+/**
  * Reads the structured-output envelope first and native tool calls second.
  *
  * Free models are small models: of the 14 `:free` slugs only 4 support
@@ -205,13 +211,27 @@ export async function runLoop(goal: EdgeGoal, ctx: RunContext): Promise<LoopOutc
 
     if (result.terminal) return result.outcome;
 
+    /**
+     * Tool results are budgeted where they are built, in executeTool, so that
+     * what the model is shown and what it is allowed to quote are the same
+     * set. This is only a backstop for an output that budgeting does not cover
+     * — and it replaces the payload rather than cutting it, because half a
+     * JSON document is worse than none: the model reads the fragment as
+     * complete and reasons from it.
+     */
+    const serialized = JSON.stringify(result.output);
     messages.push({
       role: "assistant",
       content: JSON.stringify({ tool: call.tool, args: call.args }),
     });
     messages.push({
       role: "user",
-      content: JSON.stringify(result.output).slice(0, 4000),
+      content:
+        serialized.length <= MAX_TOOL_RESULT_BYTES
+          ? serialized
+          : JSON.stringify({
+              error: "That result was too large to show. Narrow the query and try again.",
+            }),
     });
   }
 

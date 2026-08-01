@@ -31,6 +31,7 @@ export const descriptor: ConnectorDescriptor = {
   ],
   webhooks: true,
   revertible: true,
+  crawls: true,
 };
 
 /**

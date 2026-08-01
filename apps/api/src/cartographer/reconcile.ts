@@ -32,7 +32,26 @@ export interface ReconcileInput {
   markStale: boolean;
 }
 
+/** The transaction handle, so the body cannot accidentally use the pool. */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * One transaction for the whole reconcile.
+ *
+ * Node upserts, edge upserts and the two stale sweeps were four independent
+ * autocommit groups, and the gaps between them are readable: a verdict landing
+ * between the node and edge batches sees new nodes carrying none of their
+ * edges, computes a blast radius of zero, and approves a change it should have
+ * blocked. The sweeps have the same window in reverse.
+ *
+ * It also makes a mid-crawl crash leave nothing behind instead of a half-built
+ * graph that the next crawl has to converge back out of.
+ */
 export async function reconcile(input: ReconcileInput): Promise<ReconcileStats> {
+  return db.transaction((tx) => reconcileWithin(tx, input));
+}
+
+async function reconcileWithin(db: Tx, input: ReconcileInput): Promise<ReconcileStats> {
   const stats: ReconcileStats = {
     nodesSeen: input.nodes.length,
     edgesSeen: input.edges.length,
@@ -76,8 +95,33 @@ export async function reconcile(input: ReconcileInput): Promise<ReconcileStats> 
           // Reappearance resurrects a tombstone, keeping the same node id.
           state: sql`'active'`,
           staleSince: sql`NULL`,
-          // Criticality is deliberately absent: it flows only from seeding on
-          // insert and the human override API. A re-crawl never clobbers it.
+          /**
+           * A cross-vendor node is first created as a placeholder by whichever
+           * crawl referenced it, carrying that crawl's instance id. The real
+           * crawl that owns it must take it over, or the owner's stale sweep
+           * filters it out forever and the node can never be tombstoned.
+           * Claiming happens only in that direction: a placeholder never takes
+           * a node away from the connector that actually crawls it.
+           */
+          connectorInstanceId: sql`
+            CASE WHEN ${nodesTable.metadata}->>'placeholder' = 'true'
+                  AND excluded.metadata->>'placeholder' IS DISTINCT FROM 'true'
+                 THEN excluded.connector_instance_id
+                 ELSE ${nodesTable.connectorInstanceId} END`,
+          /**
+           * Criticality is insert-only so a re-crawl cannot clobber a human
+           * override — but a placeholder's seed is not an override, it is a
+           * guess made from an external id. `tblABC` seeds the 0.4 default;
+           * the real crawl names it `Invoices`, which seeds 1.0, and without
+           * this the most revenue-critical table in the graph stays scored as
+           * ordinary tooling forever. Only the placeholder→real transition
+           * re-seeds; every other re-crawl still leaves it alone.
+           */
+          criticality: sql`
+            CASE WHEN ${nodesTable.metadata}->>'placeholder' = 'true'
+                  AND excluded.metadata->>'placeholder' IS DISTINCT FROM 'true'
+                 THEN excluded.criticality
+                 ELSE ${nodesTable.criticality} END`,
         },
       })
       .returning({
@@ -172,7 +216,55 @@ export async function reconcile(input: ReconcileInput): Promise<ReconcileStats> 
       .returning({ id: nodesTable.id });
     stats.nodesStaled = staleNodes.length;
 
-    if (staleNodes.length > 0) {
+    /**
+     * Edges this crawl owns but no longer emits.
+     *
+     * Without this an edge was only ever tombstoned as collateral of one of
+     * its endpoints disappearing, so *removing a dependency* was invisible:
+     * point an n8n step at a different table and all three nodes still exist,
+     * nothing goes stale, and the old edge keeps routing blast radius and
+     * blocking merges on a dependency that is gone.
+     *
+     * A crawl is authoritative for edges leaving the nodes it owns, which is
+     * what the subquery says. Scoping by org alone would let each connector's
+     * crawl tombstone every other connector's edges.
+     */
+    const ownedNodeIds = db
+      .select({ id: nodesTable.id })
+      .from(nodesTable)
+      .where(
+        and(
+          eq(nodesTable.orgId, input.orgId),
+          eq(nodesTable.connectorInstanceId, input.connectorInstanceId),
+          inArray(nodesTable.connector, input.ownedConnectors),
+        ),
+      );
+
+    const unseenEdges = await db
+      .update(edgesTable)
+      .set({ state: "stale", staleSince: new Date() })
+      .where(
+        and(
+          eq(edgesTable.orgId, input.orgId),
+          eq(edgesTable.state, "active"),
+          lt(edgesTable.lastSeen, input.crawlStartedAt),
+          inArray(edgesTable.srcId, ownedNodeIds),
+        ),
+      )
+      .returning({ id: edgesTable.id });
+    stats.edgesStaled = unseenEdges.length;
+
+    /**
+     * Then the collateral pass, for edges *into* a node that vanished whose
+     * source belongs to a different connector — those are not covered above.
+     * Chunked because this list is not bounded by BATCH the way the upserts
+     * are, and a wide sweep would otherwise exceed Postgres's bind-parameter
+     * ceiling after the upserts have already committed.
+     */
+    for (const idChunk of chunk(
+      staleNodes.map((n) => n.id),
+      BATCH,
+    )) {
       const staleEdges = await db
         .update(edgesTable)
         .set({ state: "stale", staleSince: new Date() })
@@ -180,11 +272,11 @@ export async function reconcile(input: ReconcileInput): Promise<ReconcileStats> 
           and(
             eq(edgesTable.orgId, input.orgId),
             eq(edgesTable.state, "active"),
-            sql`(${edgesTable.srcId} IN ${staleNodes.map((n) => n.id)} OR ${edgesTable.dstId} IN ${staleNodes.map((n) => n.id)})`,
+            sql`(${edgesTable.srcId} IN ${idChunk} OR ${edgesTable.dstId} IN ${idChunk})`,
           ),
         )
         .returning({ id: edgesTable.id });
-      stats.edgesStaled = staleEdges.length;
+      stats.edgesStaled += staleEdges.length;
     }
   }
 

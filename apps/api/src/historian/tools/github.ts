@@ -10,11 +10,16 @@ import type { LoopCtx } from "./execute.js";
  * the model chooses the words and the server chooses the reach.
  */
 
+/**
+ * `authored_at` duplicates `date` under the name `propose_rationale` expects,
+ * so the model copies a value rather than reformatting one.
+ */
 export interface GithubHit {
   title: string;
   snippet: string;
   author: string;
   date: string;
+  authored_at: string | null;
   url: string;
 }
 
@@ -91,6 +96,7 @@ export async function searchGithub(
       snippet: (item.body ?? item.commit?.message ?? "").slice(0, 500),
       author: item.user?.login ?? item.commit?.author?.name ?? "unknown",
       date: item.created_at ?? item.commit?.author?.date ?? "",
+      authored_at: item.created_at ?? item.commit?.author?.date ?? null,
       url: item.html_url as string,
     }));
 }

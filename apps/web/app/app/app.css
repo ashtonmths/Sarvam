@@ -2180,48 +2180,6 @@
   box-shadow: 0 1px 2px rgba(23, 25, 30, 0.05);
 }
 
-.conn-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.conn-row:last-child {
-  border-bottom: 0;
-}
-
-.conn-row__meta {
-  flex: 1;
-  min-width: 0;
-}
-
-.conn-row__meta strong {
-  display: block;
-  font-size: 15px;
-}
-
-.conn-row__meta span {
-  font-size: 12.5px;
-  color: var(--ink-faint);
-}
-
-.scope-list {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.scope-list li {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--ink-soft);
-}
-
 .scope-list li::before {
   content: "◦ ";
   color: var(--thread);
@@ -2566,10 +2524,6 @@
   border-top: 1px solid var(--line-soft);
 }
 
-.conn-row + .conn-add {
-  margin-top: 12px;
-}
-
 .connect {
   display: flex;
   flex-direction: column;
@@ -2709,13 +2663,20 @@
   color: var(--ink-faint);
 }
 
+/* Capped, because the card spans the full panel and a channel name against a
+   member count 900px away stops reading as one row. */
 .chanpick__list {
   display: flex;
   flex-direction: column;
+  max-width: 560px;
   max-height: 320px;
   overflow-y: auto;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
+}
+
+.chanpick__note {
+  max-width: 620px;
 }
 
 .chanpick__row {
@@ -2842,4 +2803,254 @@
 .mcp__tools code {
   font-size: 12px;
   color: var(--thread);
+}
+
+/* ------------------------------------------------- connected systems
+
+   Cards, not rows. Each connector owns its own detail — status, why, its
+   permissions, and for Slack the channels it may read — because that detail
+   used to be spread across three stacked panels with no visible relationship
+   between them: a scope list dumped inline as raw bullets, a status pill
+   floating beside it with no link to its reason, and a channel picker in a
+   panel of its own two sections further down. */
+
+/* Two columns at most, not auto-fill. Connectors are few and detail-rich, and
+   auto-fill on a wide panel put one narrow card beside a large empty gap. */
+.cgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 4px;
+}
+
+@media (max-width: 900px) {
+  .cgrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* A connector with channels inside it needs the full width; a bare one does
+   not. Spanning keeps the grid honest instead of forcing every card to the
+   height of the tallest. */
+.ccard:has(.ccard__extra) {
+  grid-column: 1 / -1;
+}
+
+.ccard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+}
+
+.ccard__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ccard__glyph {
+  display: flex;
+  color: var(--ink-soft);
+  flex: none;
+}
+
+.ccard__id {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ccard__name {
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ccard__kind {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.ccard__state {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.ccard__fix {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+/* ---- status, as a dot and a word rather than a floating pill ---- */
+
+.cstat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.cstat__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+.cstat--active {
+  color: var(--approve-ink);
+}
+.cstat--active .cstat__dot {
+  background: var(--approve);
+}
+
+.cstat--degraded {
+  color: var(--warn-ink);
+}
+.cstat--degraded .cstat__dot {
+  background: var(--warn);
+}
+
+.cstat--error {
+  color: var(--block-ink);
+}
+.cstat--error .cstat__dot {
+  background: var(--block);
+}
+
+/* ---- permissions, collapsed ---- */
+
+.ccard__scopes summary {
+  font-size: 12px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.ccard__scopes summary::-webkit-details-marker {
+  display: none;
+}
+
+.ccard__scopes summary::before {
+  content: "▸";
+  font-size: 9px;
+  transition: transform 0.15s ease;
+}
+
+.ccard__scopes[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.ccard__scopes summary:hover {
+  color: var(--ink-soft);
+}
+
+.ccard__scopes summary:focus-visible {
+  outline: 2px solid var(--thread);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.ccard__scopes ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line-soft);
+}
+
+.ccard__scopes li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ccard__scopes code {
+  font-size: 11.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.ccard__scopes li span {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+/* ---- nested detail, e.g. the Slack channel picker ---- */
+
+.ccard__extra {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 14px;
+  margin-top: 2px;
+}
+
+.ccard__sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 10px;
+}
+
+.ccard__foot {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+/* ---- the github app setup state ---- */
+
+.gh-setup {
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.gh-setup__vars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.gh-setup__vars code {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }

@@ -48,6 +48,7 @@ export const descriptor: ConnectorDescriptor = {
   ],
   webhooks: true,
   revertible: false,
+  crawls: false,
 };
 
 export const ALLOWED_PATHS = [

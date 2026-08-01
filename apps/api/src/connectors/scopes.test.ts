@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import * as airtable from "./airtable/index.js";
 import * as n8nConnector from "./n8n/index.js";
 import * as postgresConnector from "./postgres/index.js";
+import { slackConnector } from "./slack/index.js";
+import { BOT_SCOPES, USER_SCOPES } from "./slack/oauth.js";
 import {
   allDescriptors,
   baseUrlFor,
@@ -24,6 +26,25 @@ describe("registry", () => {
 
   it("throws on an unknown slug rather than returning undefined", () => {
     expect(() => getConnector("stripe")).toThrow();
+  });
+});
+
+describe("slack oauth requests what the descriptor publishes", () => {
+  /**
+   * The settings page renders the descriptor's scopes verbatim to whoever is
+   * reviewing the integration. A scope listed there and not requested is a
+   * promise the app cannot keep — and the failure is silent, because Slack
+   * answers missing_scope with HTTP 200.
+   */
+  it("requests every scope the Slack descriptor declares", () => {
+    const declared = [
+      ...slackConnector.descriptor.readScopes,
+      ...slackConnector.descriptor.writeScopes,
+    ].map((s) => s.scope);
+    const requested = new Set([...BOT_SCOPES, ...USER_SCOPES]);
+
+    const missing = declared.filter((scope) => !requested.has(scope));
+    expect(missing).toEqual([]);
   });
 });
 

@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { config } from "../../config.js";
-import { UserError } from "../../errors.js";
+import { UpstreamError, UserError } from "../../errors.js";
 import { pinnedFetch } from "../../net/pinned-fetch.js";
 
 /**
@@ -38,6 +38,22 @@ export const BOT_SCOPES = [
   // human invites it.
   "groups:read",
   "groups:history",
+  /**
+   * Alerting. These were declared on the descriptor and shown to the customer
+   * from day one but never actually requested, so a workspace connected with
+   * the button got a bot token that could not post: Slack answers 200 with
+   * `ok:false, error:"missing_scope"`, the helper returns null, and nothing
+   * logs it or changes the connector's status. Reflex alerting was silently
+   * dead for every OAuth-connected org.
+   *
+   * `scopes.test.ts` now asserts this list covers the descriptor, because the
+   * descriptor is what the settings page shows a security reviewer.
+   */
+  "chat:write",
+  "im:write",
+  "users:read",
+  "users:read.email",
+  "team:read",
 ];
 
 /** User scope: the search API, which is the good retrieval path. */
@@ -170,21 +186,56 @@ interface SlackChannelList {
   }>;
 }
 
+/** Pages beyond this are a workspace we should not be enumerating in one go. */
+const MAX_CHANNEL_PAGES = 20;
+
 async function conversationsList(
   botToken: string,
   types: string,
 ): Promise<SlackChannelList> {
-  const params = new URLSearchParams({
-    limit: "200",
-    exclude_archived: "true",
-    types,
-  });
+  const channels: NonNullable<SlackChannelList["channels"]> = [];
+  let cursor: string | undefined;
 
-  const response = await pinnedFetch(
-    `${config.SLACK_API_BASE_URL}/conversations.list?${params.toString()}`,
-    { headers: { authorization: `Bearer ${botToken}` } },
-  );
-  return (await response.json()) as SlackChannelList;
+  /**
+   * Paged. A single `limit=200` call silently truncated any workspace with
+   * more channels than that, and the picker gave no sign that the rest
+   * existed — an admin simply could not select a channel Sadhak had not
+   * happened to list.
+   */
+  for (let page = 0; page < MAX_CHANNEL_PAGES; page += 1) {
+    const params = new URLSearchParams({
+      limit: "200",
+      exclude_archived: "true",
+      types,
+    });
+    if (cursor) params.set("cursor", cursor);
+
+    const response = await pinnedFetch(
+      `${config.SLACK_API_BASE_URL}/conversations.list?${params.toString()}`,
+      { headers: { authorization: `Bearer ${botToken}` } },
+    );
+
+    // Slack answers application errors with 200 and ok:false, so a non-2xx is
+    // an outage or a proxy — and its body is HTML, which would otherwise throw
+    // a raw SyntaxError out of a connector:manage route.
+    if (!response.ok) {
+      throw new UpstreamError(
+        `Slack returned ${response.status} listing channels. This is Slack being unavailable rather than a configuration problem, so it is worth retrying.`,
+      );
+    }
+
+    const body = (await response.json()) as SlackChannelList & {
+      response_metadata?: { next_cursor?: string };
+    };
+    if (!body.ok) return body;
+
+    channels.push(...(body.channels ?? []));
+
+    cursor = body.response_metadata?.next_cursor || undefined;
+    if (!cursor) break;
+  }
+
+  return { ok: true, channels };
 }
 
 /**

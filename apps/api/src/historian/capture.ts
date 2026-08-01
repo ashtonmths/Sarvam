@@ -26,6 +26,13 @@ export const captureInputSchema = z
     author: z.string().min(1),
     /** Who is making the API call. Confirmed-at-birth requires these to match. */
     actor: z.string().min(1),
+    /**
+     * When the words were written, if the surface knows. Capture-forward
+     * surfaces are typing it now, so leaving this unset is the honest default
+     * and the column stays null rather than claiming crawl time was authoring
+     * time. A surface capturing an older artifact passes its real timestamp.
+     */
+    authoredAt: z.coerce.date().optional(),
     edgeIds: z.array(z.number().int()).default([]),
     decisionId: z.number().int().optional(),
     incidentId: z.number().int().optional(),
@@ -64,7 +71,10 @@ export async function captureRationale(raw: CaptureInput): Promise<CapturedRatio
       sourceKind: "human_capture",
       sourceUrl: input.sourceUrl,
       author: input.author,
-      authoredAt: new Date(),
+      // Defaults to now because a human_capture row *is* being authored now —
+      // the two are minutes apart. An explicit value wins where the caller
+      // knows better.
+      authoredAt: input.authoredAt ?? new Date(),
       state,
       // Embedding is computed on the worker; the request path never touches
       // transformers.js.

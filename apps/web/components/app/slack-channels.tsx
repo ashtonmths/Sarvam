@@ -55,13 +55,32 @@ export function SlackChannels() {
     }
   }
 
-  if (data.loading) return <div style={{ height: 80, opacity: 0.4 }} />;
+  // Listing goes over the network to Slack, so this is a real wait rather than
+  // a flicker — and while it ran the empty branch below rendered "no channels"
+  // on a workspace that has three.
+  if (data.loading) {
+    return (
+      <p className="dim" style={{ fontSize: 13 }}>
+        Asking Slack which channels it can see…
+      </p>
+    );
+  }
+
+  // An error read as "no channels" before, which sends somebody to check their
+  // scopes when the request never arrived.
+  if (data.error) {
+    return (
+      <p className="banner banner--warn" role="alert">
+        {data.error}
+      </p>
+    );
+  }
 
   if (channels.length === 0) {
     return (
       <p className="dim" style={{ fontSize: 13.5 }}>
-        No channels to show. Connect a Slack workspace above, and make sure the app has
-        the channels:read scope.
+        Slack returned no channels. The app needs channels:read, and it only sees channels
+        that exist in the workspace it was installed into.
       </p>
     );
   }

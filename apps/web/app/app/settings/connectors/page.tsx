@@ -47,6 +47,16 @@ const GLYPH: Record<string, React.ReactNode> = {
   slack: <GlyphChat />,
 };
 
+/** active / degraded / error / pending_auth, as a dot and a word. */
+function StatusDot({ status }: { status: string }) {
+  return (
+    <span className={`cstat cstat--${status}`}>
+      <span className="cstat__dot" />
+      {status.replace("_", " ")}
+    </span>
+  );
+}
+
 export default function ConnectorsPane() {
   const data = useQuery<{
     descriptors: Descriptor[];
@@ -114,81 +124,108 @@ export default function ConnectorsPane() {
         </div>
       )}
 
-      <section className="panel" style={{ marginBottom: 16 }}>
-        <h2 className="panel__title">Connected systems</h2>
-        <p className="panel__caption">
-          Crawls are read-only. Every requested permission is listed below, verbatim —
-          this is the page to send a security reviewer.
-        </p>
+      <section className="panel">
+        <div className="panel__head">
+          <div>
+            <h2 className="panel__title">Connected systems</h2>
+            <p className="panel__caption">
+              Every crawl is read-only, and every permission each one holds is listed on
+              its own card — this is the page to send a security reviewer.
+            </p>
+          </div>
+        </div>
 
         {data.loading ? (
-          <div style={{ height: 100, opacity: 0.4 }} />
+          <div style={{ height: 120, opacity: 0.4 }} />
         ) : instances.length === 0 ? (
           <EmptyState
-            title="No connectors yet"
+            title="Nothing connected yet"
             body="Everything downstream — the graph, verdicts, agents, metrics — starts with one read-only connection."
           />
         ) : (
-          instances.map((instance) => {
-            const descriptor = descriptors.find((d) => d.slug === instance.connector);
-            return (
-              <div
-                key={instance.id}
-                className="conn-row"
-                data-testid={`connector-${instance.connector}`}
-              >
-                {GLYPH[instance.connector]}
-                <div className="conn-row__meta">
-                  <strong>{instance.displayName}</strong>
-                  <span>
+          <div className="cgrid">
+            {instances.map((instance) => {
+              const descriptor = descriptors.find((d) => d.slug === instance.connector);
+              const scopes = descriptor?.readScopes ?? [];
+              const working = busy === instance.id;
+
+              return (
+                <article
+                  key={instance.id}
+                  className="ccard"
+                  data-testid={`connector-${instance.connector}`}
+                >
+                  <header className="ccard__head">
+                    <span className="ccard__glyph">{GLYPH[instance.connector]}</span>
+                    <div className="ccard__id">
+                      <h3 className="ccard__name">{instance.displayName}</h3>
+                      <span className="ccard__kind">
+                        {descriptor?.displayName ?? instance.connector}
+                      </span>
+                    </div>
+                    <StatusDot status={instance.status} />
+                  </header>
+
+                  {/* One line, and it is the one a reader wants: why it is not
+                      healthy, or when it last ran. Not both — a status detail
+                      only exists when something is worth saying. */}
+                  <p className="ccard__state">
                     {instance.statusDetail ??
+                      instance.lastCrawlError ??
                       (instance.lastCrawlAt
                         ? `Last crawled ${new Date(instance.lastCrawlAt).toLocaleString()}`
                         : "Never crawled")}
-                  </span>
-                  {descriptor && (
-                    <ul className="scope-list">
-                      {descriptor.readScopes.map((scope) => (
-                        <li key={scope.scope} title={scope.purpose}>
-                          {scope.scope}
-                        </li>
-                      ))}
-                    </ul>
+                  </p>
+
+                  {scopes.length > 0 && (
+                    // Collapsed by default. Permissions are the answer to a
+                    // question asked once during review, and leaving them open
+                    // made every card a different height and buried the status.
+                    <details className="ccard__scopes">
+                      <summary>
+                        {scopes.length} permission{scopes.length === 1 ? "" : "s"}
+                      </summary>
+                      <ul>
+                        {scopes.map((scope) => (
+                          <li key={scope.scope}>
+                            <code className="mono">{scope.scope}</code>
+                            <span>{scope.purpose}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
                   )}
-                </div>
-                <span
-                  className={`tag ${
-                    instance.status === "active"
-                      ? "tag--green"
-                      : instance.status === "degraded"
-                        ? "tag--amber"
-                        : instance.status === "error"
-                          ? "tag--red"
-                          : ""
-                  }`}
-                >
-                  {instance.status}
-                </span>
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--tiny"
-                  disabled={busy === instance.id}
-                  onClick={() => void test(instance.id)}
-                >
-                  Test
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--tiny"
-                  disabled={busy === instance.id}
-                  onClick={() => void crawlNow(instance.id)}
-                  data-testid={`connector-crawl-${instance.connector}`}
-                >
-                  {busy === instance.id ? "Working…" : "Crawl now"}
-                </button>
-              </div>
-            );
-          })
+
+                  {instance.connector === "slack" && (
+                    <div className="ccard__extra">
+                      <h4 className="ccard__sub">Channels the Historian may read</h4>
+                      <SlackChannels />
+                    </div>
+                  )}
+
+                  <footer className="ccard__foot">
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--tiny"
+                      disabled={working}
+                      onClick={() => void test(instance.id)}
+                    >
+                      Test
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--tiny"
+                      disabled={working}
+                      onClick={() => void crawlNow(instance.id)}
+                      data-testid={`connector-crawl-${instance.connector}`}
+                    >
+                      {working ? "Working…" : "Crawl now"}
+                    </button>
+                  </footer>
+                </article>
+              );
+            })}
+          </div>
         )}
 
         <div className="conn-add">
@@ -205,67 +242,77 @@ export default function ConnectorsPane() {
         </div>
       </section>
 
-      {instances.some((i) => i.connector === "slack") && (
-        <section className="panel" style={{ marginBottom: 16 }}>
-          <h2 className="panel__title">Slack channels</h2>
-          <p className="panel__caption">
-            Nothing is mined until a channel is ticked. Each one grants the Historian read
-            access to that channel's history and puts Sadhak in it.
-          </p>
-          <SlackChannels />
-        </section>
-      )}
-
       <section className="panel">
-        <h2 className="panel__title">GitHub</h2>
+        <h2 className="panel__title">The merge gate</h2>
         <p className="panel__caption">
-          The hard gate — a check that turns red on BLOCK and, with branch protection on,
-          disables the merge button.
+          A GitHub check that turns red on BLOCK. With branch protection requiring it, the
+          merge button is disabled — this is the one place a change can genuinely be
+          stopped rather than reversed.
         </p>
 
         {!github.data?.configured ? (
-          <div className="banner banner--warn" role="status">
-            The GitHub App is not configured on this deployment. Set{" "}
-            <code className="mono">GITHUB_APP_ID</code>,{" "}
-            <code className="mono">GITHUB_APP_PRIVATE_KEY</code> and{" "}
-            <code className="mono">GITHUB_APP_WEBHOOK_SECRET</code>, then restart.
+          <div className="gh-setup">
+            <p>
+              The GitHub App is not configured on this deployment. Set these, then
+              restart:
+            </p>
+            {/* A list, not a sentence. Three variable names inline wrapped
+                mid-name and orphaned the words after them. */}
+            <ul className="gh-setup__vars">
+              <li>
+                <code className="mono">GITHUB_APP_ID</code>
+              </li>
+              <li>
+                <code className="mono">GITHUB_APP_PRIVATE_KEY</code>
+              </li>
+              <li>
+                <code className="mono">GITHUB_APP_WEBHOOK_SECRET</code>
+              </li>
+            </ul>
           </div>
         ) : (github.data.items ?? []).length === 0 ? (
           <p className="dim" style={{ fontSize: 13.5 }}>
             No installations linked to this organization yet.
           </p>
         ) : (
-          github.data.items.map((install) => (
-            <div key={install.installationId} className="conn-row">
-              <GlyphBranch />
-              <div className="conn-row__meta">
-                <strong>
-                  {install.accountLogin ?? `Installation ${install.installationId}`}
-                </strong>
-                <span>installation {install.installationId}</span>
-              </div>
-              {install.enforcing === true ? (
-                <span className="tag tag--green">enforcing</span>
-              ) : (
-                <span className="tag tag--amber">installed, not enforcing</span>
-              )}
-            </div>
-          ))
+          <div className="cgrid">
+            {github.data.items.map((install) => (
+              <article key={install.installationId} className="ccard">
+                <header className="ccard__head">
+                  <span className="ccard__glyph">
+                    <GlyphBranch />
+                  </span>
+                  <div className="ccard__id">
+                    <h3 className="ccard__name">
+                      {install.accountLogin ?? `Installation ${install.installationId}`}
+                    </h3>
+                    <span className="ccard__kind">
+                      installation {install.installationId}
+                    </span>
+                  </div>
+                  <StatusDot
+                    status={install.enforcing === true ? "active" : "degraded"}
+                  />
+                </header>
+                <p className="ccard__state">
+                  {install.enforcing === true
+                    ? "Branch protection requires the check, so a BLOCK stops the merge."
+                    : "The check runs but branch protection does not require it, so a BLOCK is advisory."}
+                </p>
+                {install.enforcing !== true && (
+                  // Believing you are protected when you are not is worse than
+                  // having no gate at all, so the fix is on the card rather
+                  // than in a banner underneath the list.
+                  <p className="ccard__fix">
+                    In GitHub:{" "}
+                    <strong>Settings → Branches → Require status checks</strong>, then
+                    select <code className="mono">sadhak/gate</code>.
+                  </p>
+                )}
+              </article>
+            ))}
+          </div>
         )}
-
-        {github.data?.configured &&
-          (github.data.items ?? []).some((i) => i.enforcing !== true) && (
-            <div className="banner banner--warn" style={{ marginTop: 12 }} role="status">
-              {/* Believing you are protected when you are not is worse than
-                having no gate at all, so this state is stated plainly. */}
-              <span>
-                The check runs, but branch protection does not require it — a BLOCK is
-                currently advisory. In GitHub:{" "}
-                <strong>Settings → Branches → Require status checks</strong>, then select{" "}
-                <code className="mono">sadhak/gate</code>.
-              </span>
-            </div>
-          )}
       </section>
     </>
   );

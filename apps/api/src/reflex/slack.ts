@@ -5,7 +5,7 @@ import {
   reflexIncidents,
   reflexSettings,
 } from "@sadhak/shared/schema";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db.js";
 import { getCredential } from "../vault/vault.js";
 import { buildAlert, buildEscalation, type RationaleLink } from "./alert.js";
@@ -75,7 +75,17 @@ async function rationaleForBlast(
     })
     .from(rationale)
     .innerJoin(rationaleLinks, eq(rationaleLinks.rationaleId, rationale.id))
-    .where(and(eq(rationale.orgId, orgId), eq(rationale.state, "confirmed")))
+    .where(
+      and(
+        eq(rationale.orgId, orgId),
+        eq(rationale.state, "confirmed"),
+        // edgeIds was computed and then used only for the empty check, so an
+        // incident on one table could be alerted with a quote about a
+        // completely different one, carrying a real name and a real permalink.
+        inArray(rationaleLinks.edgeId, edgeIds),
+      ),
+    )
+    .orderBy(desc(rationale.confirmedAt))
     .limit(3);
   return rows;
 }

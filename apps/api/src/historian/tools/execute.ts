@@ -52,25 +52,27 @@ export async function executeTool(
       return { terminal: false, output: await edgeContext(ctx) };
 
     case "search_slack": {
-      const hits = await searchSlack(ctx, String(args.query));
-      for (const hit of hits) {
+      const all = await searchSlack(ctx, String(args.query));
+      const { kept, dropped } = fitItems(all);
+      for (const hit of kept) {
         ctx.seenUrls.add(hit.permalink);
         ctx.seenContent.set(hit.permalink, hit.text);
       }
-      return { terminal: false, output: { hits } };
+      return { terminal: false, output: withOmitted({ hits: kept }, dropped) };
     }
 
     case "search_github": {
-      const hits = await searchGithub(
+      const all = await searchGithub(
         ctx,
         String(args.query),
         args.kind as "pr" | "commit",
       );
-      for (const hit of hits) {
+      const { kept, dropped } = fitItems(all);
+      for (const hit of kept) {
         ctx.seenUrls.add(hit.url);
         ctx.seenContent.set(hit.url, hit.snippet);
       }
-      return { terminal: false, output: { hits } };
+      return { terminal: false, output: withOmitted({ hits: kept }, dropped) };
     }
 
     case "read_thread": {
@@ -84,11 +86,17 @@ export async function executeTool(
         };
       }
       const thread = await readThread(ctx, permalink);
-      for (const message of thread.messages) {
+      /**
+       * Threads are kept newest-last but trimmed from the *front*: Slack
+       * returns replies oldest first, and the decision a thread reaches is at
+       * the end. Cutting the tail removed precisely the part worth reading.
+       */
+      const { kept, dropped } = fitItems(thread.messages, "front");
+      for (const message of kept) {
         ctx.seenUrls.add(message.permalink);
         ctx.seenContent.set(message.permalink, message.text);
       }
-      return { terminal: false, output: thread };
+      return { terminal: false, output: withOmitted({ messages: kept }, dropped) };
     }
 
     case "propose_rationale":
@@ -108,10 +116,55 @@ export async function executeTool(
   }
 }
 
+/**
+ * The budget a single tool result may occupy in the conversation.
+ *
+ * The loop used to hand the model `JSON.stringify(output).slice(0, 4000)`,
+ * which cut mid-string into invalid JSON and, on a long thread, delivered the
+ * first few messages of forty. Worse, every item was registered in
+ * `seenContent` before that cut, so the containment check in
+ * `propose_rationale` would happily accept a quote from a message the model
+ * was never shown — the one guard against confabulation, validating against
+ * text that was not in the context.
+ *
+ * Budgeting here instead keeps "what the model saw" and "what it may quote"
+ * the same set, by construction.
+ */
+const OUTPUT_BUDGET_BYTES = 3600;
+
+export function fitItems<T>(
+  items: T[],
+  trim: "front" | "back" = "back",
+): { kept: T[]; dropped: number } {
+  const kept = [...items];
+  while (kept.length > 0 && JSON.stringify(kept).length > OUTPUT_BUDGET_BYTES) {
+    if (trim === "front") kept.shift();
+    else kept.pop();
+  }
+  return { kept, dropped: items.length - kept.length };
+}
+
+/**
+ * Says so when something was left out. Silence would read as "that is all
+ * there was", and the model would give up on a thread it never fully saw.
+ */
+function withOmitted<T extends Record<string, unknown>>(
+  output: T,
+  dropped: number,
+): T | (T & { omitted: string }) {
+  if (dropped === 0) return output;
+  return {
+    ...output,
+    omitted: `${dropped} more result(s) were not shown because the response was too long. What you can see is complete and quotable; narrow your query if you need the rest.`,
+  };
+}
+
 interface ProposeArgs {
   text: string;
   source_url: string;
   author: string;
+  /** ISO-8601 from the tool that returned the message. Optional by design. */
+  authored_at?: string;
   confidence: number;
 }
 
@@ -158,11 +211,29 @@ async function proposeRationale(ctx: LoopCtx, args: ProposeArgs): Promise<ToolRe
     };
   }
 
-  // Dedupe: an existing rationale on the same URL gets linked, not duplicated.
+  /**
+   * Dedupe on the quoted span, not on the URL alone.
+   *
+   * Keying on the URL meant the second edge to cite a thread was linked to
+   * whatever span the *first* edge's model had chosen, and its own `text` was
+   * dropped on the floor. One Slack thread routinely explains two different
+   * dependencies, so edge B ended up justified by a sentence about edge A —
+   * and that sentence is what a Check Run prints as the reason for a block.
+   *
+   * The insert is conflict-tolerant rather than guarded by the select above:
+   * a run fans out concurrent loops, and two of them citing the same span at
+   * once would otherwise both find nothing and both insert.
+   */
   const [existing] = await db
     .select({ id: rationale.id })
     .from(rationale)
-    .where(and(eq(rationale.orgId, ctx.orgId), eq(rationale.sourceUrl, args.source_url)))
+    .where(
+      and(
+        eq(rationale.orgId, ctx.orgId),
+        eq(rationale.sourceUrl, args.source_url),
+        eq(rationale.body, args.text),
+      ),
+    )
     .limit(1);
 
   let rationaleId = existing?.id;
@@ -176,14 +247,32 @@ async function proposeRationale(ctx: LoopCtx, args: ProposeArgs): Promise<ToolRe
         sourceKind: args.source_url.includes("github.com") ? "pr" : "slack",
         sourceUrl: args.source_url,
         author: args.author,
+        authoredAt: args.authored_at ? new Date(args.authored_at) : null,
         confidence: args.confidence,
         // Drafted, always. Only a human with `rationale:confirm` moves the
         // coverage metric — that is the invariant, as executable code.
         state: "drafted",
         embedding: null,
       })
+      .onConflictDoNothing()
       .returning({ id: rationale.id });
     rationaleId = row?.id;
+
+    // Lost the race: the row exists now, so read the winner's id.
+    if (!rationaleId) {
+      const [raced] = await db
+        .select({ id: rationale.id })
+        .from(rationale)
+        .where(
+          and(
+            eq(rationale.orgId, ctx.orgId),
+            eq(rationale.sourceUrl, args.source_url),
+            eq(rationale.body, args.text),
+          ),
+        )
+        .limit(1);
+      rationaleId = raced?.id;
+    }
   }
 
   if (!rationaleId) {

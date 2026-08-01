@@ -34,6 +34,7 @@ export const descriptor: ConnectorDescriptor = {
   writeScopes: [],
   webhooks: false,
   revertible: false,
+  crawls: true,
 };
 
 /** The exact grant published on the docs site: content/docs/connectors/postgres.mdx. */

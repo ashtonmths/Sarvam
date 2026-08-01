@@ -15,6 +15,14 @@ import { DECAY, MAX_HOPS, PRUNE_BELOW } from "./score.js";
  * times toward the Σ-impact WARN rule, making any dense graph WARN trivially.
  * `DISTINCT ON (id) … ORDER BY id, impact DESC` keeps each node once, on its
  * strongest path. The diamond golden pins this.
+ *
+ * The walk crosses only `state = 'active'` rows. Cartographer tombstones
+ * rather than deletes, so that a decision keeps pointing at the thing it was
+ * made about — but a tombstone that still routes blast radius is not a record,
+ * it is a wrong answer, and it blocks merges citing dependencies that no
+ * longer exist. The anchor is deliberately not filtered: the caller asked
+ * about that specific node, and answering "no dependents" would be a different
+ * claim from "that node is gone".
  */
 
 export interface RawBlastRow {
@@ -54,8 +62,8 @@ export async function traverse(orgId: number, nodeId: number): Promise<RawBlastR
              LEAST(b.min_conf, e.confidence)::REAL,
              b.hops + 1, b.path || e.src_id, b.edge_ids || e.id
       FROM blast b
-      JOIN edges e ON e.dst_id = b.id AND e.org_id = ${orgId}
-      JOIN nodes n ON n.id = e.src_id AND n.org_id = ${orgId}
+      JOIN edges e ON e.dst_id = b.id AND e.org_id = ${orgId} AND e.state = 'active'
+      JOIN nodes n ON n.id = e.src_id AND n.org_id = ${orgId} AND n.state = 'active'
       WHERE b.hops < ${MAX_HOPS}
         AND NOT (e.src_id = ANY(b.path))
         AND b.path_conf * e.confidence > ${PRUNE_BELOW}

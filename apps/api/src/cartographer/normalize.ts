@@ -142,11 +142,31 @@ export function normalizeNode(spec: NodeSpec): NormalizedNode {
  * In every row `src` depends on `dst` — the blast-radius CTE walks dst → src,
  * so getting this backwards produces a confidently wrong answer.
  */
+/**
+ * How much the *identity resolution* is trusted, as distinct from how the
+ * connector learned the reference.
+ *
+ * An exact vendor id was read literally out of the flow JSON. A name match is
+ * an inference: it is right only while no second table shares the name inside
+ * the same base. Both used to produce an edge at 1.0, so a guess was
+ * indistinguishable from a certainty and there was no way to ask which edges
+ * were guessed. The endpoints' resolution now travels into the score.
+ */
+export const RESOLUTION_CONFIDENCE = {
+  vendor_id: 1.0,
+  connection: 1.0,
+  name: 0.7,
+} as const;
+
+export type ResolvedBy = keyof typeof RESOLUTION_CONFIDENCE;
+
 export function normalizeEdge(edge: {
   src: { connector: string; externalId: string };
   dst: { connector: string; externalId: string };
   kind: EdgeSpec["kind"];
   provenance: ConnectorProvenance;
+  /** How each endpoint was resolved. Absent means it was already canonical. */
+  resolvedBy?: Array<ResolvedBy | undefined>;
 }): NormalizedEdge {
   if (
     edge.src.externalId === edge.dst.externalId &&
@@ -154,6 +174,14 @@ export function normalizeEdge(edge: {
   ) {
     throw new UserError("An edge cannot point at itself");
   }
+
+  // The weakest endpoint governs: an edge is only as certain as the shakier of
+  // the two things it connects.
+  const resolutionFactor = (edge.resolvedBy ?? []).reduce(
+    (weakest, how) => Math.min(weakest, how ? RESOLUTION_CONFIDENCE[how] : 1.0),
+    1.0,
+  );
+
   return {
     srcConnector: edge.src.connector,
     srcExternalId: edge.src.externalId,
@@ -161,6 +189,6 @@ export function normalizeEdge(edge: {
     dstExternalId: edge.dst.externalId,
     kind: edge.kind,
     provenance: edge.provenance,
-    confidence: confidenceFor(edge.provenance),
+    confidence: confidenceFor(edge.provenance) * resolutionFactor,
   };
 }

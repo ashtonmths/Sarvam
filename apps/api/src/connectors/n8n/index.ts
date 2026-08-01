@@ -34,6 +34,7 @@ export const descriptor: ConnectorDescriptor = {
   ],
   webhooks: true,
   revertible: true,
+  crawls: true,
 };
 
 /** Only the workflow list. The record/execution-data endpoints are not here. */

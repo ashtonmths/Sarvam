@@ -1,9 +1,10 @@
-import { connectorInstances, rationale } from "@sadhak/shared/schema";
+import { connectorInstances, documentChunks, rationale } from "@sadhak/shared/schema";
 import type { ChangeDescriptor } from "@sadhak/shared/types";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { pruneExpiredSessions } from "../auth/session.js";
 import { runCrawl } from "../cartographer/index.js";
 import { sendWeeklyDigests } from "../comms/digest.js";
+import { getConnector } from "../connectors/registry.js";
 import { db } from "../db.js";
 import { embedAll } from "../embed.js";
 import { executeRun } from "../historian/runs.js";
@@ -35,14 +36,99 @@ import { registerHandler } from "./registry.js";
  */
 const TRIAGE_PER_TICK = 5;
 
+/** One embed batch. The re-enqueue below compares against this, not a literal. */
+const EMBED_BATCH = 16;
+
+/**
+ * The embed loop, shared by rationale and document chunks.
+ *
+ * Shared rather than copied because the re-enqueue rule below is subtle and a
+ * hand-written second copy would get it wrong: it is the difference between a
+ * row being embedded and a row sitting unembedded forever, and neither state
+ * is visible without going looking.
+ */
+async function embedPending(
+  target: {
+    job: string;
+    // biome-ignore lint/suspicious/noExplicitAny: one loop over two tables.
+    table: any;
+    // biome-ignore lint/suspicious/noExplicitAny: column refs, not values.
+    id: any;
+    // biome-ignore lint/suspicious/noExplicitAny: column refs, not values.
+    body: any;
+    // biome-ignore lint/suspicious/noExplicitAny: column refs, not values.
+    embedding: any;
+  },
+  jobId: number | undefined,
+): Promise<void> {
+  const pending = (await db
+    .select({ id: target.id, body: target.body })
+    .from(target.table)
+    .where(isNull(target.embedding))
+    // Oldest first, so one org inserting steadily cannot keep starving
+    // another org's older rows out of every batch.
+    .orderBy(target.id)
+    .limit(EMBED_BATCH)) as Array<{ id: number; body: string }>;
+
+  if (pending.length > 0) {
+    const vectors = await embedAll(pending.map((row) => row.body));
+    for (const [index, row] of pending.entries()) {
+      const vector = vectors[index];
+      if (!vector) continue;
+      await db
+        .update(target.table)
+        .set({ embedding: vector })
+        .where(eq(target.id, row.id));
+    }
+  }
+
+  /**
+   * Re-enqueued unconditionally rather than only on a full batch.
+   *
+   * The dedupe key is global, so a row inserted while this batch was running
+   * had its own enqueue deduped away to null. If that batch then decided not
+   * to re-enqueue because it was not full, nothing was left to pick the row
+   * up, and there is no sweeper anywhere. On a quiet org it stayed unembedded
+   * indefinitely — invisible to every semantic search.
+   *
+   * Backing off when there was nothing to do keeps an idle deployment from
+   * spinning on an empty queue.
+   */
+  await enqueue(
+    target.job,
+    {},
+    {
+      dedupeKey: target.job,
+      ...(jobId === undefined ? {} : { excludeJobId: jobId }),
+      ...(pending.length === EMBED_BATCH
+        ? {}
+        : { runAfter: new Date(Date.now() + 60_000) }),
+    },
+  );
+}
+
 export function registerJobHandlers(): void {
   /**
    * The weekly digest. Skip-if-empty lives inside, so this runs unconditionally
    * and decides per org — an org with a quiet week gets nothing rather than an
    * email saying nothing happened.
    */
-  registerHandler("comms.weekly_digest", async () => {
-    await sendWeeklyDigests();
+  registerHandler("comms.weekly_digest", async (_payload, ctx) => {
+    try {
+      await sendWeeklyDigests();
+    } finally {
+      // In a finally, like reviewer.tick: a send that throws against a flaky
+      // SMTP host must not stop the digest existing from then on.
+      await enqueue(
+        "comms.weekly_digest",
+        {},
+        {
+          runAfter: new Date(Date.now() + 24 * 60 * 60_000),
+          dedupeKey: "comms.weekly_digest",
+          excludeJobId: ctx.jobId,
+        },
+      );
+    }
   });
 
   /** Self-rescheduling crawl. Backs off on failure rather than hammering. */
@@ -305,28 +391,35 @@ export function registerJobHandlers(): void {
    * embedding and enqueues, so the request path never touches transformers.js
    * and gate latency cannot regress behind a batch.
    */
-  registerHandler("rationale.embed", async () => {
-    const pending = await db
-      .select({ id: rationale.id, body: rationale.body })
-      .from(rationale)
-      .where(isNull(rationale.embedding))
-      .limit(16);
-    if (pending.length === 0) return;
+  registerHandler("rationale.embed", async (_payload, ctx) => {
+    await embedPending(
+      {
+        job: "rationale.embed",
+        table: rationale,
+        id: rationale.id,
+        body: rationale.body,
+        embedding: rationale.embedding,
+      },
+      ctx.jobId,
+    );
+  });
 
-    const vectors = await embedAll(pending.map((r) => r.body));
-    for (const [index, row] of pending.entries()) {
-      const vector = vectors[index];
-      if (!vector) continue;
-      await db
-        .update(rationale)
-        .set({ embedding: vector })
-        .where(eq(rationale.id, row.id));
-    }
-
-    // More may have arrived while this batch ran.
-    if (pending.length === 16) {
-      await enqueue("rationale.embed", {}, { dedupeKey: "rationale.embed" });
-    }
+  /**
+   * The same loop over uploaded document chunks. A transcript is chunked at
+   * upload time and the vectors are computed here, so a 2MB paste does not
+   * hold the request open through a few hundred forward passes.
+   */
+  registerHandler("document.embed", async (_payload, ctx) => {
+    await embedPending(
+      {
+        job: "document.embed",
+        table: documentChunks,
+        id: documentChunks.id,
+        body: documentChunks.body,
+        embedding: documentChunks.embedding,
+      },
+      ctx.jobId,
+    );
   });
 
   /**
@@ -429,12 +522,64 @@ export function registerJobHandlers(): void {
   });
 
   /** Exhaust, pruned on a schedule. Rationale is never touched by retention. */
-  registerHandler("retention.prune_sessions", async () => {
-    await pruneExpiredSessions();
-    // Rate counters age out with the same sweep: a closed window is only ever
-    // read by the request that closed it, so anything older is dead rows.
-    await purgeStaleCounters();
+  registerHandler("retention.prune_sessions", async (_payload, ctx) => {
+    try {
+      await pruneExpiredSessions();
+      // Rate counters age out with the same sweep: a closed window is only ever
+      // read by the request that closed it, so anything older is dead rows.
+      await purgeStaleCounters();
+    } finally {
+      await enqueue(
+        "retention.prune_sessions",
+        {},
+        {
+          runAfter: new Date(Date.now() + 24 * 60 * 60_000),
+          dedupeKey: "retention.prune_sessions",
+          excludeJobId: ctx.jobId,
+        },
+      );
+    }
   });
+}
+
+/**
+ * Arms every recurring job that otherwise only ever re-enqueues itself.
+ *
+ * The self-rescheduling handlers had no first cause: nothing enqueued
+ * `metrics.rollup_daily`, `comms.weekly_digest`, `retention.prune_sessions` or
+ * the n8n poll at boot, so on a fresh deploy they simply never ran. Metric
+ * rollups stayed empty and the trend charts rendered their empty state
+ * forever, which also hid the timezone bug in the bucket boundary.
+ *
+ * Safe to call on every boot: each enqueue carries the same dedupe key the
+ * handler reschedules under, so an already-armed job is not duplicated.
+ */
+export async function scheduleRecurringJobs(): Promise<number> {
+  let scheduled = 0;
+
+  const globals: Array<{ job: string; key: string }> = [
+    { job: "comms.weekly_digest", key: "comms.weekly_digest" },
+    { job: "retention.prune_sessions", key: "retention.prune_sessions" },
+  ];
+  for (const { job, key } of globals) {
+    if ((await enqueue(job, {}, { dedupeKey: key })) !== null) scheduled += 1;
+  }
+
+  // Per-org, because the rollup computes one org's metrics per run.
+  const orgs = await db
+    .selectDistinct({ orgId: connectorInstances.orgId })
+    .from(connectorInstances);
+  for (const { orgId } of orgs) {
+    const jobId = await enqueue(
+      "metrics.rollup_daily",
+      {},
+      { orgId, dedupeKey: `metrics.rollup_daily:${orgId}` },
+    );
+    if (jobId !== null) scheduled += 1;
+  }
+
+  scheduled += await scheduleReflexPolling();
+  return scheduled;
 }
 
 /**
@@ -443,7 +588,11 @@ export function registerJobHandlers(): void {
  */
 export async function scheduleDueCrawls(): Promise<number> {
   const due = await db
-    .select({ id: connectorInstances.id, orgId: connectorInstances.orgId })
+    .select({
+      id: connectorInstances.id,
+      orgId: connectorInstances.orgId,
+      connector: connectorInstances.connector,
+    })
     .from(connectorInstances)
     .where(
       and(
@@ -457,6 +606,9 @@ export async function scheduleDueCrawls(): Promise<number> {
 
   let scheduled = 0;
   for (const instance of due) {
+    // Slack and GitHub have no crawler. Enqueuing one anyway meant a healthy
+    // connection failed every half hour until it displayed as `error`.
+    if (!getConnector(instance.connector).descriptor.crawls) continue;
     const jobId = await enqueue(
       "connector.crawl",
       { instanceId: instance.id, kind: "full" },

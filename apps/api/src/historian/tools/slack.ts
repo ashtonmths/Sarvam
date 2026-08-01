@@ -14,11 +14,30 @@ import type { LoopCtx } from "./execute.js";
  * widen what Historian may read.
  */
 
+/**
+ * Field names are snake_case because this object is serialised straight to the
+ * model, and `authored_at` is the argument name `propose_rationale` expects
+ * back. Making them match is what stops the model reformatting a timestamp.
+ */
 export interface SlackHit {
   text: string;
   author: string;
   ts: string;
+  authored_at: string | null;
   permalink: string;
+}
+
+/**
+ * Slack's `ts` is "<epoch seconds>.<microseconds>" and doubles as a message id.
+ * Only the seconds half is a time; the rest disambiguates messages within the
+ * same second. Parsed by splitting rather than with parseFloat so the original
+ * string is never round-tripped through a float — that is what silently
+ * corrupts it when it is used as an id.
+ */
+export function tsToIso(ts: string): string | null {
+  const seconds = Number(ts.split(".")[0]);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  return new Date(seconds * 1000).toISOString();
 }
 
 /**
@@ -103,6 +122,7 @@ async function searchViaApi(
       text: (m.text ?? "").slice(0, 500),
       author: m.username ?? "unknown",
       ts: m.ts ?? "",
+      authored_at: m.ts ? tsToIso(m.ts) : null,
       permalink: m.permalink as string,
     }));
 }
@@ -147,6 +167,7 @@ async function scanChannels(
         text: text.slice(0, 500),
         author: message.user ?? "unknown",
         ts: message.ts ?? "",
+        authored_at: message.ts ? tsToIso(message.ts) : null,
         permalink,
       });
       if (hits.length >= 10) return hits;
@@ -177,7 +198,14 @@ async function getPermalink(
 export async function readThread(
   ctx: LoopCtx,
   permalink: string,
-): Promise<{ messages: Array<{ text: string; author: string; permalink: string }> }> {
+): Promise<{
+  messages: Array<{
+    text: string;
+    author: string;
+    authored_at: string | null;
+    permalink: string;
+  }>;
+}> {
   const token =
     (await slackToken(ctx.orgId, "oauth_user_access")) ??
     (await slackToken(ctx.orgId, "oauth_access"));
@@ -188,7 +216,17 @@ export async function readThread(
 
   const channel = match[1];
   const raw = match[2];
-  const ts = `${raw.slice(0, 10)}.${raw.slice(10)}`;
+  const messageTs = `${raw.slice(0, 10)}.${raw.slice(10)}`;
+
+  /**
+   * `conversations.replies` wants the *parent's* ts. A permalink to a reply
+   * carries the reply's ts in the path and the parent's in `?thread_ts=`, so
+   * using the path value returned just the one message the caller already had
+   * — a silent no-op for exactly the threaded discussions this tool exists to
+   * read, and the model would then give up for lack of context.
+   */
+  const threadTs = new URL(permalink).searchParams.get("thread_ts");
+  const ts = threadTs ?? messageTs;
 
   const channels = await scopedChannels(ctx.orgId);
   if (!channels.includes(channel)) return { messages: [] };
@@ -215,6 +253,7 @@ export async function readThread(
     messages.push({
       text: (message.text ?? "").slice(0, 500),
       author: message.user ?? "unknown",
+      authored_at: message.ts ? tsToIso(message.ts) : null,
       permalink: link,
     });
   }
