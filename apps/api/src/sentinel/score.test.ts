@@ -13,6 +13,9 @@ function row(over: Partial<BlastRow> = {}): BlastRow {
     minEdgeConfidence: 1,
     impact: 0.4,
     busFactor: 3,
+    // The evidence chain is carried by BlastRow but ignored by score.ts, which
+    // stays pure — these 11 cases are unchanged in behavior.
+    path: [],
     ...over,
   };
 }

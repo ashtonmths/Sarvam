@@ -21,17 +21,57 @@ export const CONNECTOR_SLUGS = [
 ] as const;
 export type ConnectorSlug = (typeof CONNECTOR_SLUGS)[number];
 
-/** What someone is proposing to do to a connected system. */
-export const changeRequestSchema = z.object({
-  connector: z.enum(CONNECTOR_SLUGS),
-  operation: z.enum(["delete", "rename", "retype", "disable", "revoke"]),
-  /** Stable id in the source system. Resolved to a node before traversal. */
-  externalId: z.string().min(1),
+/**
+ * What someone is proposing to do to a connected system.
+ *
+ * A discriminated union rather than a flat shape, because the operations that
+ * make sense depend entirely on the target: a credential cannot be renamed and
+ * a field cannot be revoked. Every enforcement door validates against this, so
+ * a change the engine cannot receive is not composable by any caller.
+ */
+const actorFields = {
   actor: z.string().optional(),
   /** Set when the caller is an AI agent going through the proxy gate. */
   agent: z.string().optional(),
-});
-export type ChangeRequest = z.infer<typeof changeRequestSchema>;
+};
+
+export const changeDescriptorSchema = z.discriminatedUnion("target", [
+  z.object({
+    target: z.literal("field"),
+    operation: z.enum(["delete", "rename", "retype"]),
+    connector: z.enum(["airtable", "postgres"]),
+    externalId: z.string().min(1),
+    newName: z.string().optional(),
+    newType: z.string().optional(),
+    ...actorFields,
+  }),
+  z.object({
+    target: z.literal("workflow"),
+    operation: z.enum(["modify", "disable", "delete"]),
+    connector: z.literal("n8n"),
+    externalId: z.string().min(1),
+    ...actorFields,
+  }),
+  z.object({
+    target: z.literal("credential"),
+    operation: z.literal("revoke"),
+    connector: z.enum(CONNECTOR_SLUGS),
+    externalId: z.string().min(1),
+    ...actorFields,
+  }),
+]);
+
+export type ChangeDescriptor = z.infer<typeof changeDescriptorSchema>;
+
+/** One edge traversed on the winning path to an impacted node. */
+export interface EvidenceHop {
+  edgeId: number;
+  srcId: number;
+  dstId: number;
+  kind: string;
+  confidence: number;
+  provenance: string;
+}
 
 /** One reachable node in the blast radius, already scored. */
 export interface BlastRow {
@@ -46,8 +86,15 @@ export interface BlastRow {
   minEdgeConfidence: number;
   /** criticality * pathConfidence * decay^(hops-1) */
   impact: number;
-  /** Number of distinct people whose rationale explains this node's edges. */
+  /**
+   * Distinct people whose *confirmed* rationale explains this node's path
+   * edges. Knowledge-concentration v1: authorship only, which undercounts
+   * understanding — the multi-signal version is Plan 11's. Zero means
+   * unexplained, which is deliberately not the same as bus-factor-1.
+   */
   busFactor: number;
+  /** The winning path that produced this row's impact. */
+  path: EvidenceHop[];
 }
 
 /** Why the verdict came out the way it did. Always populated, never a model. */
@@ -58,20 +105,46 @@ export interface Evidence {
   impact: number;
 }
 
+/**
+ * The explanation is additive prose that can fail, time out, or be switched
+ * off without the verdict noticing. `quota_exhausted` is a first-class state
+ * rather than a flavour of `failed`: on free models the daily cap is hit
+ * routinely, it recovers at a known time, and the UI should say
+ * "explanations resume at reset" instead of "something broke".
+ */
+export const EXPLANATION_STATES = [
+  "pending",
+  "streamed",
+  "failed",
+  "disabled",
+  "quota_exhausted",
+] as const;
+export type ExplanationState = (typeof EXPLANATION_STATES)[number];
+
 export interface VerdictResult {
+  /** Persisted verdict id. Every computation is auditable and replayable. */
+  id: string;
   verdict: Verdict;
-  change: ChangeRequest;
+  change: ChangeDescriptor;
   impacted: BlastRow[];
   evidence: Evidence[];
   /** Milliseconds spent in traversal and scoring. Excludes any model call. */
   computedInMs: number;
+  /** The graph generation this verdict was computed against. */
+  graphVersion: number;
   /**
    * Human readable explanation, streamed in after the verdict renders. Null
    * until the Explainer responds, and stays null if it fails. The verdict is
    * complete without it.
    */
   explanation: string | null;
+  explanationState: ExplanationState;
 }
+
+/* ------------------------------------------------------------ enforcement */
+
+export const GATE_MODES = ["hard_gate", "proxy_gate", "mcp", "forward"] as const;
+export type GateMode = (typeof GATE_MODES)[number];
 
 /* --------------------------------------------------------------- metrics */
 
@@ -82,5 +155,5 @@ export interface Metrics {
   /** Human authored and source linked only. LLM drafts are counted separately. */
   coverageConfirmed: number;
   coveragePending: number;
-  busFactorOneNodes: number;
+  totalEdges: number;
 }

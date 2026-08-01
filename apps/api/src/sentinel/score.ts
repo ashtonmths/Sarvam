@@ -22,6 +22,16 @@ export const BLOCK_IMPACT = 0.8;
 /** Aggregate impact across the whole radius that warrants a warning. */
 export const WARN_TOTAL_IMPACT = 0.3;
 
+/**
+ * Transitive closure reaches almost everything within six hops. These two are
+ * bound as SQL parameters by `traverse.ts`, so the TypeScript impact model and
+ * the recursive CTE cannot drift.
+ */
+export const MAX_HOPS = 6;
+
+/** Paths whose compounded confidence falls below this are noise. */
+export const PRUNE_BELOW = 0.05;
+
 export function decayedImpact(
   criticality: number,
   pathConfidence: number,

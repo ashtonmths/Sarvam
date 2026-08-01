@@ -1,0 +1,1 @@
+ALTER TABLE "rationale" ADD COLUMN "confidence" real;

@@ -1,10 +1,13 @@
 import {
   bigint,
   bigserial,
+  boolean,
+  date,
   foreignKey,
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -16,6 +19,7 @@ import {
   uuid,
   vector,
 } from "drizzle-orm/pg-core";
+import type { BlastRow, Evidence } from "./types.js";
 
 /* ------------------------------------------------------------------ enums */
 
@@ -59,7 +63,35 @@ export const sourceKind = pgEnum("source_kind", [
 ]);
 
 /** Only `confirmed` rationale counts toward the coverage metric. */
-export const rationaleState = pgEnum("rationale_state", ["drafted", "confirmed"]);
+export const rationaleState = pgEnum("rationale_state", [
+  "drafted",
+  "confirmed",
+  /** Kept, never deleted — draft acceptance rate is a quality metric. */
+  "rejected",
+]);
+
+export const gateMode = pgEnum("gate_mode", [
+  "hard_gate",
+  "proxy_gate",
+  "mcp",
+  "forward",
+]);
+
+export const incidentState = pgEnum("incident_state", [
+  "detected",
+  "alerted",
+  "acknowledged",
+  "reverting",
+  "reverted",
+  "revert_failed",
+]);
+
+export const historianRunState = pgEnum("historian_run_state", [
+  "queued",
+  "running",
+  "done",
+  "cancelled",
+]);
 
 export const jobState = pgEnum("job_state", [
   "queued",
@@ -370,6 +402,8 @@ export const rationale = pgTable(
     sourceUrl: text("source_url").notNull(),
     author: text("author"),
     authoredAt: timestamp("authored_at", { withTimezone: true }),
+    /** The agent's own confidence, for reviewer triage. Null for human capture. */
+    confidence: real("confidence"),
     state: rationaleState("state").notNull().default("drafted"),
     confirmedBy: text("confirmed_by"),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
@@ -508,8 +542,305 @@ export const unresolvedRefs = pgTable(
   (t) => [index("unresolved_refs_org_idx").on(t.orgId, t.createdAt)],
 );
 
+/* ----------------------------------------------------- sentinel (plan 7) */
+
+/**
+ * The single persistence point for every verdict computation in the system —
+ * direct service calls, all three enforcement modes, and backtest replays
+ * alike. `impacted` and `evidence` are frozen snapshots on purpose: the graph
+ * mutates daily, and an auditable decision must carry the evidence *as it
+ * stood*, not a pointer into a graph that has since moved.
+ */
+export const verdicts = pgTable(
+  "verdicts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    change: jsonb("change").$type<Record<string, unknown>>().notNull(),
+    verdict: text("verdict").notNull(),
+    impacted: jsonb("impacted").$type<BlastRow[]>().notNull().default([]),
+    evidence: jsonb("evidence").$type<Evidence[]>().notNull().default([]),
+    graphVersion: bigint("graph_version", { mode: "number" }).notNull().default(0),
+    computedInMs: integer("computed_in_ms").notNull().default(0),
+    explanation: text("explanation"),
+    explanationState: text("explanation_state").notNull().default("pending"),
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("verdicts_org_time_idx").on(t.orgId, t.createdAt)],
+);
+
+/** Bumped by triggers on edge writes and criticality overrides. */
+export const graphVersions = pgTable("graph_versions", {
+  orgId: bigint("org_id", { mode: "number" })
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  version: bigint("version", { mode: "number" }).notNull().default(0),
+});
+
+/* --------------------------------------------------- enforcement (plan 8) */
+
+/**
+ * Not one column here duplicates the verdict. Change, evidence, impacted and
+ * timing live exactly once, on the `verdicts` row. This table answers a
+ * different question: under which enforcement mode, for which actor and key,
+ * and was it real or a simulation.
+ */
+export const gateDecisions = pgTable(
+  "gate_decisions",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    verdictId: uuid("verdict_id")
+      .notNull()
+      .references(() => verdicts.id, { onDelete: "cascade" }),
+    mode: gateMode("mode").notNull(),
+    /** Simulations are recorded and flagged; metrics filter on this column. */
+    dryRun: boolean("dry_run").notNull().default(false),
+    actor: text("actor"),
+    apiKeyId: bigint("api_key_id", { mode: "number" }).references(() => apiKeys.id, {
+      onDelete: "set null",
+    }),
+    idempotencyKey: text("idempotency_key"),
+    requestHash: text("request_hash"),
+    executedAt: timestamp("executed_at", { withTimezone: true }),
+    executionResult: jsonb("execution_result").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("gate_decisions_org_time_idx").on(t.orgId, t.createdAt, t.id),
+    unique("gate_decisions_idem").on(t.apiKeyId, t.idempotencyKey),
+  ],
+);
+
+export const githubInstallations = pgTable(
+  "github_installations",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    installationId: bigint("installation_id", { mode: "number" }).notNull().unique(),
+    orgId: bigint("org_id", { mode: "number" }).references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    accountLogin: text("account_login"),
+    repositorySelection: text("repository_selection"),
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("github_installations_org_idx").on(t.orgId)],
+);
+
+/* -------------------------------------------------------- reflex (plan 9) */
+
+/**
+ * One row per detected change. Created at detection, carrying the frozen
+ * verdict evidence, accumulating timestamps as the incident moves. This table
+ * *is* the MTTD/MTTR dataset — this plan records, Plan 11 computes. No MTTD
+ * or MTTR number is asserted anywhere in product copy from here.
+ */
+export const reflexIncidents = pgTable(
+  "reflex_incidents",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** sha256(connector:externalId:operation:vendorEventId) — at-least-once dedupe. */
+    dedupeKey: text("dedupe_key").notNull().unique(),
+    connector: text("connector").notNull(),
+    target: text("target").notNull(),
+    operation: text("operation").notNull(),
+    externalId: text("external_id").notNull(),
+    nodeId: bigint("node_id", { mode: "number" }).references(() => nodes.id, {
+      onDelete: "set null",
+    }),
+    actor: jsonb("actor").$type<{
+      name?: string;
+      email?: string;
+      vendorUserId?: string;
+    }>(),
+    verdict: text("verdict"),
+    verdictId: uuid("verdict_id").references(() => verdicts.id, { onDelete: "set null" }),
+    blast: jsonb("blast").$type<BlastRow[]>(),
+    evidence: jsonb("evidence").$type<Evidence[]>(),
+    /** 'push' | 'poll' — Plan 11 must never blend the two into one latency. */
+    detectPath: text("detect_path").notNull().default("push"),
+    slackChannel: text("slack_channel"),
+    slackTs: text("slack_ts"),
+    /** The vendor's clock. MTTD across clocks is approximate; say so. */
+    changeAt: timestamp("change_at", { withTimezone: true }),
+    detectedAt: timestamp("detected_at", { withTimezone: true }).notNull().defaultNow(),
+    verdictAt: timestamp("verdict_at", { withTimezone: true }),
+    alertedAt: timestamp("alerted_at", { withTimezone: true }),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    acknowledgedBy: text("acknowledged_by"),
+    revertRequestedAt: timestamp("revert_requested_at", { withTimezone: true }),
+    revertRequestedBy: text("revert_requested_by"),
+    revertedAt: timestamp("reverted_at", { withTimezone: true }),
+    revertError: text("revert_error"),
+    state: incidentState("state").notNull().default("detected"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("reflex_incidents_org_state_idx").on(t.orgId, t.state, t.createdAt)],
+);
+
+/**
+ * The revert source of truth. Structure only — workflow JSON references
+ * credential *ids*, never secret values, and no row data ever lands here.
+ */
+export const structureSnapshots = pgTable(
+  "structure_snapshots",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    connector: text("connector").notNull(),
+    externalId: text("external_id").notNull(),
+    contentHash: text("content_hash").notNull(),
+    structure: jsonb("structure").$type<Record<string, unknown>>().notNull(),
+    capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("structure_snapshots_identity").on(
+      t.orgId,
+      t.connector,
+      t.externalId,
+      t.contentHash,
+    ),
+    index("structure_snapshots_lookup_idx").on(t.orgId, t.externalId, t.capturedAt),
+  ],
+);
+
+export const reflexSettings = pgTable("reflex_settings", {
+  orgId: bigint("org_id", { mode: "number" })
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  slackChannelId: text("slack_channel_id"),
+  /** APPROVE incidents are recorded silently — a ping per green change is how Reflex gets muted. */
+  alertThreshold: text("alert_threshold").notNull().default("WARN"),
+  dmActor: boolean("dm_actor").notNull().default(true),
+});
+
+/* ----------------------------------------------------- historian (plan 10) */
+
+/** An org with zero scopes mines nothing. No tool parameter can widen this. */
+export const miningScopes = pgTable(
+  "mining_scopes",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    connector: text("connector").notNull(),
+    scopeValue: text("scope_value").notNull(),
+    addedBy: text("added_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("mining_scopes_identity").on(t.orgId, t.connector, t.scopeValue)],
+);
+
+export const historianRuns = pgTable(
+  "historian_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    subjectNodeId: bigint("subject_node_id", { mode: "number" }).references(
+      () => nodes.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    state: historianRunState("state").notNull().default("queued"),
+    edgesTotal: integer("edges_total").notNull().default(0),
+    edgesProposed: integer("edges_proposed").notNull().default(0),
+    edgesGaveUp: integer("edges_gave_up").notNull().default(0),
+    edgesSkippedQuota: integer("edges_skipped_quota").notNull().default(0),
+    requestBudget: integer("request_budget").notNull().default(0),
+    requestsUsed: integer("requests_used").notNull().default(0),
+    startedBy: text("started_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("historian_runs_org_idx").on(t.orgId, t.createdAt)],
+);
+
+export const historianRunEdges = pgTable(
+  "historian_run_edges",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => historianRuns.id, { onDelete: "cascade" }),
+    edgeId: bigint("edge_id", { mode: "number" })
+      .notNull()
+      .references(() => edges.id, { onDelete: "cascade" }),
+    /** = agent_traces.run_id for this edge's loop. */
+    loopRunId: text("loop_run_id"),
+    outcome: text("outcome"),
+  },
+  (t) => [
+    unique("historian_run_edges_identity").on(t.runId, t.edgeId),
+    index("historian_run_edges_loop_idx").on(t.loopRunId),
+  ],
+);
+
+/** Monthly spend attribution. On free slugs the dollar figure is 0.0000. */
+export const llmUsage = pgTable(
+  "llm_usage",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    month: date("month").notNull(),
+    agent: text("agent").notNull(),
+    tier: text("tier").notNull(),
+    requests: integer("requests").notNull().default(0),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    completionTokens: integer("completion_tokens").notNull().default(0),
+    costUsd: numeric("cost_usd", { precision: 10, scale: 4 }).notNull().default("0"),
+  },
+  (t) => [unique("llm_usage_identity").on(t.orgId, t.month, t.agent, t.tier)],
+);
+
+/**
+ * The daily-cap ledger, at the grain the cap actually has. One OpenRouter key
+ * serves every org, so remaining-today is an *account* number: the cap minus
+ * the sum across all orgs. A per-org budget inside a shared ceiling is an
+ * allocation, not a guarantee.
+ */
+export const llmRequests = pgTable(
+  "llm_requests",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    day: date("day").notNull(),
+    orgId: bigint("org_id", { mode: "number" }).references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    agent: text("agent").notNull(),
+    requests: integer("requests").notNull().default(0),
+  },
+  (t) => [unique("llm_requests_identity").on(t.day, t.orgId, t.agent)],
+);
+
 /* ------------------------------------------------------- inferred types */
 
+/** The persisted row. `Verdict` in types.ts is the APPROVE|WARN|BLOCK union. */
+export type VerdictRow = typeof verdicts.$inferSelect;
+export type GateDecision = typeof gateDecisions.$inferSelect;
+export type ReflexIncident = typeof reflexIncidents.$inferSelect;
+export type StructureSnapshot = typeof structureSnapshots.$inferSelect;
+export type MiningScope = typeof miningScopes.$inferSelect;
+export type HistorianRun = typeof historianRuns.$inferSelect;
 export type Organization = typeof organizations.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
