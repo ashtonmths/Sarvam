@@ -396,7 +396,11 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/ashtonmths/sadhak-${{ matrix.app }}
+          # Derived, never hardcoded. GITHUB_TOKEN is scoped to the repository
+          # running this workflow, so it can only push packages owned by that
+          # repo's owner — a literal org here breaks the push the moment the
+          # code lives somewhere else. metadata-action lowercases it for us.
+          images: ghcr.io/${{ github.repository_owner }}/sadhak-${{ matrix.app }}
           tags: |
             type=raw,value=latest
             type=sha

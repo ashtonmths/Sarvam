@@ -82,7 +82,7 @@ services:
       - dokploy-network
 
   api:
-    image: ghcr.io/ashtonmths/sadhak-api:latest
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER to the org that owns the packages}/sadhak-api:latest
     restart: unless-stopped
     <<: *logging
     depends_on:
@@ -166,7 +166,7 @@ services:
       - sadhak-obs
 
   web:
-    image: ghcr.io/ashtonmths/sadhak-web:latest
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER to the org that owns the packages}/sadhak-web:latest
     restart: unless-stopped
     <<: *logging
     depends_on:

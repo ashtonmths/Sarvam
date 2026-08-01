@@ -18,7 +18,7 @@ function read(relative: string): string {
 }
 
 /** Keys the app never reads — consumed by compose or the toolchain. */
-const DEPLOY_ONLY = new Set(["POSTGRES_PASSWORD", "N8N_ENCRYPTION_KEY"]);
+const DEPLOY_ONLY = new Set(["POSTGRES_PASSWORD", "N8N_ENCRYPTION_KEY", "GHCR_OWNER"]);
 
 /**
  * The schema body, found by balancing braces rather than by scanning for the
