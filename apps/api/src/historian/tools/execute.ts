@@ -57,8 +57,14 @@ export async function executeTool(
       return { terminal: false, output: await edgeContext(ctx) };
 
     case "search_slack": {
-      const all = await searchSlack(ctx, String(args.query));
-      const { kept, dropped } = fitItems(all);
+      const result = await searchSlack(ctx, String(args.query));
+      // Reported as an error, not as an empty result. The model must be able
+      // to tell "nobody wrote this down" from "we could not go and look",
+      // because only the first is an honest reason to give up.
+      if (result.unavailable) {
+        return { terminal: false, output: { error: result.unavailable } };
+      }
+      const { kept, dropped } = fitItems(result.hits);
       for (const hit of kept) {
         ctx.seenUrls.add(hit.permalink);
         ctx.seenContent.set(hit.permalink, hit.text);
@@ -67,12 +73,15 @@ export async function executeTool(
     }
 
     case "search_github": {
-      const all = await searchGithub(
+      const result = await searchGithub(
         ctx,
         String(args.query),
         args.kind as "pr" | "commit",
       );
-      const { kept, dropped } = fitItems(all);
+      if (result.unavailable) {
+        return { terminal: false, output: { error: result.unavailable } };
+      }
+      const { kept, dropped } = fitItems(result.hits);
       for (const hit of kept) {
         ctx.seenUrls.add(hit.url);
         ctx.seenContent.set(hit.url, hit.snippet);

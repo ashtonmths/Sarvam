@@ -51,6 +51,14 @@ export function LiveGraph({ initialQuery = "" }: { initialQuery?: string }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
   const [q, setQ] = useState(initialQuery);
+
+  // `useState(initialQuery)` reads only on the first mount. Searching from the
+  // top bar while already on this page pushes a new ?q= but does not remount
+  // the component, so the box kept its old value and the search looked broken.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: syncing to the prop is the whole point
+  useEffect(() => {
+    setQ(initialQuery);
+  }, [initialQuery]);
   const [kind, setKind] = useState("all");
   const [critReason, setCritReason] = useState("");
   const [pendingCrit, setPendingCrit] = useState<number | null>(null);

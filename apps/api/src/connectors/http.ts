@@ -20,6 +20,30 @@ const RATE_LIMITS: Record<ConnectorSlug, number> = {
 
 const MAX_RETRIES = 3;
 
+/**
+ * How many times one request will wait out a rate limit before giving up.
+ * Bounded so a provider that is limiting indefinitely cannot pin a worker.
+ */
+const MAX_THROTTLE_WAITS = 5;
+
+/**
+ * `Retry-After` as milliseconds. The header is either delta-seconds or an
+ * HTTP-date, and GitHub genuinely sends the date form — parsing only the
+ * integer yielded NaN there and silently fell through to plain backoff,
+ * ignoring the one number the provider actually told us.
+ */
+function retryAfterMs(response: Response): number | null {
+  const raw = response.headers.get("retry-after");
+  if (!raw) return null;
+
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+
+  const at = Date.parse(raw);
+  if (Number.isNaN(at)) return null;
+  return Math.max(0, at - Date.now());
+}
+
 class TokenBucket {
   #tokens: number;
   #lastRefill = Date.now();
@@ -91,7 +115,19 @@ export class InstanceHttp {
     this.assertAllowed(path);
     const url = new URL(path, this.options.baseUrl).toString();
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt += 1) {
+    /**
+     * Rate-limit waits do not count against the retry budget.
+     *
+     * A 429 is the provider saying "not yet", not "this failed" — but it
+     * consumed an attempt like any error, so three consecutive 429s threw
+     * "exhausted retries" on a request that had never actually been tried.
+     * That is the opposite of what `Retry-After` means. They get their own
+     * bounded allowance instead, so a busy provider costs waiting rather than
+     * a failed crawl.
+     */
+    let throttled = 0;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; ) {
       await this.#bucket.take();
 
       let response: Response;
@@ -120,6 +156,7 @@ export class InstanceHttp {
             `${this.options.slug} request failed: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
+        attempt += 1;
         await sleep(backoffWithJitter(attempt));
         continue;
       }
@@ -135,12 +172,19 @@ export class InstanceHttp {
       }
 
       if (response.status === 429) {
-        const retryAfter = Number(response.headers.get("retry-after") ?? "0");
-        await sleep(retryAfter > 0 ? retryAfter * 1000 : backoffWithJitter(attempt));
+        throttled += 1;
+        if (throttled > MAX_THROTTLE_WAITS) {
+          throw new UpstreamError(
+            `${this.options.slug} is rate limiting persistently; giving this crawl back rather than holding a worker`,
+            { status: 502 },
+          );
+        }
+        await sleep(retryAfterMs(response) ?? backoffWithJitter(throttled));
         continue;
       }
 
       if (response.status >= 500 && attempt < MAX_RETRIES) {
+        attempt += 1;
         await sleep(backoffWithJitter(attempt));
         continue;
       }

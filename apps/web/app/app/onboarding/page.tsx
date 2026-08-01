@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { PageHead, VerdictBadge } from "../../../components/app/ui";
 import { GlyphDb, GlyphFlow, GlyphGrid } from "../../../components/marks";
-import { api, type GraphNode, type Page, type VerdictResult } from "../../../lib/api";
+import {
+  api,
+  type GraphNode,
+  type GraphStats,
+  type Page,
+  type VerdictResult,
+} from "../../../lib/api";
 
 /**
  * Connect → crawl → first verdict, under ten minutes. The wait during crawl
@@ -34,24 +40,44 @@ const CONNECTOR_CHOICES = [
   },
 ];
 
-const CRAWL_LINES = [
-  "connected read-only · sadhak_ro",
-  "tables: customers, invoices",
-  "fields: vat_rate, amount, email …",
-  "views: eu_vat_report",
-  "n8n: billing-sync (3 steps)",
-  "n8n: vat-report-mailer (3 steps)",
-  "n8n: dunning-reminders (2 steps)",
-  "airtable: Finance Ops / Invoices Mirror",
-  "fusing cross-vendor edges…",
-  "24 nodes · 22 edges mapped",
-];
+/**
+ * What has actually been mapped, read from the graph.
+ *
+ * This step used to replay a hardcoded script on a timer — "24 nodes · 22
+ * edges mapped" was a string, not a count, and it scrolled past identically
+ * whether a crawl had ever run or not. An onboarding screen that invents
+ * progress is the worst place in the product to do it: it is the first thing
+ * a customer sees, and it teaches them that the numbers here are decorative.
+ */
+function summarize(stats: GraphStats | null): string[] {
+  if (!stats) return [];
+  if (stats.nodes.total === 0) {
+    return [
+      "No graph yet. Connect a system and run a crawl — this fills in from the real one.",
+    ];
+  }
+
+  const lines = [`${stats.nodes.total} nodes · ${stats.edges.total} edges mapped`];
+  for (const [connector, count] of Object.entries(stats.nodes.byConnector)) {
+    lines.push(`${connector}: ${count} nodes`);
+  }
+  for (const [kind, count] of Object.entries(stats.nodes.byKind)) {
+    lines.push(`${kind}: ${count}`);
+  }
+  if (stats.unresolvedRefs > 0) {
+    // Stated, because an unresolved reference is a gap in the map and the
+    // whole point of this screen is what was really found.
+    lines.push(`${stats.unresolvedRefs} references could not be resolved`);
+  }
+  return lines;
+}
 
 export default function OnboardingPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [picked, setPicked] = useState<string | null>(null);
   const [demoMode, setDemoMode] = useState(false);
   const [crawlLines, setCrawlLines] = useState<string[]>([]);
+  const [crawlDone, setCrawlDone] = useState(false);
   const [decision, setDecision] = useState<VerdictResult | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -62,21 +88,35 @@ export default function OnboardingPage() {
     [],
   );
 
+  /**
+   * Polls the real graph while a crawl runs in the background, so the lines
+   * that appear are counts of things that exist.
+   */
   function startCrawl() {
     setStep(2);
     setCrawlLines([]);
-    let i = 0;
-    timer.current = setInterval(() => {
-      i += 1;
-      setCrawlLines(CRAWL_LINES.slice(0, i));
-      if (i >= CRAWL_LINES.length && timer.current) {
-        clearInterval(timer.current);
-        timer.current = null;
-      }
-    }, 600);
-  }
+    setCrawlDone(false);
 
-  const crawlDone = crawlLines.length >= CRAWL_LINES.length;
+    let polls = 0;
+    const poll = async () => {
+      polls += 1;
+      const stats = await api.get<GraphStats>("/api/graph/stats").catch(() => null);
+      setCrawlLines(summarize(stats));
+
+      // Settles once the graph stops growing, or after a bounded wait — a
+      // crawl that is still running says so rather than blocking the wizard.
+      if ((stats && stats.nodes.total > 0) || polls >= 10) {
+        setCrawlDone(true);
+        if (timer.current) {
+          clearInterval(timer.current);
+          timer.current = null;
+        }
+      }
+    };
+
+    void poll();
+    timer.current = setInterval(() => void poll(), 2000);
+  }
 
   async function runFirstVerdict() {
     setStep(3);
@@ -214,9 +254,10 @@ export default function OnboardingPage() {
             <div className="crawl-progress__bar">
               <div
                 className="crawl-progress__fill"
-                style={{
-                  width: `${Math.round((crawlLines.length / CRAWL_LINES.length) * 100)}%`,
-                }}
+                // Indeterminate until the graph reports, then full. There is
+                // no honest fraction to show: the crawl does not publish
+                // progress, and inventing one is what this screen used to do.
+                style={{ width: crawlDone ? "100%" : "35%" }}
               />
             </div>
             <div aria-live="polite">

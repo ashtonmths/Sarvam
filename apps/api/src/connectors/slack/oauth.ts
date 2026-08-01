@@ -86,19 +86,35 @@ export function redirectUri(): string {
  */
 const STATE_TTL_MS = 10 * 60_000;
 
-export function signState(orgId: number): string {
-  const payload = `${orgId}.${Date.now()}.${randomBytes(9).toString("base64url")}`;
+/**
+ * The state, plus the nonce that must come back in a cookie.
+ *
+ * Signing the org alone defeats forgery but not confusion: an attacker could
+ * start their own connect flow, take the signed state out of the redirect, and
+ * get a victim's Slack admin to approve *that* authorize URL. The callback
+ * would then bind the victim's workspace tokens to the attacker's org, and the
+ * attacker could read that workspace through the Historian.
+ *
+ * The remedy is to prove the browser completing the flow is the one that
+ * started it. The session cookie cannot do that — Slack returns to
+ * PUBLIC_API_URL, which in development is a tunnel host that never saw it — so
+ * a short-lived nonce cookie is set on the API origin instead, and the
+ * callback requires the nonce inside the signed state to match it.
+ */
+export function signState(orgId: number): { state: string; nonce: string } {
+  const nonce = randomBytes(18).toString("base64url");
+  const payload = `${orgId}.${Date.now()}.${nonce}`;
   const mac = createHmac("sha256", config.SESSION_SECRET)
     .update(payload)
     .digest("base64url");
-  return `${payload}.${mac}`;
+  return { state: `${payload}.${mac}`, nonce };
 }
 
-export function verifyState(state: string): number {
+export function verifyState(state: string, presentedNonce: string | undefined): number {
   const parts = state.split(".");
   if (parts.length !== 4) throw new UserError("Malformed OAuth state");
 
-  const [orgId, issuedAt, , mac] = parts as [string, string, string, string];
+  const [orgId, issuedAt, nonce, mac] = parts as [string, string, string, string];
   const payload = `${orgId}.${issuedAt}.${parts[2]}`;
   const expected = createHmac("sha256", config.SESSION_SECRET)
     .update(payload)
@@ -112,6 +128,23 @@ export function verifyState(state: string): number {
 
   if (Date.now() - Number(issuedAt) > STATE_TTL_MS) {
     throw new UserError("This OAuth link expired. Start the connection again.");
+  }
+
+  /**
+   * Checked after the MAC, so this compares a value we signed rather than one
+   * an attacker chose. Without it a valid signature is enough on its own, and
+   * a signature the attacker obtained legitimately for their own org is exactly
+   * what the hijack uses.
+   */
+  const expectedNonce = Buffer.from(nonce);
+  const gotNonce = Buffer.from(presentedNonce ?? "");
+  if (
+    gotNonce.length !== expectedNonce.length ||
+    !timingSafeEqual(gotNonce, expectedNonce)
+  ) {
+    throw new UserError(
+      "This authorization did not start in this browser. Begin the connection from Sadhak and approve it in the same browser.",
+    );
   }
 
   const parsed = Number(orgId);

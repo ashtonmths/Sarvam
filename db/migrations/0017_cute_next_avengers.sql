@@ -1,0 +1,3 @@
+ALTER TABLE "unresolved_refs" ADD COLUMN "connector_instance_id" bigint;--> statement-breakpoint
+ALTER TABLE "unresolved_refs" ADD CONSTRAINT "unresolved_refs_connector_instance_id_connector_instances_id_fk" FOREIGN KEY ("connector_instance_id") REFERENCES "public"."connector_instances"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "unresolved_refs_instance_idx" ON "unresolved_refs" USING btree ("connector_instance_id");

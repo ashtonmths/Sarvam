@@ -25,6 +25,9 @@ import { recordDetection } from "./incidents.js";
 
 const POLL_LIMIT = 100;
 
+/** Bounded so one enormous instance cannot hold the poll indefinitely. */
+const MAX_POLL_PAGES = 20;
+
 interface N8nWorkflow extends Record<string, unknown> {
   id: string;
   name: string;
@@ -45,6 +48,26 @@ function hashStructure(workflow: N8nWorkflow): string {
     connections: workflow.connections ?? {},
   };
   return createHash("sha256").update(JSON.stringify(structural)).digest("hex");
+}
+
+/**
+ * A vendor timestamp that cannot be trusted to parse.
+ *
+ * `new Date("garbage")` yields Invalid Date, which drizzle serialises by
+ * calling `toISOString()` — that throws a RangeError, and the throw escapes
+ * the poll before its re-enqueue, so one malformed `updatedAt` dead-lettered
+ * the job and stopped n8n change detection for that org permanently.
+ *
+ * A zone-less string is also read in the process's local zone by V8, so it is
+ * rejected rather than silently offset by however the container is configured.
+ */
+function parseVendorDate(raw: string | undefined): Date | null {
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  // Requires an explicit zone: trailing Z, or +hh:mm / -hh:mm.
+  if (!/(?:Z|[+-]\d{2}:?\d{2})$/.test(raw.trim())) return null;
+  return parsed;
 }
 
 function stripPayloads(workflow: N8nWorkflow): Record<string, unknown> {
@@ -72,18 +95,42 @@ export async function pollN8nWorkflows(orgId: number): Promise<number> {
     const secret = await getReadCredential(orgId, instance.id, "reflex.poll_n8n");
     if (!secret) continue;
 
-    let workflows: N8nWorkflow[];
+    /**
+     * Paged to the end rather than taking the first hundred.
+     *
+     * A single `limit=100` call left every workflow past the hundredth
+     * unmonitored — silently, since nothing compared what was asked for
+     * against what came back. `complete` also matters below: deletion is
+     * inferred from absence, and absence is only meaningful if the whole list
+     * was actually read.
+     */
+    const workflows: N8nWorkflow[] = [];
+    let complete = false;
     try {
-      const res = await pinnedFetch(
-        `${baseUrlFor(instance)}/api/v1/workflows?limit=${POLL_LIMIT}`,
-        {
-          headers: { "X-N8N-API-KEY": secret.reveal(), accept: "application/json" },
-        },
-        egressOptionsFor(instance),
-      );
-      if (!res.ok) continue;
-      const body = (await res.json()) as { data?: N8nWorkflow[] };
-      workflows = body.data ?? [];
+      let cursor: string | undefined;
+      for (let page = 0; page < MAX_POLL_PAGES; page += 1) {
+        const url = new URL(`${baseUrlFor(instance)}/api/v1/workflows`);
+        url.searchParams.set("limit", String(POLL_LIMIT));
+        if (cursor) url.searchParams.set("cursor", cursor);
+
+        const res = await pinnedFetch(
+          url.toString(),
+          {
+            headers: { "X-N8N-API-KEY": secret.reveal(), accept: "application/json" },
+          },
+          egressOptionsFor(instance),
+        );
+        if (!res.ok) break;
+
+        const body = (await res.json()) as { data?: N8nWorkflow[]; nextCursor?: string };
+        workflows.push(...(body.data ?? []));
+
+        cursor = body.nextCursor ?? undefined;
+        if (!cursor) {
+          complete = true;
+          break;
+        }
+      }
     } catch {
       continue;
     }
@@ -148,8 +195,22 @@ export async function pollN8nWorkflows(orgId: number): Promise<number> {
         orgId,
         connector: "n8n",
         change,
-        vendorEventId: hash.slice(0, 16),
-        changeAt: workflow.updatedAt ? new Date(workflow.updatedAt) : null,
+        /**
+         * The *previous* structure plus this one, not this one alone.
+         *
+         * Keying on the new hash made the dedupe key a function of a state
+         * rather than of a transition, so any change that reproduced a
+         * structure seen before was silently swallowed: disable a workflow,
+         * re-enable it, disable it again a fortnight later, and the second
+         * disable produced the identical key and no incident at all. Reflex
+         * went permanently blind to every repeat of a change it had seen
+         * once — and repeats are exactly what an incident review looks for.
+         *
+         * The pair is unique per transition, so a genuine redelivery still
+         * collapses while a real recurrence does not.
+         */
+        vendorEventId: `${(latest.contentHash ?? "").slice(0, 16)}:${hash.slice(0, 16)}`,
+        changeAt: parseVendorDate(workflow.updatedAt),
         detectPath: "poll",
         nodeId: node?.id ?? null,
       });
@@ -165,6 +226,72 @@ export async function pollN8nWorkflows(orgId: number): Promise<number> {
           .set({ metadata: { ...stripPayloads(workflow), active: false } })
           .where(eq(nodesTable.id, node.id));
       }
+
+      await enqueue(
+        "reflex.verdict",
+        { incidentId },
+        { orgId, dedupeKey: `reflex.verdict:${incidentId}`, priority: 5 },
+      );
+    }
+
+    /**
+     * Deletion, which the loop above can never see.
+     *
+     * It iterates the workflows the API *returned*, so a workflow that no
+     * longer exists produces no comparison and no incident — leaving Reflex
+     * blind to the single most destructive change it claims to cover. Absence
+     * is the only signal available, so it is inferred by diffing what we have
+     * snapshots for against what came back.
+     *
+     * Only when the listing was complete. A truncated page or a mid-poll
+     * failure would otherwise read as "everything vanished" and raise an
+     * incident per workflow, which is a worse failure than missing one.
+     */
+    if (!complete) continue;
+
+    const present = new Set(workflows.map((w) => `workflow/${w.id}`));
+    const known = await db
+      .selectDistinct({ externalId: structureSnapshots.externalId })
+      .from(structureSnapshots)
+      .where(
+        and(eq(structureSnapshots.orgId, orgId), eq(structureSnapshots.connector, "n8n")),
+      );
+
+    for (const row of known) {
+      if (present.has(row.externalId)) continue;
+
+      const [node] = await db
+        .select({ id: nodesTable.id })
+        .from(nodesTable)
+        .where(
+          and(
+            eq(nodesTable.orgId, orgId),
+            eq(nodesTable.connector, "n8n"),
+            eq(nodesTable.externalId, row.externalId),
+          ),
+        )
+        .limit(1);
+
+      const incidentId = await recordDetection({
+        orgId,
+        connector: "n8n",
+        change: {
+          target: "workflow",
+          operation: "delete",
+          connector: "n8n",
+          externalId: row.externalId,
+        },
+        // Keyed on the disappearance itself. A workflow can only be deleted
+        // once, and if it is restored and deleted again that is a new
+        // transition from a fresh snapshot.
+        vendorEventId: `deleted:${row.externalId}`,
+        changeAt: null,
+        detectPath: "poll",
+        nodeId: node?.id ?? null,
+      });
+
+      if (incidentId === null) continue;
+      detected += 1;
 
       await enqueue(
         "reflex.verdict",

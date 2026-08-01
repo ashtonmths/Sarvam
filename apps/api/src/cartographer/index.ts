@@ -121,11 +121,36 @@ export async function runCrawl(
       markStale: kind === "full",
     });
 
+    /**
+     * Replaced per connector instance, not appended to.
+     *
+     * These are the *current* unresolved references, and every crawl produces
+     * the same ones until somebody fixes the underlying reference. Appending
+     * meant one persistently unresolvable ref wrote a fresh row every crawl —
+     * around forty-eight a day at the default frequency — and `routes/graph.ts`
+     * surfaces a raw `count(*)` as the Reviewer inbox number. So a single
+     * stuck reference grew without bound into a queue that looked like
+     * mounting work and was one problem counted repeatedly.
+     *
+     * Deleting this instance's previous set first also means a reference that
+     * has since resolved disappears from the inbox on its own, which is the
+     * behaviour anyone would assume it already had.
+     */
+    await db
+      .delete(unresolvedRefs)
+      .where(
+        and(
+          eq(unresolvedRefs.orgId, orgId),
+          eq(unresolvedRefs.connectorInstanceId, instanceId),
+        ),
+      );
+
     if (unresolved.length > 0) {
       await db.insert(unresolvedRefs).values(
         unresolved.map((entry) => ({
           orgId,
           crawlId,
+          connectorInstanceId: instanceId,
           raw: entry.raw,
           candidates: entry.candidates,
         })),

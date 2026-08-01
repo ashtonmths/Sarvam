@@ -110,6 +110,33 @@ services:
       # stays as the default base for instances that do not override it.
       N8N_BASE_URL: http://n8n:5678
       PORT: "3001"
+
+      # Where vendors redirect back to. Slack sends the browser here after a
+      # grant, and the redirect must match the URL registered on the Slack app
+      # exactly. Unset, `redirectUri()` throws and the connect button 500s.
+      PUBLIC_API_URL: https://api.sadhak.online
+
+      # Hosts the operator vouches for, bypassing the private-range check.
+      # `db` is here because the Postgres crawler now goes through the egress
+      # guard and the stack's own database is on the compose network — without
+      # it a connector pointed at `db:5432` is refused as a private address.
+      # Operator-set only: an org admin cannot add to this, or a tenant could
+      # allowlist their way to the cloud metadata endpoint.
+      EGRESS_ALLOW_PRIVATE_HOSTS: n8n,db
+
+      # GitHub. The token is the fallback the change store and the Historian
+      # use where no App installation covers a repository; the App is what the
+      # merge gate needs to post a Check Run. All optional — the API boots and
+      # the deterministic verdict path works with none of them.
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_APP_WEBHOOK_SECRET: ${GITHUB_APP_WEBHOOK_SECRET:-}
+
+      # Slack OAuth, so connecting is a button rather than a token paste.
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
     # Readiness, so a redeploy drains before it swaps: /readyz reports 503 the
     # moment shutdown starts, and keeps serving for DRAIN_DELAY_MS afterwards
     # so the proxy notices before the socket closes.

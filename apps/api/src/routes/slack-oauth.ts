@@ -1,6 +1,11 @@
 import { connectorInstances, miningScopes } from "@sadhak/shared/schema";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+
+/** Proves the browser finishing the flow is the one that started it. */
+const OAUTH_NONCE_COOKIE = "sadhak_slack_oauth";
+
 import { z } from "zod";
 import { audit, auditSystem } from "../audit.js";
 import { config } from "../config.js";
@@ -62,7 +67,23 @@ slackOauthRoutes.get(
         "Slack OAuth is not configured on this deployment. Set SLACK_CLIENT_ID and SLACK_CLIENT_SECRET, or paste a bot token instead.",
       );
     }
-    return c.redirect(authorizeUrl(signState(c.get("orgId"))));
+    const { state, nonce } = signState(c.get("orgId"));
+
+    /**
+     * Set on the API origin, which is where Slack returns to — the session
+     * cookie lives on the web origin and never arrives at the callback. Short
+     * lived and SameSite=Lax so it survives the top-level redirect back from
+     * Slack while not riding along on cross-site subrequests.
+     */
+    setCookie(c, OAUTH_NONCE_COOKIE, nonce, {
+      httpOnly: true,
+      secure: config.NODE_ENV === "production",
+      sameSite: "Lax",
+      path: "/api/connectors/slack/oauth",
+      maxAge: 600,
+    });
+
+    return c.redirect(authorizeUrl(state));
   },
 );
 
@@ -190,7 +211,9 @@ slackOauthCallback.get("/api/connectors/slack/oauth/callback", async (c) => {
   const state = c.req.query("state");
   if (!code || !state) throw new UserError("Slack returned no code");
 
-  const orgId = verifyState(state);
+  const orgId = verifyState(state, getCookie(c, OAUTH_NONCE_COOKIE));
+  // Single use: a state that has been redeemed must not be redeemable again.
+  deleteCookie(c, OAUTH_NONCE_COOKIE, { path: "/api/connectors/slack/oauth" });
   const grant = await exchangeCode(code);
 
   // One Slack instance per org: connecting a second workspace replaces the

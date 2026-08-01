@@ -1059,6 +1059,278 @@
         }
       }
     },
+    "/api/documents": {
+      "get": {
+        "summary": "Uploaded documents, with embedding progress",
+        "tags": [
+          "Documents"
+        ],
+        "description": "Requires the `graph:read` capability.",
+        "responses": {
+          "200": {
+            "description": "Every document this organisation has uploaded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No credential, or one that no longer resolves.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Upload a transcript or note for the Historian to search",
+        "tags": [
+          "Documents"
+        ],
+        "description": "Requires `connector:manage` — uploading is the act of granting\naccess, the same as picking a Slack channel.\n\nText and markdown only, including subtitle exports. The text is\nchunked on its own boundaries and embedded on a worker, so text\nsearch works immediately and semantic search follows.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "This exact content was already uploaded. Nothing was stored again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Stored, with the number of chunks it produced.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Larger than the upload limit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unreadable, or not a text format.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/repos": {
+      "get": {
+        "summary": "Tracked repositories and how much history has landed",
+        "tags": [
+          "Changes"
+        ],
+        "description": "Requires the `graph:read` capability.",
+        "responses": {
+          "200": {
+            "description": "Each repository with its change count and coverage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Track a repository and start walking its history",
+        "tags": [
+          "Changes"
+        ],
+        "description": "Requires `connector:manage`, and requires that this organisation's\nGitHub App installation covers the repository — the deployment's\nown token is not proof that this organisation may read it.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tracked; the backfill runs in the background.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This organisation cannot be shown to have access to that repository.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checkpoints": {
+      "get": {
+        "summary": "Known-good moments, newest first",
+        "tags": [
+          "Changes"
+        ],
+        "description": "Requires the `graph:read` capability.",
+        "responses": {
+          "200": {
+            "description": "Recorded checkpoints with their confidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Mark a moment as known-good",
+        "tags": [
+          "Changes"
+        ],
+        "description": "Requires `graph:read`. Saying something looked fine at a given time\nis an observation anyone on the team can make, and a checkpoint only\never narrows a later search — a wrong one costs a wasted round, not\na wrong answer.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A checkpoint cannot be in the future.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/investigate": {
+      "post": {
+        "summary": "Find what changed between known-good and an incident",
+        "tags": [
+          "Changes"
+        ],
+        "description": "Requires `graph:read`. Starts at the most recent trusted checkpoint\nbefore the incident and widens to earlier ones only when that window\ncomes up empty.\n\nDeterministic: there is no model in this path, only indexed range\nscans and a ranking pass, so the same question returns the same\nanswer. Every stop is named — `found`, `scan_limit`,\n`lookback_limit`, `windows_exhausted` and `no_changes` are\ndifferent outcomes and the response says which.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The checkpoint used, the windows searched, the likely cause and its evidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/changes": {
+      "get": {
+        "summary": "Raw changes in a time window",
+        "tags": [
+          "Changes"
+        ],
+        "description": "Requires `graph:read`. `from` and `to` are ISO-8601.",
+        "responses": {
+          "200": {
+            "description": "Commits and pull requests, newest first, with paths.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`from` or `to` missing or not a valid instant.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/org/export": {
       "get": {
         "summary": "Export everything this organisation has",

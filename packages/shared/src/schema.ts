@@ -837,11 +837,26 @@ export const unresolvedRefs = pgTable(
     crawlId: bigint("crawl_id", { mode: "number" }).references(() => crawls.id, {
       onDelete: "cascade",
     }),
+    /**
+     * Which instance's crawl produced this set.
+     *
+     * These rows are the *current* unresolved references, replaced wholesale
+     * on each crawl rather than appended to, so the replace has to be scoped
+     * to the connector that owns them — otherwise one connector's crawl would
+     * clear another's findings.
+     */
+    connectorInstanceId: bigint("connector_instance_id", { mode: "number" }).references(
+      () => connectorInstances.id,
+      { onDelete: "cascade" },
+    ),
     raw: jsonb("raw").$type<Record<string, unknown>>().notNull(),
     candidates: jsonb("candidates").$type<unknown[]>().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("unresolved_refs_org_idx").on(t.orgId, t.createdAt)],
+  (t) => [
+    index("unresolved_refs_org_idx").on(t.orgId, t.createdAt),
+    index("unresolved_refs_instance_idx").on(t.connectorInstanceId),
+  ],
 );
 
 /* ----------------------------------------------------- sentinel (plan 7) */

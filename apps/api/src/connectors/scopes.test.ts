@@ -171,6 +171,23 @@ describe("the Postgres crawler reads the catalog and nothing else", () => {
     // No table SELECT is requested; catalog visibility suffices for structure.
     expect(postgresConnector.SETUP_GRANT).not.toMatch(/GRANT SELECT ON (TABLE|ALL)/i);
   });
+
+  /**
+   * The docs are the copy a customer actually runs, and they had drifted: the
+   * page published a blanket `GRANT SELECT ON ALL TABLES IN SCHEMA public`
+   * while the code asserted above that it never asks for one. Testing only the
+   * constant left the wrong instruction on the website, which is the version
+   * that matters — nobody grants privileges by reading a TypeScript file.
+   */
+  it("never tells a customer to grant a table SELECT", () => {
+    const page = readFileSync(
+      new URL("../../../web/content/docs/connectors/postgres.mdx", import.meta.url),
+      "utf8",
+    );
+    const sql = page.match(/```sql[\s\S]*?```/g)?.join("\n") ?? "";
+    expect(sql).toContain("GRANT USAGE ON SCHEMA");
+    expect(sql).not.toMatch(/GRANT SELECT ON (TABLE|ALL)/i);
+  });
 });
 
 describe("connector config rejects secrets", () => {

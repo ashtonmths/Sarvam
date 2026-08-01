@@ -73,9 +73,29 @@ async function scopedChannels(orgId: number): Promise<string[]> {
   return rows.map((r) => r.value);
 }
 
-export async function searchSlack(ctx: LoopCtx, query: string): Promise<SlackHit[]> {
+/**
+ * A search that could not run is not a search that found nothing.
+ *
+ * Returning a bare empty array conflated the two, and the agent cannot tell
+ * them apart: it concludes there is no written trace, calls give_up, and the
+ * edge is recorded as investigated-and-unexplainable — having spent the run's
+ * budget without ever reaching Slack. `unavailable` carries the reason so the
+ * model is told it was blocked rather than left to infer an absence.
+ */
+export interface SearchResult {
+  hits: SlackHit[];
+  unavailable?: string;
+}
+
+export async function searchSlack(ctx: LoopCtx, query: string): Promise<SearchResult> {
   const channels = await scopedChannels(ctx.orgId);
-  if (channels.length === 0) return [];
+  if (channels.length === 0) {
+    return {
+      hits: [],
+      unavailable:
+        "No Slack channel has been selected for mining, so there was nothing to search. An admin picks channels in connector settings.",
+    };
+  }
 
   const userToken = await slackToken(ctx.orgId, "oauth_user_access");
   if (userToken) return searchViaApi(userToken, query, channels, ctx.signal);
@@ -83,7 +103,11 @@ export async function searchSlack(ctx: LoopCtx, query: string): Promise<SlackHit
   const botToken = await slackToken(ctx.orgId, "oauth_access");
   if (botToken) return scanChannels(botToken, query, channels, ctx.signal);
 
-  return [];
+  return {
+    hits: [],
+    unavailable:
+      "Slack is connected but no usable token is stored, so it could not be searched.",
+  };
 }
 
 /** Preferred path: the qualifiers are built server-side from the scope list. */
@@ -92,7 +116,7 @@ async function searchViaApi(
   query: string,
   channels: string[],
   signal?: AbortSignal,
-): Promise<SlackHit[]> {
+): Promise<SearchResult> {
   const scoped = `${stripQualifiers(query)} ${channels.map((c) => `in:${c}`).join(" ")}`;
   const url = `${SLACK_API}/search.messages?query=${encodeURIComponent(scoped)}&count=10`;
 
@@ -100,10 +124,13 @@ async function searchViaApi(
     headers: { authorization: `Bearer ${token}` },
     ...(signal ? { signal } : {}),
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    return { hits: [], unavailable: `Slack search returned HTTP ${res.status}.` };
+  }
 
   const body = (await res.json()) as {
     ok?: boolean;
+    error?: string;
     messages?: {
       matches?: Array<{
         text?: string;
@@ -113,9 +140,16 @@ async function searchViaApi(
       }>;
     };
   };
-  if (!body.ok) return [];
+  if (!body.ok) {
+    // Slack answers 200 with ok:false, so a missing scope or a revoked token
+    // arrives looking exactly like a successful empty search.
+    return {
+      hits: [],
+      unavailable: `Slack refused the search: ${body.error ?? "unknown"}.`,
+    };
+  }
 
-  return (body.messages?.matches ?? [])
+  const hits = (body.messages?.matches ?? [])
     .filter((m) => m.permalink && m.text)
     .slice(0, 10)
     .map((m) => ({
@@ -125,6 +159,8 @@ async function searchViaApi(
       authored_at: m.ts ? tsToIso(m.ts) : null,
       permalink: m.permalink as string,
     }));
+
+  return { hits };
 }
 
 /** Fallback for bot-token-only orgs: bounded scan, filtered in memory. */
@@ -133,9 +169,13 @@ async function scanChannels(
   query: string,
   channels: string[],
   signal?: AbortSignal,
-): Promise<SlackHit[]> {
+): Promise<SearchResult> {
   const terms = stripQualifiers(query).toLowerCase().split(/\s+/).filter(Boolean);
   const hits: SlackHit[] = [];
+  // Counted so a scan where every channel refused is reported as blocked
+  // rather than as an honest empty result.
+  let unreachable = 0;
+  let lastError = "unknown";
   const perChannel = Math.max(
     1,
     Math.floor(config.SLACK_SCAN_MESSAGES / channels.length),
@@ -147,13 +187,21 @@ async function scanChannels(
       headers: { authorization: `Bearer ${token}` },
       ...(signal ? { signal } : {}),
     });
-    if (!res.ok) continue;
+    if (!res.ok) {
+      unreachable += 1;
+      continue;
+    }
 
     const body = (await res.json()) as {
       ok?: boolean;
+      error?: string;
       messages?: Array<{ text?: string; user?: string; ts?: string }>;
     };
-    if (!body.ok) continue;
+    if (!body.ok) {
+      unreachable += 1;
+      lastError = body.error ?? lastError;
+      continue;
+    }
 
     for (const message of body.messages ?? []) {
       const text = message.text ?? "";
@@ -170,13 +218,19 @@ async function scanChannels(
         authored_at: message.ts ? tsToIso(message.ts) : null,
         permalink,
       });
-      if (hits.length >= 10) return hits;
+      if (hits.length >= 10) return { hits };
     }
   }
 
   // Nothing from the scan persists except the final quoted span — pointers,
   // never archives.
-  return hits;
+  if (hits.length === 0 && unreachable === channels.length) {
+    return {
+      hits: [],
+      unavailable: `None of the ${channels.length} selected channels could be read (${lastError}). The bot may not be a member, or the token may have lost its scopes.`,
+    };
+  }
+  return { hits };
 }
 
 async function getPermalink(

@@ -10,7 +10,9 @@ export default function AppLoading() {
   return (
     <div role="status" aria-busy="true" aria-label="Loading">
       <div className="loader">
-        <LogoMark size={34} className="loader__mark" />
+        <span className="loader__mark">
+          <LogoMark size={26} />
+        </span>
         <span className="loader__label">Loading</span>
       </div>
 

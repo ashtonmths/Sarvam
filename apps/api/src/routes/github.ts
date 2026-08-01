@@ -7,6 +7,7 @@ import { db } from "../db.js";
 import { NotFoundError } from "../errors.js";
 import {
   githubAppConfigured,
+  installationRepositories,
   installationToken,
   isCheckRequired,
 } from "../github/app.js";
@@ -32,19 +33,44 @@ githubRoutes.get("/github/installations", requireCapability("graph:read"), async
 
   const items = await Promise.all(
     rows.map(async (row) => {
+      /**
+       * Asked of the repositories the installation actually covers.
+       *
+       * This used to query `${accountLogin}/${accountLogin}` — the account
+       * name in both halves — which is a repository that essentially never
+       * exists. GitHub answered 404, `isCheckRequired` reads a 404 as "no
+       * protection configured", and so *every* installation rendered the amber
+       * "installed, not enforcing" banner, including correctly configured
+       * ones. A banner that exists to stop someone believing they are
+       * protected was itself the thing lying.
+       *
+       * Reported per repository, because enforcement is per branch: an org
+       * with the check required on one repo and not another is the normal
+       * case, and collapsing that to one boolean would replace a false
+       * negative with a false positive.
+       */
       let enforcing: boolean | null = null;
-      if (githubAppConfigured() && row.accountLogin) {
+      let repositories: Array<{ fullName: string; enforcing: boolean | null }> = [];
+
+      if (githubAppConfigured()) {
         try {
           const token = await installationToken(row.installationId);
-          enforcing = await isCheckRequired(
-            token,
-            `${row.accountLogin}/${row.accountLogin}`,
+          const repos = await installationRepositories(token);
+          repositories = await Promise.all(
+            repos.map(async (repo) => ({
+              fullName: repo.fullName,
+              enforcing: await isCheckRequired(token, repo.fullName, repo.defaultBranch),
+            })),
           );
+          // Only a true claim across every covered repository clears the
+          // banner, since one unprotected repo is one place a change can land.
+          enforcing =
+            repositories.length > 0 && repositories.every((r) => r.enforcing === true);
         } catch {
           enforcing = null;
         }
       }
-      return { ...row, enforcing };
+      return { ...row, enforcing, repositories };
     }),
   );
 

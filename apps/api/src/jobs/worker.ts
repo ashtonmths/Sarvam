@@ -125,7 +125,24 @@ async function runOneInContext(
 
   const controller = new AbortController();
   const heartbeat = setInterval(() => {
-    void sqlJobs`UPDATE jobs SET heartbeat_at = now() WHERE id = ${job.id}`;
+    /**
+     * Caught, because an unhandled rejection here kills the process.
+     *
+     * `void` discards the promise but not its rejection, so a transient
+     * database blip during a long crawl became an unhandled rejection — which
+     * on Node's default terminates the worker mid-job. A missed heartbeat is
+     * survivable: the reaper only requeues after several are missed, and the
+     * next tick writes one anyway.
+     */
+    void sqlJobs`UPDATE jobs SET heartbeat_at = now() WHERE id = ${job.id}`.catch(
+      (error: unknown) => {
+        log().warn({
+          event: "job_heartbeat_failed",
+          jobId: job.id,
+          err: error instanceof Error ? error.message : String(error),
+        });
+      },
+    );
   }, HEARTBEAT_MS);
 
   const timeoutMs = registration.options.timeoutMs ?? 10 * 60_000;

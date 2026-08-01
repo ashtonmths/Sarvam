@@ -31,9 +31,6 @@ export function Footer() {
                 <Link className="footer__link" href="/product/gate">
                   The gate
                 </Link>
-                <Link className="footer__link" href="/docs">
-                  Docs
-                </Link>
               </div>
               <div className="footer__col">
                 <span className="footer__col-title">Project</span>

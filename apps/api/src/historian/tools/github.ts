@@ -1,7 +1,8 @@
-import { miningScopes } from "@sadhak/shared/schema";
-import { and, eq } from "drizzle-orm";
+import { githubInstallations, miningScopes } from "@sadhak/shared/schema";
+import { and, eq, isNull } from "drizzle-orm";
 import { config } from "../../config.js";
 import { db } from "../../db.js";
+import { githubAppConfigured, installationToken } from "../../github/app.js";
 import type { LoopCtx } from "./execute.js";
 
 /**
@@ -33,6 +34,33 @@ async function throttle(orgId: number): Promise<void> {
   lastSearchAt.set(orgId, Date.now());
 }
 
+/**
+ * Falls back to the shared token so a deployment without the GitHub App can
+ * still mine, which is the only reason that token exists. When both are absent
+ * the caller reports it rather than returning an empty search.
+ */
+async function miningToken(orgId: number): Promise<string | null> {
+  if (githubAppConfigured()) {
+    const [row] = await db
+      .select({ installationId: githubInstallations.installationId })
+      .from(githubInstallations)
+      .where(
+        and(eq(githubInstallations.orgId, orgId), isNull(githubInstallations.removedAt)),
+      )
+      .limit(1);
+
+    if (row) {
+      try {
+        return await installationToken(row.installationId);
+      } catch {
+        // A suspended or revoked installation falls through rather than
+        // failing the search outright.
+      }
+    }
+  }
+  return config.GITHUB_TOKEN ?? null;
+}
+
 async function scopedRepos(orgId: number): Promise<string[]> {
   const rows = await db
     .select({ value: miningScopes.scopeValue })
@@ -41,16 +69,43 @@ async function scopedRepos(orgId: number): Promise<string[]> {
   return rows.map((r) => r.value);
 }
 
+/** Same contract as the Slack search: blocked is not the same as empty. */
+export interface GithubSearchResult {
+  hits: GithubHit[];
+  unavailable?: string;
+}
+
 export async function searchGithub(
   ctx: LoopCtx,
   query: string,
   kind: "pr" | "commit" = "pr",
-): Promise<GithubHit[]> {
+): Promise<GithubSearchResult> {
   const repos = await scopedRepos(ctx.orgId);
-  if (repos.length === 0) return [];
+  if (repos.length === 0) {
+    return {
+      hits: [],
+      unavailable:
+        "No GitHub repository has been selected for mining, so there was nothing to search.",
+    };
+  }
 
-  const token = config.GITHUB_TOKEN;
-  if (!token) return [];
+  /**
+   * The org's own installation first, the deployment token only as a fallback.
+   *
+   * Mining read every org's GitHub through one deployment-wide token, so reach
+   * followed whoever owned that token rather than the customer's grant, and
+   * every tenant competed for its single 30/min search budget. An installation
+   * token is scoped to exactly the repositories that organisation installed
+   * the app on, which is the same answer the change store already uses.
+   */
+  const token = await miningToken(ctx.orgId);
+  if (!token) {
+    return {
+      hits: [],
+      unavailable:
+        "No GitHub credential is available for this organisation — install the Sadhak app on the repositories, or set GITHUB_TOKEN on the deployment. This is a configuration gap, not an absence of evidence.",
+    };
+  }
 
   await throttle(ctx.orgId);
 
@@ -75,7 +130,12 @@ export async function searchGithub(
     },
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    return {
+      hits: [],
+      unavailable: `GitHub search returned HTTP ${res.status}${res.status === 403 ? " — likely a secondary rate limit" : ""}.`,
+    };
+  }
 
   const body = (await res.json()) as {
     items?: Array<{
@@ -88,7 +148,7 @@ export async function searchGithub(
     }>;
   };
 
-  return (body.items ?? [])
+  const hits = (body.items ?? [])
     .filter((item) => item.html_url)
     .slice(0, 10)
     .map((item) => ({
@@ -99,6 +159,8 @@ export async function searchGithub(
       authored_at: item.created_at ?? item.commit?.author?.date ?? null,
       url: item.html_url as string,
     }));
+
+  return { hits };
 }
 
 function stripRepoQualifiers(query: string): string {

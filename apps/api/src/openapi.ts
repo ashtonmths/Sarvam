@@ -332,6 +332,165 @@ export function openapiDocument(version = "dev") {
         get: listOperation("List detected changes", "Reflex", "graph:read"),
       },
       "/api/audit": { get: listOperation("The audit log", "Org", "audit:read") },
+
+      "/api/documents": {
+        get: {
+          summary: "Uploaded documents, with embedding progress",
+          tags: ["Documents"],
+          description: "Requires the `graph:read` capability.",
+          responses: {
+            "200": {
+              description: "Every document this organisation has uploaded.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+            "401": problemResponse("No credential, or one that no longer resolves."),
+          },
+        },
+        post: {
+          summary: "Upload a transcript or note for the Historian to search",
+          tags: ["Documents"],
+          description: [
+            "Requires `connector:manage` — uploading is the act of granting",
+            "access, the same as picking a Slack channel.",
+            "",
+            "Text and markdown only, including subtitle exports. The text is",
+            "chunked on its own boundaries and embedded on a worker, so text",
+            "search works immediately and semantic search follows.",
+          ].join("\n"),
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object" } } },
+          },
+          responses: {
+            "201": {
+              description: "Stored, with the number of chunks it produced.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+            "200": {
+              description:
+                "This exact content was already uploaded. Nothing was stored again.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+            "413": problemResponse("Larger than the upload limit."),
+            "422": problemResponse("Unreadable, or not a text format."),
+          },
+        },
+      },
+
+      "/api/repos": {
+        get: {
+          summary: "Tracked repositories and how much history has landed",
+          tags: ["Changes"],
+          description: "Requires the `graph:read` capability.",
+          responses: {
+            "200": {
+              description: "Each repository with its change count and coverage.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+          },
+        },
+        post: {
+          summary: "Track a repository and start walking its history",
+          tags: ["Changes"],
+          description: [
+            "Requires `connector:manage`, and requires that this organisation's",
+            "GitHub App installation covers the repository — the deployment's",
+            "own token is not proof that this organisation may read it.",
+          ].join("\n"),
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object" } } },
+          },
+          responses: {
+            "201": {
+              description: "Tracked; the backfill runs in the background.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+            "403": problemResponse(
+              "This organisation cannot be shown to have access to that repository.",
+            ),
+          },
+        },
+      },
+
+      "/api/checkpoints": {
+        get: {
+          summary: "Known-good moments, newest first",
+          tags: ["Changes"],
+          description: "Requires the `graph:read` capability.",
+          responses: {
+            "200": {
+              description: "Recorded checkpoints with their confidence.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+          },
+        },
+        post: {
+          summary: "Mark a moment as known-good",
+          tags: ["Changes"],
+          description: [
+            "Requires `graph:read`. Saying something looked fine at a given time",
+            "is an observation anyone on the team can make, and a checkpoint only",
+            "ever narrows a later search — a wrong one costs a wasted round, not",
+            "a wrong answer.",
+          ].join("\n"),
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object" } } },
+          },
+          responses: {
+            "201": {
+              description: "Recorded.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+            "422": problemResponse("A checkpoint cannot be in the future."),
+          },
+        },
+      },
+
+      "/api/investigate": {
+        post: {
+          summary: "Find what changed between known-good and an incident",
+          tags: ["Changes"],
+          description: [
+            "Requires `graph:read`. Starts at the most recent trusted checkpoint",
+            "before the incident and widens to earlier ones only when that window",
+            "comes up empty.",
+            "",
+            "Deterministic: there is no model in this path, only indexed range",
+            "scans and a ranking pass, so the same question returns the same",
+            "answer. Every stop is named — `found`, `scan_limit`,",
+            "`lookback_limit`, `windows_exhausted` and `no_changes` are",
+            "different outcomes and the response says which.",
+          ].join("\n"),
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object" } } },
+          },
+          responses: {
+            "200": {
+              description:
+                "The checkpoint used, the windows searched, the likely cause and its evidence.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+          },
+        },
+      },
+
+      "/api/changes": {
+        get: {
+          summary: "Raw changes in a time window",
+          tags: ["Changes"],
+          description: "Requires `graph:read`. `from` and `to` are ISO-8601.",
+          responses: {
+            "200": {
+              description: "Commits and pull requests, newest first, with paths.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+            "422": problemResponse("`from` or `to` missing or not a valid instant."),
+          },
+        },
+      },
       "/api/org/export": {
         get: {
           summary: "Export everything this organisation has",

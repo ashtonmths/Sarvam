@@ -163,22 +163,36 @@ export function registerJobHandlers(): void {
         .select({
           frequency: connectorInstances.crawlFrequencyMinutes,
           status: connectorInstances.status,
+          breakerOpenUntil: connectorInstances.breakerOpenUntil,
         })
         .from(connectorInstances)
         .where(eq(connectorInstances.id, instanceId))
         .limit(1);
 
       if (instance && instance.status !== "disabled") {
+        /**
+         * The breaker is read here, not only at boot.
+         *
+         * `runCrawl` computes an exponential `breakerOpenUntil` after repeated
+         * failures, and `scheduleDueCrawls` honours it — but that runs once, at
+         * startup. This path is where a connector actually reschedules itself,
+         * and it consulted only `status`, so a connector failing against a
+         * down or rate-limited provider was re-crawled at full frequency
+         * forever while the backoff it had calculated sat unread in the
+         * column.
+         */
+        const base = instance.frequency * 60_000;
         // ±10% jitter is the thundering-herd guard when many instances share
         // a frequency.
-        const base = instance.frequency * 60_000;
         const jitter = base * (Math.random() * 0.2 - 0.1);
+        const breaker = instance.breakerOpenUntil?.getTime() ?? 0;
+        const nextAt = Math.max(Date.now() + base + jitter, breaker);
         await enqueue(
           "connector.crawl",
           { instanceId, kind: "full" },
           {
             orgId: ctx.orgId,
-            runAfter: new Date(Date.now() + base + jitter),
+            runAfter: new Date(nextAt),
             dedupeKey: `connector.crawl:${instanceId}`,
             excludeJobId: ctx.jobId,
           },

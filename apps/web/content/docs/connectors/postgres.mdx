@@ -20,13 +20,22 @@ same amount of stored data as a crawl of an empty one.
 CREATE ROLE sadhak_reader LOGIN PASSWORD 'a-strong-password';
 GRANT CONNECT ON DATABASE your_db TO sadhak_reader;
 GRANT USAGE ON SCHEMA public TO sadhak_reader;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO sadhak_reader;
 ```
 
-`SELECT` looks broader than it is: `information_schema` is itself a set of
-tables, and reading it is what the grant is for. If your policy forbids a blanket
-grant, `GRANT SELECT ON ALL TABLES IN SCHEMA information_schema` is enough for
-the structural crawl.
+That is the whole grant. There is deliberately no `GRANT SELECT ON ALL TABLES`:
+every query the crawler runs reads `information_schema` or `pg_catalog`, which
+Postgres exposes to any role that can connect, so a table `SELECT` would grant
+access the crawler never uses.
+
+This page previously published a blanket `SELECT ON ALL TABLES IN SCHEMA public`.
+That was wrong, and wrong in the expensive direction — it asked customers to hand
+over read access to every row in their database to run a crawl that only reads
+structure. The role above is the one the code actually needs, and a unit test
+asserts the published grant never contains a table `SELECT` so the two cannot
+drift again.
+
+The session is also hardened read-only on connect, so a write through this
+connection is a database error rather than something a code review has to catch.
 
 ## Read and revert are separate
 

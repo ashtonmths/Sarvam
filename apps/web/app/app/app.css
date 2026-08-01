@@ -172,11 +172,16 @@
   margin-left: auto;
 }
 
+/* flex:none and a real minimum — it sat between the nav groups and the tools
+   with nothing stopping it shrinking, so on a mid-width window it squeezed
+   down to a sliver that clipped whatever you typed. */
 .topnav__search {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: clamp(180px, 22vw, 300px);
+  flex: none;
+  min-width: 210px;
+  width: clamp(210px, 22vw, 300px);
   padding: 6px 6px 6px 16px;
   border: 1px solid var(--line);
   border-radius: 99px;
@@ -4308,23 +4313,30 @@
   color: var(--ink);
 }
 
+/* The mark is a raster image, so the motion lives around it rather than inside
+   it: the mark breathes while a ring traces the thread it cannot draw itself. */
 .loader__mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
   animation: loader-pulse 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
 
-/* the thread inside the mark, drawn and redrawn */
-.loader__mark path {
-  stroke-dasharray: 46;
-  animation: loader-thread 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+.loader__mark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--thread);
+  animation: loader-spin 0.9s linear infinite;
 }
 
-@keyframes loader-thread {
-  0% {
-    stroke-dashoffset: 46;
-  }
-  55%,
-  100% {
-    stroke-dashoffset: 0;
+@keyframes loader-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -4380,4 +4392,68 @@
   .skel::after {
     display: none;
   }
+}
+
+/* ---------------------------------------------- graph: overview language */
+
+/* The canvas and its side panel are the last surfaces still on the old radius
+   and shadow. They now match every other card in the app. */
+.graph-canvas {
+  border-color: var(--line-soft);
+  border-radius: 20px;
+  box-shadow:
+    0 1px 2px rgba(23, 25, 30, 0.035),
+    0 18px 40px -26px rgba(23, 25, 30, 0.3);
+}
+
+/* The filter row reads as one control bar rather than three loose inputs. */
+.filters {
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 99px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(23, 25, 30, 0.035);
+}
+
+.filters input[type="search"],
+.filters select {
+  border-radius: 99px;
+  padding: 8px 14px;
+  font-size: 13.5px;
+  background: var(--panel);
+  border-color: transparent;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.filters input[type="search"]:focus {
+  outline: none;
+  background: var(--card);
+  border-color: var(--thread);
+  box-shadow: 0 0 0 4px var(--thread-soft);
+}
+
+/* zoom controls as a floating pill, matching the top bar's icon buttons */
+.graph-controls {
+  top: 14px;
+  right: 14px;
+  border-radius: 99px;
+  border-color: var(--line);
+  box-shadow: 0 6px 18px -10px rgba(23, 25, 30, 0.35);
+}
+
+.graph-controls button {
+  width: 34px;
+  height: 32px;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.graph-legend {
+  border-radius: 99px;
 }

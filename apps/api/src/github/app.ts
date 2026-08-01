@@ -224,6 +224,36 @@ export async function completeCheckRun(
  * advisory, and a customer believing otherwise is worse than no gate — the
  * web app surfaces this as "installed but not enforcing".
  */
+/**
+ * The repositories an installation actually covers.
+ *
+ * Needed because the installation row records only the *account* it was
+ * installed on, and enforcement is a per-repository, per-branch setting. The
+ * default branch comes back on the same response, which matters: asking about
+ * protection on `main` for a repo whose default is `master` reports "not
+ * enforcing" for a repository that is correctly protected.
+ */
+export async function installationRepositories(
+  token: string,
+): Promise<Array<{ fullName: string; defaultBranch: string }>> {
+  try {
+    const body = await gh<{
+      repositories?: Array<{ full_name?: string; default_branch?: string }>;
+    }>(token, "/installation/repos?per_page=100");
+
+    return (body.repositories ?? [])
+      .filter((repo) => repo.full_name)
+      .map((repo) => ({
+        fullName: repo.full_name as string,
+        defaultBranch: repo.default_branch || "main",
+      }));
+  } catch {
+    // An unreadable installation reports nothing rather than guessing, so the
+    // caller renders "unknown" instead of a confident "not enforcing".
+    return [];
+  }
+}
+
 export async function isCheckRequired(
   token: string,
   repo: string,

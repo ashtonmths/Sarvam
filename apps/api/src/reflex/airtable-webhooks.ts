@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { connectorInstances, nodes as nodesTable } from "@sadhak/shared/schema";
 import type { ChangeDescriptor } from "@sadhak/shared/types";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { constantTimeEqual, verifyHmacSha256 } from "../crypto/compare.js";
 import { db } from "../db.js";
 import { enqueue } from "../jobs/queue.js";
@@ -68,10 +68,27 @@ export async function registerAirtableWebhook(
     value: body.macSecretBase64,
   });
 
+  /**
+   * Merged into the existing config, never replacing it.
+   *
+   * Replacing it dropped `bases` — the list the customer picked on the connect
+   * form. The crawler reads an absent `bases` as "no filter", so registering a
+   * webhook silently widened Sadhak from the one base somebody deliberately
+   * chose to every base the token can see, with no event saying so. That is the
+   * opposite of the consent this product is built on.
+   *
+   * Done in SQL rather than read-modify-write: the payload job writes the
+   * cursor to this same column, and a read-modify-write here would clobber
+   * whatever it committed between the read and the write.
+   */
   await db
     .update(connectorInstances)
     .set({
-      config: { webhookId: body.id, baseId, [CURSOR_KEY]: 0 },
+      config: sql`${connectorInstances.config} || ${JSON.stringify({
+        webhookId: body.id,
+        baseId,
+        [CURSOR_KEY]: 0,
+      })}::jsonb`,
       updatedAt: new Date(),
     })
     .where(eq(connectorInstances.id, instanceId));
@@ -177,9 +194,19 @@ export async function fetchAirtablePayloads(
     more = body.mightHaveMore ?? false;
     pages += 1;
 
+    /**
+     * Merged in SQL, for the same reason as the registration above and one
+     * more: `cfg` was read before this loop started. Spreading it back would
+     * restore that snapshot over anything written since — including a fresh
+     * `webhookId` from a concurrent refresh, after which every subsequent pull
+     * 404s against a webhook that no longer exists.
+     */
     await db
       .update(connectorInstances)
-      .set({ config: { ...cfg, airtableCursor: cursor }, updatedAt: new Date() })
+      .set({
+        config: sql`${connectorInstances.config} || ${JSON.stringify({ airtableCursor: cursor })}::jsonb`,
+        updatedAt: new Date(),
+      })
       .where(eq(connectorInstances.id, instance.id));
   }
 
