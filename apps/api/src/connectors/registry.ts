@@ -119,6 +119,11 @@ export function makeReadContext(
     secret,
     authHeaders: profile?.authHeaders ?? (() => ({})),
     allowedPaths: profile?.allowedPaths ?? [],
+    // n8n is the only connector whose base URL the customer supplies, and the
+    // only one that may legitimately be a private http host (the bundled
+    // instance on the compose network). Everything else is a fixed vendor
+    // domain and is held to public https.
+    allowPrivateHttp: slug === "n8n",
   });
 
   return {

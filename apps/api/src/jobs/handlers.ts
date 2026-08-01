@@ -6,6 +6,7 @@ import { runCrawl } from "../cartographer/index.js";
 import { db } from "../db.js";
 import { embedAll } from "../embed.js";
 import { executeRun } from "../historian/runs.js";
+import { purgeStaleCounters } from "../http/rate-limit.js";
 import { pollN8nWorkflows } from "../reflex/detect-n8n.js";
 import { getIncident, recordVerdict } from "../reflex/incidents.js";
 import {
@@ -311,6 +312,9 @@ export function registerJobHandlers(): void {
   /** Exhaust, pruned on a schedule. Rationale is never touched by retention. */
   registerHandler("retention.prune_sessions", async () => {
     await pruneExpiredSessions();
+    // Rate counters age out with the same sweep: a closed window is only ever
+    // read by the request that closed it, so anything older is dead rows.
+    await purgeStaleCounters();
   });
 }
 

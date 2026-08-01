@@ -832,6 +832,29 @@ export const llmRequests = pgTable(
   (t) => [unique("llm_requests_identity").on(t.day, t.orgId, t.agent)],
 );
 
+/**
+ * Fixed-window rate counters. Shared across replicas because a per-key or
+ * per-org budget that each replica counted separately would be N times the
+ * number written in the docs.
+ *
+ * The table is `UNLOGGED` (see the migration): counters are worth less than
+ * the WAL churn of persisting them, and losing a window to a crash costs one
+ * minute of over-permissive limiting, never correctness. The per-IP tier
+ * deliberately does *not* live here — it protects a single replica from
+ * unauthenticated floods and must cost zero round trips.
+ */
+export const rateCounters = pgTable(
+  "rate_counters",
+  {
+    /** "{tier}:{id}" — e.g. "key:412", "org:7", "webhook:3". */
+    bucket: text("bucket").notNull(),
+    /** floor(now, window) — the window this count belongs to. */
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull().default(1),
+  },
+  (t) => [primaryKey({ columns: [t.bucket, t.windowStart] })],
+);
+
 /* ------------------------------------------------------- inferred types */
 
 /** The persisted row. `Verdict` in types.ts is the APPROVE|WARN|BLOCK union. */

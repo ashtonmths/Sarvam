@@ -25,8 +25,12 @@ function requestIdOf(c: Context): string {
 }
 
 function problem(c: Context, body: ProblemDetails) {
-  c.header("Content-Type", "application/problem+json");
-  return c.json(body, body.status as 400);
+  // The content type is part of the RFC 9457 contract, and `c.json` sets its
+  // own — so it has to be passed in rather than set beforehand, or every
+  // problem response goes out as plain application/json.
+  return c.body(JSON.stringify(body), body.status as 400, {
+    "Content-Type": "application/problem+json",
+  });
 }
 
 /** Mints or honors `X-Request-Id` and echoes it on every response. */

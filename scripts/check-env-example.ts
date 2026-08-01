@@ -20,11 +20,35 @@ function read(relative: string): string {
 /** Keys the app never reads — consumed by compose or the toolchain. */
 const DEPLOY_ONLY = new Set(["POSTGRES_PASSWORD", "N8N_ENCRYPTION_KEY"]);
 
+/**
+ * The schema body, found by balancing braces rather than by scanning for the
+ * first `});`. A validator with a nested call in it — `ctx.addIssue({ … });`
+ * inside a transform, say — closes a brace before the schema does, and a
+ * scan-to-first-match truncates the body there and silently reports every
+ * variable declared after it as undocumented.
+ */
+function schemaBody(source: string): string {
+  const open = source.indexOf("z.object({");
+  if (open === -1) throw new Error("config.ts: no z.object({ found");
+
+  const start = source.indexOf("{", open);
+  let depth = 0;
+  for (let i = start; i < source.length; i++) {
+    const char = source[i];
+    if (char === "{") depth++;
+    else if (char === "}") {
+      depth--;
+      if (depth === 0) return source.slice(start, i);
+    }
+  }
+  throw new Error("config.ts: unbalanced braces in the env schema");
+}
+
 function schemaKeys(): Set<string> {
-  const source = read("apps/api/src/config.ts");
-  const body = source.slice(source.indexOf("z.object({"), source.indexOf("});"));
+  const body = schemaBody(read("apps/api/src/config.ts"));
   const keys = new Set<string>();
-  for (const match of body.matchAll(/^\s{2}([A-Z][A-Z0-9_]*)\s*:/gm)) {
+  // Two-space indent means top level; anything nested is deeper and ignored.
+  for (const match of body.matchAll(/^ {2}([A-Z][A-Z0-9_]*)\s*:/gm)) {
     if (match[1]) keys.add(match[1]);
   }
   return keys;

@@ -48,7 +48,34 @@ const Env = z.object({
   // auth (plan 4) — a dev default keeps `pnpm dev` zero-config; production
   // must set it, which the check below enforces.
   SESSION_SECRET: z.string().min(16).default("dev-only-insecure-session-secret"),
-  WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
+  /**
+   * Comma-separated CORS allowlist. A list rather than one value because the
+   * apex and `www.` are different origins to a browser, and a self-host may
+   * front the web app on its own domain. Every entry is parsed as a URL and
+   * reduced to scheme+host+port, so a trailing path or slash cannot silently
+   * produce an origin that never matches.
+   */
+  WEB_ORIGINS: z
+    .string()
+    .default("http://localhost:3000")
+    .transform((raw, ctx) => {
+      const origins = raw
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+        .map((entry) => {
+          try {
+            return new URL(entry).origin;
+          } catch {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: `not a URL: ${entry}` });
+            return entry;
+          }
+        });
+      if (origins.length === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "must list one origin" });
+      }
+      return origins;
+    }),
 
   // credential vault (plan 5). Absent ⇒ credential storage reports itself
   // unavailable; crawls against already-stored credentials still work.
@@ -67,6 +94,37 @@ const Env = z.object({
   // pools (plan 3)
   PG_POOL_WEB: z.coerce.number().int().min(1).max(50).default(10),
   PG_POOL_JOBS: z.coerce.number().int().min(1).max(50).default(5),
+
+  // rate limits (plan 13). Per minute, fixed window. The kill switch exists
+  // because a limiter misfiring during an incident must be one env var away
+  // from off, not one deploy away.
+  RATE_LIMIT_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+  /** Unauthenticated, per replica. Protects this process from a flood. */
+  RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().min(1).default(60),
+  /** Credential stuffing costs more than browsing does. */
+  RATE_LIMIT_AUTH_PER_MIN: z.coerce.number().int().min(1).default(10),
+  RATE_LIMIT_KEY_PER_MIN: z.coerce.number().int().min(1).default(300),
+  RATE_LIMIT_ORG_PER_MIN: z.coerce.number().int().min(1).default(1200),
+  RATE_LIMIT_WEBHOOK_PER_MIN: z.coerce.number().int().min(1).default(300),
+
+  /**
+   * Hostnames the egress guard may reach despite resolving privately.
+   * Operator-set: the prod stack crawls its own bundled n8n over the compose
+   * network. Never reachable from org-level config, or a tenant could
+   * allowlist their way to the metadata endpoint.
+   */
+  EGRESS_ALLOW_PRIVATE_HOSTS: z
+    .string()
+    .default("n8n")
+    .transform((raw) =>
+      raw
+        .split(",")
+        .map((host) => host.trim().toLowerCase())
+        .filter((host) => host.length > 0),
+    ),
 
   // feature-gated: absent ⇒ the feature reports itself unavailable
   OPENROUTER_API_KEY: z.string().min(1).optional(),

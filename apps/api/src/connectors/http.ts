@@ -1,4 +1,5 @@
-import { UpstreamError } from "../errors.js";
+import { UpstreamError, UserError } from "../errors.js";
+import { pinnedFetch } from "../net/pinned-fetch.js";
 import type { Secret } from "../vault/secret.js";
 import type { ConnectorSlug } from "./types.js";
 
@@ -62,6 +63,13 @@ export interface InstanceHttpOptions {
    * makes "we never fetch records" a construction rather than a code review.
    */
   allowedPaths: RegExp[];
+  /**
+   * Self-hosted n8n is the one connector whose base URL a customer supplies
+   * and the one that legitimately speaks http on a private network. Every
+   * other connector talks to a fixed vendor domain over https, so this stays
+   * off and the guard refuses anything that is not public https.
+   */
+  allowPrivateHttp?: boolean;
 }
 
 export class InstanceHttp {
@@ -88,14 +96,25 @@ export class InstanceHttp {
 
       let response: Response;
       try {
-        response = await fetch(url, {
-          headers: {
-            accept: "application/json",
-            ...this.options.authHeaders(this.options.secret),
+        response = await pinnedFetch(
+          url,
+          {
+            headers: {
+              accept: "application/json",
+              ...this.options.authHeaders(this.options.secret),
+            },
+            ...(signal ? { signal } : {}),
           },
-          ...(signal ? { signal } : {}),
-        });
+          {
+            allowHttp: this.options.allowPrivateHttp ?? false,
+            ...(this.options.allowPrivateHttp ? {} : { allowPrivateHosts: [] }),
+          },
+        );
       } catch (error) {
+        // A refused destination is the caller's configuration being wrong, not
+        // the provider being down. Retrying it would just re-resolve the same
+        // private address twice more.
+        if (error instanceof UserError) throw error;
         if (attempt === MAX_RETRIES) {
           throw new UpstreamError(
             `${this.options.slug} request failed: ${error instanceof Error ? error.message : String(error)}`,

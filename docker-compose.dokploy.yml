@@ -79,7 +79,7 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgres://sadhak:${POSTGRES_PASSWORD}@db:5432/sadhak
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
-      WEB_ORIGIN: https://sadhak.online
+      WEB_ORIGINS: https://sadhak.online,https://www.sadhak.online
       # Losing this key does not lose graph data, but every stored connector
       # credential becomes unreadable. Back it up outside Dokploy.
       CREDENTIAL_MASTER_KEY: ${CREDENTIAL_MASTER_KEY:?set CREDENTIAL_MASTER_KEY}
@@ -91,6 +91,10 @@ services:
       # stays as the default base for instances that do not override it.
       N8N_BASE_URL: http://n8n:5678
       PORT: "3001"
+    # expose, never ports. Traefik is the only route to this container, which
+    # is what makes the last X-Forwarded-For hop trustworthy in
+    # src/http/client-ip.ts. Publish this port and every IP-keyed rate limit
+    # becomes spoofable by anyone who can reach the host directly.
     expose:
       - "3001"
     volumes:

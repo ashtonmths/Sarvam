@@ -1,9 +1,10 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { config } from "./config.js";
 import { closePools, sql } from "./db.js";
 import { notFound, onError, requestId } from "./http/middleware.js";
+import { identityRateLimit, ipRateLimit, webhookRateLimit } from "./http/rate-limit.js";
+import { bodyGuard, corsMiddleware, securityHeaders } from "./http/security.js";
 import { registerJobHandlers, scheduleDueCrawls } from "./jobs/handlers.js";
 import { queueStats } from "./jobs/queue.js";
 import { startWorker, stopWorker } from "./jobs/worker.js";
@@ -23,16 +24,20 @@ import { webhookRoutes } from "./routes/webhooks.js";
 
 const app = new Hono();
 
-// Request id first, so every error and log line downstream carries it.
+// Headers first: a response rejected by any middleware below still carries
+// its armor, including the error paths.
+app.use("*", securityHeaders);
+// Request id next, so every error and log line downstream carries it.
 app.use("*", requestId);
-app.use(
-  "*",
-  cors({
-    origin: [config.WEB_ORIGIN],
-    credentials: true,
-    allowHeaders: ["content-type", "x-api-key", "authorization", "x-request-id"],
-  }),
-);
+app.use("*", corsMiddleware);
+
+// Webhook ingress buffers whole provider deliveries and gets a larger cap;
+// everything else is held to the small one.
+app.use("*", bodyGuard);
+
+// Per-IP, before anything reads a credential: an unauthenticated flood must be
+// refused without touching Postgres.
+app.use("*", ipRateLimit);
 
 app.onError(onError);
 app.notFound(notFound);
@@ -54,6 +59,7 @@ app.route("/api/auth", authRoutes);
 app.route("/", mcpRoutes);
 
 // Vendor ingress: signature-verified, never cookie-authenticated.
+app.use("/webhooks/*", webhookRateLimit);
 app.route("/", webhookRoutes);
 
 /**
@@ -63,6 +69,8 @@ app.route("/", webhookRoutes);
 const api = new Hono();
 api.use("*", requireAuth);
 api.use("*", requireOrg);
+// After auth: the key and org tiers need a resolved identity to charge.
+api.use("*", identityRateLimit);
 api.route("/", orgRoutes);
 api.route("/", connectorRoutes);
 api.route("/", graphRoutes);
