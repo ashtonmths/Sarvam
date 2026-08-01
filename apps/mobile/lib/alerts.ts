@@ -1,9 +1,4 @@
-import {
-  getPermissionsAsync,
-  requestPermissionsAsync,
-} from "expo-notifications/build/NotificationPermissions";
-import { setNotificationHandler } from "expo-notifications/build/NotificationsHandler";
-import scheduleNotificationAsync from "expo-notifications/build/scheduleNotificationAsync";
+import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { api, type DecisionRow, type DriftSummary, type Page } from "./api";
 
@@ -24,23 +19,23 @@ export const POLL_MS = 60_000;
 /**
  * Pings work anywhere but web, Expo Go included.
  *
- * The imports above reach the three modules directly instead of the package
- * root, and that is load-bearing rather than a style choice. `index.js` pulls
- * DevicePushTokenAutoRegistration, which registers a *push token* listener at
- * import time whether or not the app ever asks for remote push. Expo Go on
- * Android dropped remote push in SDK 53, so that side effect errored during
- * route load — the Alerts screen imports this file — and an app that only
- * schedules local notifications was falling over on a feature it never used.
+ * Expo Go on Android prints one alarming line on SDK 53+ — that remote push
+ * was removed and you should use a development build. It is worth reading
+ * `warnOfExpoGoPushUsage` in expo-notifications before acting on it:
  *
- * Local notifications were never the thing Expo Go removed. Skipping the entry
- * module skips the registration and keeps them, so the switch works on the
- * phone in your hand today rather than only in a future dev build.
+ *     if (__DEV__ && isRunningInExpoGo() && !didWarn) { ... console.error(...) }
  *
- * The cost is a deep import: no `exports` field in expo-notifications makes it
- * legal, and the three modules pull only expo-modules-core and their own native
- * wrappers. It is pinned to ~0.32.17 and would need rechecking on an SDK bump —
- * a broken build, not a silent regression, since the paths simply stop
- * resolving.
+ * A `console.error`, not a throw. Guarded by `__DEV__`, so it cannot reach a
+ * release build; guarded by Expo Go, so a development build never sees it;
+ * guarded by `didWarn`, so it happens once. It surfaces during route load
+ * because the Alerts screen imports this file, and a red LogBox entry under a
+ * stack trace reads exactly like a crash. It is not one, and nothing here was
+ * ever broken by it.
+ *
+ * What SDK 53 removed from Expo Go is *remote push*. This module only ever
+ * schedules local notifications, which still work — so the plain public import
+ * is correct, and the message is noise that disappears the moment this runs
+ * anywhere but Expo Go in dev.
  */
 export const PINGS_SUPPORTED = Platform.OS !== "web";
 
@@ -60,7 +55,7 @@ let configured = false;
 export function configureNotifications() {
   if (configured || !PINGS_SUPPORTED) return;
   configured = true;
-  setNotificationHandler({
+  Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: false,
@@ -74,16 +69,16 @@ export function configureNotifications() {
 /** Asks once. A refusal is a valid answer — the in-app list still works. */
 export async function askPermission(): Promise<boolean> {
   if (!PINGS_SUPPORTED) return false;
-  const existing = await getPermissionsAsync();
+  const existing = await Notifications.getPermissionsAsync();
   if (existing.granted) return true;
-  const asked = await requestPermissionsAsync();
+  const asked = await Notifications.requestPermissionsAsync();
   return asked.granted;
 }
 
 export async function ping(alert: Alert) {
   if (!PINGS_SUPPORTED) return;
   try {
-    await scheduleNotificationAsync({
+    await Notifications.scheduleNotificationAsync({
       content: { title: alert.title, body: alert.body },
       trigger: null,
     });
