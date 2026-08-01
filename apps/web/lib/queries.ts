@@ -22,6 +22,10 @@ export function useQuery<T>(path: string | null, deps: unknown[] = []): Query<T>
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
 
+  // `nonce` is never read in the effect: bumping it is how reload() re-runs
+  // the fetch. The spread deps belong to the caller, which the linter cannot
+  // see through either.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: nonce is the re-run trigger
   useEffect(() => {
     if (path === null) {
       setLoading(false);
@@ -48,7 +52,6 @@ export function useQuery<T>(path: string | null, deps: unknown[] = []): Query<T>
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, nonce, ...deps]);
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);

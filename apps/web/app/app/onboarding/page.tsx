@@ -101,11 +101,14 @@ export default function OnboardingPage() {
         </Link>
       </PageHead>
 
-      <div className="wizard__rail" aria-label="Onboarding progress">
+      {/* An ordered list, because that is what the rail is: numbered steps in
+          sequence. aria-current marks where the reader stands. */}
+      <ol className="wizard__rail" aria-label="Onboarding progress">
         {steps.map((s, i) => (
-          <span
+          <li
             key={s.n}
             style={{ display: "inline-flex", alignItems: "center", gap: 10 }}
+            aria-current={step === s.n ? "step" : undefined}
           >
             {i > 0 && <i className="wizard__dash" aria-hidden="true" />}
             <span
@@ -116,9 +119,9 @@ export default function OnboardingPage() {
               <span className="wizard__step-n">{step > s.n ? "✓" : s.n}</span>
               {s.label}
             </span>
-          </span>
+          </li>
         ))}
-      </div>
+      </ol>
 
       {step === 1 && (
         <div className="panel">

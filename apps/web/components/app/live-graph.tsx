@@ -306,10 +306,24 @@ export function LiveGraph() {
                 const hop = impacted.get(n.id);
                 const color = CONNECTOR_COLOR[n.connector] ?? "#8a8f99";
                 return (
+                  // The map is the primary way into a node's dependents, so it
+                  // is reachable without a pointer: tab to a node, Enter or
+                  // Space to select it. SVG has no button element to reach for.
+                  // biome-ignore lint/a11y/useSemanticElements: <button> is not valid inside <svg>
                   <g
                     key={n.id}
                     className={`graph-node${selected === n.id ? " graph-node--selected" : ""}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={selected === n.id}
+                    aria-label={`${n.name} — ${n.kind} on ${n.connector}`}
                     onClick={() => setSelected(n.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelected(n.id);
+                      }
+                    }}
                   >
                     {/* The locked visual: opacity is the impact score. */}
                     {hop !== undefined && (

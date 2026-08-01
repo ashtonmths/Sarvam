@@ -96,6 +96,8 @@ export function useSession(): SessionState {
   });
   const [nonce, setNonce] = useState(0);
 
+  // `nonce` is never read in the effect: bumping it is how refresh() re-fetches.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: nonce is the re-run trigger
   useEffect(() => {
     let cancelled = false;
 

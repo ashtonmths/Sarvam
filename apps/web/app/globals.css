@@ -90,6 +90,9 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* biome-ignore-start lint/complexity/noImportantStyles: a user asking for
+     less motion outranks anything the app sets, inline styles included — this
+     is the one place the cascade is supposed to be overruled. */
   *,
   *::before,
   *::after {
@@ -98,6 +101,7 @@ button {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  /* biome-ignore-end lint/complexity/noImportantStyles: see above */
   html {
     scroll-behavior: auto;
   }
@@ -1747,6 +1751,13 @@ button {
   opacity: 0.5;
 }
 
+/* The mobile-only sign-in pair inside the drawer. Declared before the
+   responsive block that reveals it, so the rule that wins is also the one that
+   comes last. */
+.nav__cta-mobile {
+  display: none;
+}
+
 /* ------------------------------------------------------------ responsive */
 
 @media (max-width: 1024px) {
@@ -1941,8 +1952,4 @@ button {
   .proofbar__item:last-child {
     border-bottom: none;
   }
-}
-
-.nav__cta-mobile {
-  display: none;
 }

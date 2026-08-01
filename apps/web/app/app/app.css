@@ -441,7 +441,6 @@
   cursor: pointer;
 }
 
-.dtable .mono,
 .mono {
   font-family: var(--font-mono);
   font-size: 12.5px;
@@ -780,12 +779,24 @@
   transition: stroke-width 0.12s ease;
 }
 
+/* Nodes are tab stops, so the keyboard needs to see where it is. */
+.graph-node:focus {
+  outline: none;
+}
+
+.graph-node:focus-visible circle {
+  stroke: var(--thread);
+  stroke-width: 3;
+}
+
 .graph-node:hover circle {
   stroke-width: 3;
 }
 
+/* `stroke` on the node circle is a presentation attribute, which loses to any
+   stylesheet rule — so selection wins here without !important. */
 .graph-node--selected circle {
-  stroke: var(--ink) !important;
+  stroke: var(--ink);
   stroke-width: 3;
 }
 
@@ -1191,6 +1202,8 @@
   align-items: center;
   margin-bottom: 28px;
   flex-wrap: wrap;
+  list-style: none;
+  padding: 0;
 }
 
 .wizard__step {
@@ -1328,7 +1341,18 @@
   backdrop-filter: blur(3px);
 }
 
+/* Sits under the card and covers the rest of the viewport: a click anywhere
+   outside dismisses, and it is a focusable control rather than a bare div. */
+.help-overlay__scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
 .help-overlay__card {
+  position: relative;
   background: var(--card);
   border-radius: var(--radius-md);
   border: 1px solid var(--line);

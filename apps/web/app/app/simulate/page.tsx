@@ -37,7 +37,7 @@ function SimulateInner() {
       ? preselect
       : (SIMULATABLE_NODES[0]?.id ?? 1),
   );
-  const [operation, setOperation] = useState<string>(
+  const [chosenOperation, setOperation] = useState<string>(
     () => OPERATIONS_BY_KIND[nodeById(preselect)?.kind ?? "field"]?.[0] ?? "delete",
   );
   const [decision, setDecision] = useState<SimulatedDecision | null>(null);
@@ -49,10 +49,15 @@ function SimulateInner() {
   const node = nodeById(nodeId);
   const operations = OPERATIONS_BY_KIND[node.kind] ?? ["delete"];
 
-  useEffect(() => {
-    if (!operations.includes(operation)) setOperation(operations[0] ?? "delete");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeId]);
+  /**
+   * The node's kind decides which operations exist, so a choice carried over
+   * from the previous node falls back rather than lingering as a value this
+   * kind cannot do. Derived instead of synced in an effect: there is no frame
+   * where the picker shows an operation that is not in its own list.
+   */
+  const operation = operations.includes(chosenOperation)
+    ? chosenOperation
+    : (operations[0] ?? "delete");
 
   useEffect(
     () => () => {

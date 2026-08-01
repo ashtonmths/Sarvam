@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EmptyState, Kbd, PageHead } from "../../../components/app/ui";
+import { EmptyState, Kbd, Overlay, PageHead } from "../../../components/app/ui";
 import {
   CORRECTIONS,
   EDGES,
@@ -43,6 +43,7 @@ export default function QueuePage() {
   const [rejectReason, setRejectReason] = useState("");
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const rejectInputRef = useRef<HTMLInputElement>(null);
 
   const drafts = RATIONALE.filter(
     (r) => r.state === "drafted" && !done.has(`drafts-${r.id}`),
@@ -150,6 +151,13 @@ export default function QueuePage() {
       ?.scrollIntoView({ block: "nearest" });
   }, [active]);
 
+  // The reject dialog opens from a keystroke, so the caret belongs in the
+  // reason field. Focused on open rather than with autoFocus, which would also
+  // steal focus on a full page load.
+  useEffect(() => {
+    if (rejecting != null) rejectInputRef.current?.focus();
+  }, [rejecting]);
+
   if (!hasGraph) {
     return (
       <>
@@ -237,12 +245,17 @@ export default function QueuePage() {
             drafts.map((r, i) => {
               const edge = EDGES.find((e) => e.id === r.edgeId)!;
               return (
+                // The row is not a control: clicking it only moves the cursor
+                // the shortcuts act on, which j/k already does from the
+                // keyboard, and onFocusCapture keeps the two in step.
+                // biome-ignore lint/a11y/useKeyWithClickEvents: the row selects, it does not act
                 <article
                   key={r.id}
                   className="queue__row"
                   data-active={i === active}
                   data-idx={i}
                   onClick={() => setCursor(i)}
+                  onFocusCapture={() => setCursor(i)}
                   data-testid={`queue-draft-${r.id}`}
                 >
                   <div>
@@ -322,12 +335,14 @@ export default function QueuePage() {
             />
           ) : (
             corrections.map((c, i) => (
+              // biome-ignore lint/a11y/useKeyWithClickEvents: as above — the row selects, it does not act
               <article
                 key={c.id}
                 className="queue__row"
                 data-active={i === active}
                 data-idx={i}
                 onClick={() => setCursor(i)}
+                onFocusCapture={() => setCursor(i)}
                 data-testid={`queue-correction-${c.id}`}
               >
                 <div>
@@ -391,196 +406,166 @@ export default function QueuePage() {
       )}
 
       {reciteDraft && (
-        <div
-          className="help-overlay"
-          role="dialog"
-          aria-label="Edit and recite"
-          onClick={() => setRecite(null)}
-        >
-          <div
-            className="help-overlay__card"
-            style={{ maxWidth: 540 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2>Edit &amp; recite</h2>
-            <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>
-              The one place a span may change — and never on your word alone. The
-              corrected text is re-checked against the live cited source before anything
-              is written. The pointer itself is immutable: a wrong{" "}
-              <code className="mono">source_url</code> means Reject, then re-cite.
+        <Overlay label="Edit and recite" onClose={() => setRecite(null)} width={540}>
+          <h2>Edit &amp; recite</h2>
+          <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>
+            The one place a span may change — and never on your word alone. The corrected
+            text is re-checked against the live cited source before anything is written.
+            The pointer itself is immutable: a wrong{" "}
+            <code className="mono">source_url</code> means Reject, then re-cite.
+          </p>
+          <textarea
+            value={reciteText}
+            onChange={(e) => {
+              setReciteText(e.target.value);
+              setReciteError(false);
+            }}
+            rows={4}
+            aria-label="Corrected span"
+            style={{
+              width: "100%",
+              border: "1px solid var(--line)",
+              borderRadius: 10,
+              padding: "10px 12px",
+              font: "inherit",
+              fontSize: 14,
+              resize: "vertical",
+            }}
+            data-testid="recite-textarea"
+          />
+          {reciteError && (
+            <p role="alert" style={{ fontSize: 13, color: "var(--block)", marginTop: 8 }}>
+              422 — this text does not appear in the cited source. Your remaining moves
+              are Reject, or re-cite with a pointer to where it does. There is no path
+              from a failed recite to a confirmed row.
             </p>
-            <textarea
-              value={reciteText}
-              onChange={(e) => {
-                setReciteText(e.target.value);
-                setReciteError(false);
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn btn--approve btn--tiny"
+              onClick={() => {
+                // Mock of the server's §10.2 re-validation: the cited source
+                // "contains" exactly the mined span, so any added words 422.
+                if (
+                  normalize(reciteDraft.body).includes(normalize(reciteText)) &&
+                  reciteText.trim()
+                ) {
+                  setRecite(null);
+                  act(
+                    "confirm",
+                    reciteDraft.id,
+                    `Recited & confirmed draft #${reciteDraft.id}`,
+                  );
+                } else {
+                  setReciteError(true);
+                }
               }}
-              rows={4}
-              aria-label="Corrected span"
-              style={{
-                width: "100%",
-                border: "1px solid var(--line)",
-                borderRadius: 10,
-                padding: "10px 12px",
-                font: "inherit",
-                fontSize: 14,
-                resize: "vertical",
-              }}
-              data-testid="recite-textarea"
-            />
-            {reciteError && (
-              <p
-                role="alert"
-                style={{ fontSize: 13, color: "var(--block)", marginTop: 8 }}
-              >
-                422 — this text does not appear in the cited source. Your remaining moves
-                are Reject, or re-cite with a pointer to where it does. There is no path
-                from a failed recite to a confirmed row.
-              </p>
-            )}
-            <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="btn btn--approve btn--tiny"
-                onClick={() => {
-                  // Mock of the server's §10.2 re-validation: the cited source
-                  // "contains" exactly the mined span, so any added words 422.
-                  if (
-                    normalize(reciteDraft.body).includes(normalize(reciteText)) &&
-                    reciteText.trim()
-                  ) {
-                    setRecite(null);
-                    act(
-                      "confirm",
-                      reciteDraft.id,
-                      `Recited & confirmed draft #${reciteDraft.id}`,
-                    );
-                  } else {
-                    setReciteError(true);
-                  }
-                }}
-                data-testid="recite-submit"
-              >
-                Re-validate &amp; confirm
-              </button>
-              <button
-                type="button"
-                className="btn btn--ghost btn--tiny"
-                onClick={() => setRecite(null)}
-              >
-                Cancel
-              </button>
-            </div>
+              data-testid="recite-submit"
+            >
+              Re-validate &amp; confirm
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost btn--tiny"
+              onClick={() => setRecite(null)}
+            >
+              Cancel
+            </button>
           </div>
-        </div>
+        </Overlay>
       )}
 
       {rejecting != null && (
-        <div
-          className="help-overlay"
-          role="dialog"
-          aria-label="Reject with reason"
-          onClick={() => setRejecting(null)}
-        >
-          <div className="help-overlay__card" onClick={(e) => e.stopPropagation()}>
-            <h2>Reject</h2>
-            <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>
-              The reason travels with the rejection — Historian and Reviewer learn from
-              it.
-            </p>
-            <input
-              type="text"
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Why is this wrong?"
-              aria-label="Rejection reason"
-              autoFocus
-              style={{
-                width: "100%",
-                border: "1px solid var(--line)",
-                borderRadius: 10,
-                padding: "9px 12px",
-                font: "inherit",
-                fontSize: 14,
+        <Overlay label="Reject with reason" onClose={() => setRejecting(null)}>
+          <h2>Reject</h2>
+          <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>
+            The reason travels with the rejection — Historian and Reviewer learn from it.
+          </p>
+          <input
+            type="text"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Why is this wrong?"
+            aria-label="Rejection reason"
+            ref={rejectInputRef}
+            style={{
+              width: "100%",
+              border: "1px solid var(--line)",
+              borderRadius: 10,
+              padding: "9px 12px",
+              font: "inherit",
+              fontSize: 14,
+            }}
+            data-testid="reject-reason"
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <button
+              type="button"
+              className="btn btn--danger-ghost btn--tiny"
+              disabled={!rejectReason.trim()}
+              onClick={() => {
+                const id = rejecting;
+                setRejecting(null);
+                act(
+                  "reject",
+                  id,
+                  tab === "drafts"
+                    ? `Rejected draft #${id}`
+                    : `Rejected correction #${id}`,
+                );
               }}
-              data-testid="reject-reason"
-            />
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <button
-                type="button"
-                className="btn btn--danger-ghost btn--tiny"
-                disabled={!rejectReason.trim()}
-                onClick={() => {
-                  const id = rejecting;
-                  setRejecting(null);
-                  act(
-                    "reject",
-                    id,
-                    tab === "drafts"
-                      ? `Rejected draft #${id}`
-                      : `Rejected correction #${id}`,
-                  );
-                }}
-                data-testid="reject-submit"
-              >
-                Reject
-              </button>
-              <button
-                type="button"
-                className="btn btn--ghost btn--tiny"
-                onClick={() => setRejecting(null)}
-              >
-                Cancel
-              </button>
-            </div>
+              data-testid="reject-submit"
+            >
+              Reject
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost btn--tiny"
+              onClick={() => setRejecting(null)}
+            >
+              Cancel
+            </button>
           </div>
-        </div>
+        </Overlay>
       )}
 
       {help && (
-        <div
-          className="help-overlay"
-          role="dialog"
-          aria-label="Keyboard shortcuts"
-          onClick={() => setHelp(false)}
-        >
-          <div className="help-overlay__card" onClick={(e) => e.stopPropagation()}>
-            <h2>Keyboard</h2>
-            <dl>
-              <dt>
-                <Kbd>j</Kbd> / <Kbd>k</Kbd>
-              </dt>
-              <dd>next / previous item</dd>
-              <dt>
-                <Kbd>o</Kbd>
-              </dt>
-              <dd>open source in new tab</dd>
-              <dt>
-                <Kbd>a</Kbd>
-              </dt>
-              <dd>approve / confirm / apply</dd>
-              <dt>
-                <Kbd>e</Kbd>
-              </dt>
-              <dd>
-                edit &amp; recite (server re-validates containment; 422 → reject or
-                re-cite)
-              </dd>
-              <dt>
-                <Kbd>x</Kbd>
-              </dt>
-              <dd>reject (reason prompt)</dd>
-              <dt>
-                <Kbd>u</Kbd>
-              </dt>
-              <dd>undo (15s window — mutation fires after it closes)</dd>
-              <dt>
-                <Kbd>?</Kbd>
-              </dt>
-              <dd>toggle this overlay</dd>
-            </dl>
-          </div>
-        </div>
+        <Overlay label="Keyboard shortcuts" onClose={() => setHelp(false)}>
+          <h2>Keyboard</h2>
+          <dl>
+            <dt>
+              <Kbd>j</Kbd> / <Kbd>k</Kbd>
+            </dt>
+            <dd>next / previous item</dd>
+            <dt>
+              <Kbd>o</Kbd>
+            </dt>
+            <dd>open source in new tab</dd>
+            <dt>
+              <Kbd>a</Kbd>
+            </dt>
+            <dd>approve / confirm / apply</dd>
+            <dt>
+              <Kbd>e</Kbd>
+            </dt>
+            <dd>
+              edit &amp; recite (server re-validates containment; 422 → reject or re-cite)
+            </dd>
+            <dt>
+              <Kbd>x</Kbd>
+            </dt>
+            <dd>reject (reason prompt)</dd>
+            <dt>
+              <Kbd>u</Kbd>
+            </dt>
+            <dd>undo (15s window — mutation fires after it closes)</dd>
+            <dt>
+              <Kbd>?</Kbd>
+            </dt>
+            <dd>toggle this overlay</dd>
+          </dl>
+        </Overlay>
       )}
     </>
   );

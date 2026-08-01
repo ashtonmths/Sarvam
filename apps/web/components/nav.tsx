@@ -20,6 +20,9 @@ export function Nav() {
   const [signedIn, setSignedIn] = useState(false);
   const pathname = usePathname();
 
+  // Signing in or out happens on another page, so the cookie is re-read on
+  // every navigation.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pathname is the trigger, not an input
   useEffect(() => {
     setSignedIn(hasSessionCookie());
   }, [pathname]);
@@ -31,6 +34,7 @@ export function Nav() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: navigating is what closes the drawer
   useEffect(() => {
     setOpen(false);
   }, [pathname]);

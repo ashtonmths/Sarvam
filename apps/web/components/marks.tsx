@@ -5,12 +5,14 @@
  */
 
 export function LogoMark({ size = 26 }: { size?: number }) {
-  // The labyrinth mark. Served from public/logo.png at 192px, which stays
-  // crisp for every size the site renders it at.
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src="/logo.png" alt="" width={size} height={size} aria-hidden="true" />
-  );
+  // The labyrinth mark. Served from public/logo.png at 192px, which stays crisp
+  // for every size the site renders it at, and decorative beside the wordmark.
+  //
+  // Deliberately not next/image: the optimizer needs sharp at runtime, which
+  // the standalone output does not trace into the container, and there is
+  // nothing to optimize about a 192px mark drawn at 26.
+  // biome-ignore lint/performance/noImgElement: a 26px static mark, no optimizer worth its runtime dependency
+  return <img src="/logo.png" alt="" width={size} height={size} aria-hidden="true" />;
 }
 
 type GlyphProps = { size?: number };

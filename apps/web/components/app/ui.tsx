@@ -100,3 +100,34 @@ export function Stat({
 export function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="kbd">{children}</kbd>;
 }
+
+/**
+ * A modal over a scrim. The scrim is a real button rather than a click handler
+ * on the backdrop, so dismissing works from the keyboard and the card no longer
+ * has to stop event propagation to avoid closing itself.
+ */
+export function Overlay({
+  label,
+  onClose,
+  width,
+  children,
+}: {
+  label: string;
+  onClose: () => void;
+  width?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="help-overlay" role="dialog" aria-modal="true" aria-label={label}>
+      <button
+        type="button"
+        className="help-overlay__scrim"
+        aria-label={`Close ${label.toLowerCase()}`}
+        onClick={onClose}
+      />
+      <div className="help-overlay__card" style={width ? { maxWidth: width } : undefined}>
+        {children}
+      </div>
+    </div>
+  );
+}
