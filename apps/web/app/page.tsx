@@ -7,6 +7,7 @@ import {
   GlyphDb,
   GlyphFlow,
   GlyphGrid,
+  LogoMark,
 } from "../components/marks";
 import { Nav } from "../components/nav";
 import { AgentRefusal, GiveUpTrace, HistorianTrace, Msg } from "../components/product-cards";
@@ -56,7 +57,7 @@ export default function Home() {
 
               <div className="hero__head">
                 <span className="hero__badge">
-                  <span className="hero__badge-dot" />
+                  <LogoMark size={18} />
                   Change intelligence for operations
                 </span>
                 <h1 className="hero__title">
