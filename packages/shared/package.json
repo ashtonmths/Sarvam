@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./rbac": "./src/rbac.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

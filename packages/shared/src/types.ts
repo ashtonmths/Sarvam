@@ -8,9 +8,22 @@ import { z } from "zod";
 export const VERDICTS = ["APPROVE", "WARN", "BLOCK"] as const;
 export type Verdict = (typeof VERDICTS)[number];
 
+/**
+ * The connector set, named once. The registry and the gate contract derive
+ * from this, so they cannot disagree.
+ */
+export const CONNECTOR_SLUGS = [
+  "n8n",
+  "airtable",
+  "postgres",
+  "github",
+  "slack",
+] as const;
+export type ConnectorSlug = (typeof CONNECTOR_SLUGS)[number];
+
 /** What someone is proposing to do to a connected system. */
 export const changeRequestSchema = z.object({
-  connector: z.enum(["n8n", "airtable", "postgres", "github", "slack"]),
+  connector: z.enum(CONNECTOR_SLUGS),
   operation: z.enum(["delete", "rename", "retype", "disable", "revoke"]),
   /** Stable id in the source system. Resolved to a node before traversal. */
   externalId: z.string().min(1),
