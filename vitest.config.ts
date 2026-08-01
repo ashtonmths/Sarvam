@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["apps/**/*.test.ts", "packages/**/*.test.ts"],
+    include: ["apps/**/*.test.ts", "packages/**/*.test.ts", "scripts/**/*.test.ts"],
     // The integration tier needs a real Postgres and runs under
     // vitest.integration.config.ts. Excluded here so `pnpm test` stays a
     // no-services command that anyone can run on a fresh clone.

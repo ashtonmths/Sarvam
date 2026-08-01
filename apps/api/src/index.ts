@@ -1,7 +1,9 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { config } from "./config.js";
+import { constantTimeEqual } from "./crypto/compare.js";
 import { closePools, sql } from "./db.js";
+import { NotFoundError } from "./errors.js";
 import { notFound, onError, requestId, requestLog } from "./http/middleware.js";
 import { identityRateLimit, ipRateLimit, webhookRateLimit } from "./http/rate-limit.js";
 import { bodyGuard, corsMiddleware, securityHeaders } from "./http/security.js";
@@ -9,6 +11,7 @@ import { registerJobHandlers, scheduleDueCrawls } from "./jobs/handlers.js";
 import { queueStats } from "./jobs/queue.js";
 import { startWorker, stopWorker } from "./jobs/worker.js";
 import { log } from "./log.js";
+import { render } from "./metrics.js";
 import { requireAuth, requireOrg } from "./middleware/auth.js";
 import { authRoutes } from "./routes/auth.js";
 import { connectorRoutes } from "./routes/connectors.js";
@@ -53,6 +56,24 @@ app.get("/health", async (c) => {
   } catch {
     return c.json({ ok: false, db: "down" }, 503);
   }
+});
+
+/**
+ * Prometheus exposition. Behind a bearer token and 404 rather than 401 when no
+ * token is configured, so an internet-facing deployment does not advertise that
+ * the endpoint exists at all. Traffic volume, org counts and which callers are
+ * hitting their limits are not public facts.
+ */
+app.get("/metrics", (c) => {
+  const expected = config.METRICS_TOKEN;
+  if (!expected) throw new NotFoundError();
+
+  const presented = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!presented || !constantTimeEqual(presented, expected)) {
+    throw new NotFoundError();
+  }
+
+  return c.text(render(), 200, { "Content-Type": "text/plain; version=0.0.4" });
 });
 
 // Unauthenticated by necessity: this is where sessions are created.

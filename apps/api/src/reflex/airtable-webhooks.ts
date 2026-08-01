@@ -1,7 +1,8 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { connectorInstances, nodes as nodesTable } from "@sadhak/shared/schema";
 import type { ChangeDescriptor } from "@sadhak/shared/types";
 import { and, eq } from "drizzle-orm";
+import { constantTimeEqual, verifyHmacSha256 } from "../crypto/compare.js";
 import { db } from "../db.js";
 import { enqueue } from "../jobs/queue.js";
 import { getCredential, getReadCredential, putCredential } from "../vault/vault.js";
@@ -95,11 +96,12 @@ export async function verifyAirtablePing(
   );
   if (!secret) return false;
 
-  const key = Buffer.from(secret.reveal(), "base64");
-  const expected = `hmac-sha256=${createHmac("sha256", key).update(rawBody).digest("hex")}`;
-  const a = Buffer.from(expected);
-  const b = Buffer.from(header);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return verifyHmacSha256({
+    rawBody,
+    key: Buffer.from(secret.reveal(), "base64"),
+    presented: header,
+    prefix: "hmac-sha256=",
+  });
 }
 
 interface PayloadsResponse {
@@ -406,7 +408,5 @@ export async function verifyN8nHook(
   );
   if (!secret) return false;
 
-  const a = Buffer.from(secret.reveal());
-  const b = Buffer.from(header);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return constantTimeEqual(secret.reveal(), header);
 }

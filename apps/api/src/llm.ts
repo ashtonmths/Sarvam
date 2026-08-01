@@ -27,6 +27,7 @@
 
 import { config, requireEnv } from "./config.js";
 import { log } from "./log.js";
+import { llmCalls } from "./metrics.js";
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -217,6 +218,11 @@ async function classify429(res: Response): Promise<Error> {
 }
 
 function logCall(fields: Record<string, unknown>): void {
+  llmCalls.inc({
+    tier: String(fields.tier ?? "unknown"),
+    caller: String(fields.caller ?? "unknown"),
+    outcome: fields.ok === true ? "ok" : "error",
+  });
   // Token counts and costs only — never prompt bodies. Mined content is
   // attacker-influenced text, and a log line is a place it would be read back
   // by a human with more trust than it deserves.

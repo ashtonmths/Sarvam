@@ -19,7 +19,8 @@
     "db:push": "pnpm --filter @sadhak/api db:push",
     "db:migrate": "pnpm --filter @sadhak/api db:migrate",
     "db:studio": "pnpm --filter @sadhak/api db:studio",
-    "check:env": "tsx scripts/check-env-example.ts"
+    "check:env": "tsx scripts/check-env-example.ts",
+    "check:docs": "tsx scripts/check-docs-honesty.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",

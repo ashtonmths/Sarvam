@@ -2,6 +2,7 @@ import type { Context, ErrorHandler, NotFoundHandler } from "hono";
 import { ZodError } from "zod";
 import { AppError, RateLimitedError } from "../errors.js";
 import { log, withLogContext } from "../log.js";
+import { httpDuration, httpRequests, routeLabel, statusClass } from "../metrics.js";
 
 /**
  * One error shape for the whole API (RFC 9457 problem details), enforced by a
@@ -60,6 +61,11 @@ export async function requestLog(c: Context, next: () => Promise<void>) {
   } finally {
     const durationMs = Math.round((performance.now() - startedAt) * 10) / 10;
     const status = c.res.status;
+    const route = routeLabel(c.req.path);
+
+    httpRequests.inc({ method: c.req.method, route, status: statusClass(status) });
+    httpDuration.observe(durationMs, { route });
+
     const fields = {
       event: "http_request",
       method: c.req.method,

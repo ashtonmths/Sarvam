@@ -35,6 +35,11 @@ jobs:
       - name: .env.example is in step with the env schema
         run: pnpm check:env
 
+      # The positioning rests on being straighter than the category. A claim
+      # that drifts into the docs is caught here rather than by a reviewer.
+      - name: Docs make no claim this product cannot support
+        run: pnpm check:docs
+
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15

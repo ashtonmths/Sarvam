@@ -1,8 +1,9 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import { connectorInstances, githubInstallations } from "@sadhak/shared/schema";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { config } from "../config.js";
+import { verifyHmacSha256 } from "../crypto/compare.js";
 import { db } from "../db.js";
 import { verifyWebhookSignature } from "../github/app.js";
 import { enqueue } from "../jobs/queue.js";
@@ -197,10 +198,12 @@ function verifySlack(raw: string, timestamp: string, signature: string): boolean
   const age = Math.abs(Date.now() / 1000 - Number(timestamp));
   if (!Number.isFinite(age) || age > 300) return false;
 
-  const expected = `v0=${createHmac("sha256", secret).update(`v0:${timestamp}:${raw}`).digest("hex")}`;
-  const a = Buffer.from(expected);
-  const b = Buffer.from(signature);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return verifyHmacSha256({
+    rawBody: `v0:${timestamp}:${raw}`,
+    key: secret,
+    presented: signature,
+    prefix: "v0=",
+  });
 }
 
 /* ---------------------------------------------- Airtable and n8n ingress */

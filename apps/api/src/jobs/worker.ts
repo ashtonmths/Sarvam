@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
 import { sqlJobs } from "../db.js";
 import { log, withLogContext } from "../log.js";
+import { jobsProcessed } from "../metrics.js";
 import { settleAfterFailure } from "./backoff.js";
 import { getHandler, type JobContext } from "./registry.js";
 
@@ -118,6 +119,7 @@ async function runOneInContext(
       WHERE id = ${job.id}
     `;
     metrics.deadLettered += 1;
+    jobsProcessed.inc({ kind: job.kind, outcome: "dead_letter" });
     return;
   }
 
@@ -146,6 +148,7 @@ async function runOneInContext(
       WHERE id = ${job.id}
     `;
     metrics.succeeded += 1;
+    jobsProcessed.inc({ kind: job.kind, outcome: "succeeded" });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const maxAttempts = registration.options.maxAttempts ?? job.maxAttempts;
@@ -157,6 +160,7 @@ async function runOneInContext(
         WHERE id = ${job.id}
       `;
       metrics.deadLettered += 1;
+      jobsProcessed.inc({ kind: job.kind, outcome: "dead_letter" });
     } else {
       await sqlJobs`
         UPDATE jobs SET state = 'queued',

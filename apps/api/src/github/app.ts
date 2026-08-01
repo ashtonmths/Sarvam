@@ -1,5 +1,6 @@
-import { createHmac, createSign, timingSafeEqual } from "node:crypto";
+import { createSign } from "node:crypto";
 import { config, requireEnv } from "../config.js";
+import { verifyHmacSha256 } from "../crypto/compare.js";
 import { UpstreamError, UserError } from "../errors.js";
 
 /**
@@ -104,10 +105,12 @@ export function verifyWebhookSignature(
   const secret = config.GITHUB_APP_WEBHOOK_SECRET;
   if (!secret) return false;
 
-  const expected = `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`;
-  const a = Buffer.from(expected);
-  const b = Buffer.from(signature);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return verifyHmacSha256({
+    rawBody,
+    key: secret,
+    presented: signature,
+    prefix: "sha256=",
+  });
 }
 
 /* ------------------------------------------------------------ REST calls */

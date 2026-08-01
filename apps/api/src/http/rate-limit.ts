@@ -2,6 +2,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import { config } from "../config.js";
 import { sql } from "../db.js";
 import { RateLimitedError } from "../errors.js";
+import { rateLimitDecisions } from "../metrics.js";
 import { clientIp } from "./client-ip.js";
 
 /**
@@ -136,6 +137,15 @@ function isExempt(c: Context): boolean {
   return c.req.path === "/health";
 }
 
+/**
+ * Counted at every tier, allowed as well as limited. A sustained rise in
+ * `limited` on the ip tier is a misconfigured client or someone probing, and
+ * neither is legible without the allowed count next to it.
+ */
+function record(tier: string, decision: LimitDecision): void {
+  rateLimitDecisions.inc({ tier, outcome: decision.allowed ? "allowed" : "limited" });
+}
+
 function deny(decision: LimitDecision): never {
   throw new RateLimitedError("Too many requests", decision.retryAfterSeconds);
 }
@@ -154,6 +164,7 @@ export const ipRateLimit: MiddlewareHandler = async (c, next) => {
   const tier = isAuthRoute ? "auth" : "ip";
 
   const decision = hitMemory(`${tier}:${clientIp(c)}`, limit);
+  record(tier, decision);
   if (!decision.allowed) deny(decision);
   await next();
 };
@@ -169,12 +180,14 @@ export const identityRateLimit: MiddlewareHandler = async (c, next) => {
   const actor = c.get("actor");
   if (actor?.type === "api_key") {
     const decision = await hitShared(`key:${actor.id}`, config.RATE_LIMIT_KEY_PER_MIN);
+    record("key", decision);
     if (!decision.allowed) deny(decision);
   }
 
   const orgId = c.get("orgId");
   if (orgId !== undefined) {
     const decision = await hitShared(`org:${orgId}`, config.RATE_LIMIT_ORG_PER_MIN);
+    record("org", decision);
     if (!decision.allowed) deny(decision);
   }
 
@@ -196,6 +209,7 @@ export const webhookRateLimit: MiddlewareHandler = async (c, next) => {
     `webhook:${target}`,
     config.RATE_LIMIT_WEBHOOK_PER_MIN,
   );
+  record("webhook", decision);
   if (!decision.allowed) deny(decision);
   await next();
 };

@@ -104,6 +104,26 @@ export const jobState = pgEnum("job_state", [
 /** A crawled entity that stopped appearing is tombstoned, never deleted. */
 export const entityState = pgEnum("entity_state", ["active", "stale"]);
 
+/** Where a drift finding came from. Three sources, one queue. */
+export const driftKind = pgEnum("drift_kind", [
+  "hash_change",
+  "staleness",
+  "unresolved_ref",
+]);
+
+/**
+ * `auto_dismissed` is distinct from `dismissed` on purpose: the first was
+ * suppressed by a prior judgment, the second *is* the judgment. Collapsing
+ * them would make the mute self-reinforcing with nobody ever having decided.
+ */
+export const findingState = pgEnum("finding_state", [
+  "open",
+  "investigating",
+  "corrected",
+  "dismissed",
+  "auto_dismissed",
+]);
+
 export const memberRole = pgEnum("member_role", ["owner", "admin", "member", "viewer"]);
 
 export const connectorStatus = pgEnum("connector_status", [
@@ -855,6 +875,75 @@ export const rateCounters = pgTable(
   (t) => [primaryKey({ columns: [t.bucket, t.windowStart] })],
 );
 
+/* ---------------------------------------------------------- reviewer */
+
+/**
+ * Two-level hashes per connector instance: one `root` row answering "did
+ * anything change here" in a single comparison, and one row per entity scope
+ * turning a yes into "exactly these things".
+ */
+export const structuralHashes = pgTable(
+  "structural_hashes",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    connectorInstanceId: bigint("connector_instance_id", { mode: "number" })
+      .notNull()
+      .references(() => connectorInstances.id, { onDelete: "cascade" }),
+    /** 'root', or an entity scope like 'workflow/17', 'base/appX'. */
+    scope: text("scope").notNull(),
+    /** sha256 hex over the canonical form — see reviewer/hash.ts. */
+    hash: text("hash").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("structural_hashes_identity").on(t.orgId, t.connectorInstanceId, t.scope),
+  ],
+);
+
+/**
+ * The correction queue. Three sources land here — hash changes, staleness
+ * events and unresolved references — because an operator should review "what
+ * does the map have wrong" in one place rather than three.
+ */
+export const driftFindings = pgTable(
+  "drift_findings",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    connectorInstanceId: bigint("connector_instance_id", { mode: "number" })
+      .notNull()
+      .references(() => connectorInstances.id, { onDelete: "cascade" }),
+    kind: driftKind("kind").notNull(),
+    scope: text("scope").notNull(),
+    /** Stable digest of scope + change shape. The suppression key. */
+    signature: text("signature").notNull(),
+    /** What the map believed, captured before the reconciling crawl runs. */
+    documentedState: jsonb("documented_state").$type<Record<string, unknown>>(),
+    liveState: jsonb("live_state").$type<Record<string, unknown>>(),
+    state: findingState("state").notNull().default("open"),
+    /** Judgment only. A resource limit is never a reason to dismiss. */
+    dismissReason: text("dismiss_reason"),
+    /**
+     * Stamped when a run ended on a step or token limit rather than on a
+     * judgment. The state stays `open`, so an investigation that never
+     * finished cannot mute the signature it failed to reach a verdict on.
+     */
+    budgetExhaustedAt: timestamp("budget_exhausted_at", { withTimezone: true }),
+    runId: text("run_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("drift_findings_org_state_idx").on(t.orgId, t.state),
+    index("drift_findings_signature_idx").on(t.orgId, t.signature),
+  ],
+);
+
 /* ------------------------------------------------------- inferred types */
 
 /** The persisted row. `Verdict` in types.ts is the APPROVE|WARN|BLOCK union. */
@@ -881,3 +970,6 @@ export type NewRationale = typeof rationale.$inferInsert;
 export type AgentTrace = typeof agentTraces.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type Crawl = typeof crawls.$inferSelect;
+export type StructuralHash = typeof structuralHashes.$inferSelect;
+export type DriftFinding = typeof driftFindings.$inferSelect;
+export type NewDriftFinding = typeof driftFindings.$inferInsert;

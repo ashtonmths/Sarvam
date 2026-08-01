@@ -45,6 +45,12 @@ const Env = z.object({
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
+  /**
+   * Bearer token for `GET /metrics`. Absent ⇒ the endpoint 404s, because the
+   * API is internet-facing and traffic volumes, org counts and per-caller
+   * limit rejections are not things to publish to anyone who asks.
+   */
+  METRICS_TOKEN: z.string().min(16).optional(),
 
   // boot-required
   DATABASE_URL: z.string().url(),

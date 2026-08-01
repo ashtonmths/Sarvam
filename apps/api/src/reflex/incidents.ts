@@ -36,6 +36,16 @@ export interface DetectedChange {
   nodeId?: number | null;
 }
 
+/**
+ * Identity of one detected change, for at-least-once delivery.
+ *
+ * The components are JSON-encoded rather than joined with a separator. Joining
+ * on ":" makes ("airtable:x", "y") and ("airtable", "x:y") the same digest,
+ * and two different changes collapsing into one incident means the second is
+ * never alerted on — the exact failure Reflex exists to prevent. `externalId`
+ * and `vendorEventId` both come from vendor payloads, so the delimiter is not
+ * ours to guarantee.
+ */
 export function dedupeKeyFor(input: {
   connector: string;
   externalId: string;
@@ -44,7 +54,12 @@ export function dedupeKeyFor(input: {
 }): string {
   return createHash("sha256")
     .update(
-      `${input.connector}:${input.externalId}:${input.operation}:${input.vendorEventId}`,
+      JSON.stringify([
+        input.connector,
+        input.externalId,
+        input.operation,
+        input.vendorEventId,
+      ]),
     )
     .digest("hex");
 }
