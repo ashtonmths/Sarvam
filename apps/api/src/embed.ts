@@ -1,4 +1,4 @@
-import { pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
+import { type FeatureExtractionPipeline, pipeline } from "@huggingface/transformers";
 
 /**
  * Embeddings run locally. Two reasons: it removes a second vendor, and it means

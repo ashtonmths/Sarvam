@@ -30,7 +30,7 @@ describe("decayedImpact", () => {
     expect(far).toBeLessThan(mid);
     // Six hops out, a maximally critical node contributes almost nothing.
     // It shows on the map. It does not raise an alarm.
-    expect(far).toBeCloseTo(Math.pow(DECAY, 5), 5);
+    expect(far).toBeCloseTo(DECAY ** 5, 5);
     expect(far).toBeLessThan(0.1);
   });
 
@@ -42,7 +42,12 @@ describe("decayedImpact", () => {
 describe("verdict", () => {
   it("blocks when a revenue touching node is reached over trusted edges", () => {
     const rows = [
-      row({ name: "billing-sync-flow", criticality: 1, impact: 0.94, minEdgeConfidence: 1 }),
+      row({
+        name: "billing-sync-flow",
+        criticality: 1,
+        impact: 0.94,
+        minEdgeConfidence: 1,
+      }),
     ];
     const result = verdict(rows);
     expect(result.verdict).toBe("BLOCK");
@@ -53,7 +58,12 @@ describe("verdict", () => {
   // so no matter how critical the node it reaches, it can only warn.
   it("never blocks on an llm inferred edge alone", () => {
     const rows = [
-      row({ name: "billing-sync-flow", criticality: 1, impact: 0.94, minEdgeConfidence: 0.5 }),
+      row({
+        name: "billing-sync-flow",
+        criticality: 1,
+        impact: 0.94,
+        minEdgeConfidence: 0.5,
+      }),
     ];
     const result = verdict(rows);
     expect(result.verdict).toBe("WARN");

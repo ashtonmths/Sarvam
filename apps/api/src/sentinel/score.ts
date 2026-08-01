@@ -28,7 +28,7 @@ export function decayedImpact(
   hops: number,
 ): number {
   if (hops < 1) return criticality;
-  return criticality * pathConfidence * Math.pow(DECAY, hops - 1);
+  return criticality * pathConfidence * DECAY ** (hops - 1);
 }
 
 /**

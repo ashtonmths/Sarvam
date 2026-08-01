@@ -6,6 +6,8 @@
  * imports this: a slow or failed call costs prose, never a gate.
  */
 
+import { requireEnv } from "./config.js";
+
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
 export type Role = "system" | "user" | "assistant" | "tool";
@@ -35,12 +37,11 @@ export interface ToolDef {
 export type Tier = "strong" | "bulk";
 
 function modelFor(tier: Tier): string {
-  const model =
-    tier === "strong"
-      ? process.env.OPENROUTER_MODEL_STRONG
-      : process.env.OPENROUTER_MODEL_BULK;
-  if (!model) throw new Error(`OPENROUTER_MODEL_${tier.toUpperCase()} is not set`);
-  return model;
+  // Missing model config fails the prose, never the boot: the deterministic
+  // verdict path uses no model at all.
+  return requireEnv(
+    tier === "strong" ? "OPENROUTER_MODEL_STRONG" : "OPENROUTER_MODEL_BULK",
+  );
 }
 
 export interface CompleteOptions {
@@ -57,16 +58,9 @@ export interface Completion {
 }
 
 export async function complete(opts: CompleteOptions): Promise<Completion> {
-  const {
-    tier = "strong",
-    messages,
-    tools,
-    timeoutMs = 60_000,
-    maxRetries = 2,
-  } = opts;
+  const { tier = "strong", messages, tools, timeoutMs = 60_000, maxRetries = 2 } = opts;
 
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) throw new Error("OPENROUTER_API_KEY is not set");
+  const key = requireEnv("OPENROUTER_API_KEY");
 
   let lastError: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
