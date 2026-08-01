@@ -183,8 +183,21 @@ volumes:
   models:
 
 networks:
+  # Created here, not declared external, which is the difference between a
+  # deploy that works and one that does not.
+  #
+  # Both this stack and ops/observability declared it external, so neither
+  # created it and each assumed the other had. Nothing did: the only thing that
+  # ever ran `docker network create sadhak-obs` was scripts/obs-local.sh, which
+  # is for a laptop and never runs on the VPS. Every deploy failed attaching the
+  # api container to a network that did not exist.
+  #
+  # The app stack owns it because the app is what is always deployed, and it has
+  # to come up whether or not anyone is running monitoring. `name` pins the
+  # literal network name so compose does not prefix it with the project — the
+  # observability stack still joins it as external, and now finds it there.
   sadhak-obs:
-    external: true
     name: sadhak-obs
+  # Genuinely external: Dokploy creates this one, and Traefik routes through it.
   dokploy-network:
     external: true
