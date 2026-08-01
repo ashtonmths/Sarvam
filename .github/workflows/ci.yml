@@ -444,7 +444,18 @@ jobs:
           # noticed was the smoke test failing 180s later for a stack that had
           # never been redeployed. Read the body and refuse to claim a deploy
           # that did not start.
-          body=$(curl -fsS -X POST "$HOOK")
+          #
+          # The branch Dokploy compares against is the one in the payload, and
+          # this step posted an empty body from the day it was written — so
+          # there was never a ref to read and "Branch Not Match" was the only
+          # answer it could give. Adding the check made that visible; it did
+          # not make the webhook work. Send the push event Dokploy expects.
+          # A generic /api/deploy/<token> hook ignores the body, so this is
+          # safe whichever endpoint the secret points at.
+          body=$(curl -fsS -X POST "$HOOK" \
+            -H 'Content-Type: application/json' \
+            -H 'X-GitHub-Event: push' \
+            -d "{\"ref\":\"${GITHUB_REF}\"}")
           echo "Dokploy said: $body"
           case "$body" in
             *"Not Match"*|*error*|*Error*)

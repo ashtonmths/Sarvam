@@ -117,9 +117,14 @@ test.describe("metrics", () => {
     // The seeded org has no incidents, so every latency is unmeasured. "0ms"
     // here would read as instant detection — the most flattering possible lie
     // a dashboard can tell, and the reason the null state exists at all.
-    const latencies = page.locator(".lat__value");
-    await expect(latencies.first()).toBeVisible();
-    for (const value of await latencies.allTextContents()) {
+    const boxes = page.locator(".mx-lat");
+    await expect(boxes.first()).toBeVisible();
+
+    // An unmeasured box names what would measure it instead of rendering a
+    // figure, so there is no number present to be mistaken for a fast one.
+    await expect(page.locator(".mx-lat--waiting").first()).toBeVisible();
+
+    for (const value of await page.locator(".mx-lat__value").allTextContents()) {
       expect(value).not.toMatch(/^0\s*(ms|s)$/);
     }
   });
@@ -127,8 +132,18 @@ test.describe("metrics", () => {
   test("shows coverage as two numbers and never sums them", async ({ page }) => {
     await page.goto("/app/metrics");
 
-    await expect(page.getByText(/counts toward coverage/i)).toBeVisible();
-    await expect(page.getByText(/never counted/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Coverage" })).toBeVisible();
+
+    // Confirmed and drafted are reported side by side and never added. A draft
+    // is a proposal until a person checks it against its source, so folding it
+    // into coverage would claim credit for work nobody has verified.
+    await expect(page.locator(".mx-cov__key")).toHaveText(["confirmed", "drafted"]);
+
+    const [confirmed] = await page.locator(".mx-cov__num").allTextContents();
+    await expect(page.locator(".mx-cov__num")).toHaveCount(2);
+
+    // The headline figure is the confirmed share alone, not the two added up.
+    await expect(page.locator(".mx-cov__pct")).toHaveText(confirmed);
   });
 });
 
