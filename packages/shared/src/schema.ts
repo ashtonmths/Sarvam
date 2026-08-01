@@ -152,6 +152,23 @@ export const crawlState = pgEnum("crawl_state", [
   "failed",
 ]);
 
+/**
+ * How far a provisioned n8n account got.
+ *
+ * `invited` is not a transient step on the way to `active` — it is where n8n
+ * leaves us whenever SMTP is unconfigured, which is the default. The public
+ * API creates the user and hands back an `inviteAcceptUrl`, but nothing is
+ * delivered and the account has no password until a human opens that link.
+ * Collapsing it into `active` would claim an account is usable when nobody
+ * can sign into it.
+ */
+export const n8nAccountState = pgEnum("n8n_account_state", [
+  "pending",
+  "invited",
+  "active",
+  "failed",
+]);
+
 /* ---------------------------------------------------------- organizations */
 
 export const organizations = pgTable("organizations", {
@@ -1465,3 +1482,109 @@ export const embeddingState = pgTable("embedding_state", {
   model: text("model").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/* -------------------------------------------------------------------- n8n */
+
+/**
+ * The n8n user provisioned for a Sadhak user at signup.
+ *
+ * One row per user, enforced by a unique constraint rather than by the
+ * provisioning job being careful: the job is retried, and at-least-once
+ * delivery means "careful" is not a property the code can have on its own.
+ * `n8nUserId` is n8n's uuid, which is the only identifier that survives the
+ * user changing their email upstream.
+ */
+export const n8nAccounts = pgTable(
+  "n8n_accounts",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    userId: bigint("user_id", { mode: "number" })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** Null until the upstream create succeeds; the row exists first so a
+     * retry has somewhere to record why the last attempt failed. */
+    n8nUserId: text("n8n_user_id"),
+    email: text("email").notNull(),
+    /**
+     * Where the user sets their n8n password. Not a secret in the vault sense
+     * — it is single-use and scoped to an account with no data in it yet — but
+     * it is still only shown to the user it belongs to.
+     */
+    inviteAcceptUrl: text("invite_accept_url"),
+    state: n8nAccountState("state").notNull().default("pending"),
+    /** The last provisioning error, kept after success so a recovered
+     * account still shows what went wrong the first time. */
+    failureReason: text("failure_reason"),
+    /** The connector wired to this account, once auto-provisioning ran. */
+    instanceId: bigint("instance_id", { mode: "number" }).references(
+      () => connectorInstances.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    invitedAt: timestamp("invited_at", { withTimezone: true }),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
+  },
+  (t) => [unique("n8n_accounts_user_unique").on(t.userId)],
+);
+
+/**
+ * A failed workflow execution, as observed by polling.
+ *
+ * Deliberately not `reflex_incidents`. That table is about someone *changing*
+ * a workflow and whether to revert it; this is about a workflow running and
+ * throwing. They share a connector and nothing else — same state machine for
+ * both would mean an execution failure could be offered a "revert", which is
+ * meaningless.
+ *
+ * What is stored is the shape of the failure, never the payload that caused
+ * it. n8n's execution data embeds the actual rows flowing through every node,
+ * so `runData` is dropped at the boundary and only the failing node's name and
+ * message survive — and the message is truncated, because an error string is
+ * one `JSON.stringify(row)` away from being customer data too.
+ */
+export const n8nExecutionFailures = pgTable(
+  "n8n_execution_failures",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    instanceId: bigint("instance_id", { mode: "number" })
+      .notNull()
+      .references(() => connectorInstances.id, { onDelete: "cascade" }),
+    /**
+     * n8n's execution id. Numeric and monotonic, which is what makes the poll
+     * cheap: the high-water mark is `max(execution_id)` per instance, so a
+     * steady state reads one page and stops.
+     */
+    executionId: bigint("execution_id", { mode: "number" }).notNull(),
+    workflowId: text("workflow_id").notNull(),
+    workflowName: text("workflow_name"),
+    /** The graph node for this workflow, when the crawl has seen it. */
+    nodeId: bigint("node_id", { mode: "number" }).references(() => nodes.id, {
+      onDelete: "set null",
+    }),
+    /** n8n's execution mode: trigger | webhook | manual | retry … */
+    mode: text("mode"),
+    /** The node that threw, by name — `lastNodeExecuted` in n8n's data. */
+    failedNode: text("failed_node"),
+    errorMessage: text("error_message"),
+    /** The vendor's clock, and not trusted to parse. */
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    stoppedAt: timestamp("stopped_at", { withTimezone: true }),
+    /** 'poll' | 'push', kept for the same reason reflex_incidents keeps it:
+     * two detection latencies must never average into one number. */
+    detectPath: text("detect_path").notNull().default("poll"),
+    detectedAt: timestamp("detected_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("n8n_execution_failures_instance_execution").on(t.instanceId, t.executionId),
+    index("n8n_execution_failures_org_detected_idx").on(t.orgId, t.detectedAt),
+    index("n8n_execution_failures_workflow_idx").on(t.orgId, t.workflowId, t.detectedAt),
+  ],
+);
