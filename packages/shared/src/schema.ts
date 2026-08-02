@@ -271,6 +271,113 @@ export const apiKeys = pgTable(
   (t) => [index("api_keys_org_idx").on(t.orgId)],
 );
 
+/**
+ * OAuth 2.1, for the MCP clients that cannot send a static header.
+ *
+ * An API key is a credential the org mints and pastes; this is one the client
+ * obtains for itself, on behalf of a signed-in person, and which that person
+ * can withdraw without touching anyone else's access. Both end up as the same
+ * `scopes` array from `rbac.ts`, checked by the same `requireScope`, so the
+ * authorization model has one shape and the transport is what differs.
+ *
+ * Every secret here is stored as SHA-256 and never in plaintext, matching
+ * `sessions.token_hash` and `api_keys.key_hash`.
+ */
+export const oauthClients = pgTable("oauth_clients", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  /** The `client_id` handed back at registration. Public, not a secret. */
+  clientId: text("client_id").notNull().unique(),
+  /** SHA-256 of the secret. Null for a public client, which proves itself with PKCE alone. */
+  secretHash: text("secret_hash"),
+  clientName: text("client_name").notNull(),
+  /**
+   * Exact-match allowlist. A redirect_uri is the one input an attacker would
+   * most like to influence, so it is compared whole — never by prefix, which
+   * is how `https://evil.com/?x=https://good.com` gets accepted.
+   */
+  redirectUris: jsonb("redirect_uris").$type<string[]>().notNull().default([]),
+  grantTypes: jsonb("grant_types").$type<string[]>().notNull().default([]),
+  /** RFC 7591 registration access token, for reading back the registration. */
+  registrationTokenHash: text("registration_token_hash"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const oauthAuthorizationCodes = pgTable(
+  "oauth_authorization_codes",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    codeHash: text("code_hash").notNull().unique(),
+    clientId: bigint("client_id", { mode: "number" })
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: bigint("user_id", { mode: "number" })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+    /** Bound at issue and compared at redemption; a code is valid for one URI. */
+    redirectUri: text("redirect_uri").notNull(),
+    codeChallenge: text("code_challenge").notNull(),
+    codeChallengeMethod: text("code_challenge_method").notNull(),
+    /** RFC 8707. Recorded so a code minted for this server cannot be spent elsewhere. */
+    resource: text("resource"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** Set on first redemption. A second attempt is an attack, not a retry. */
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("oauth_codes_client_idx").on(t.clientId)],
+);
+
+export const oauthAccessTokens = pgTable(
+  "oauth_access_tokens",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    tokenHash: text("token_hash").notNull().unique(),
+    clientId: bigint("client_id", { mode: "number" })
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: bigint("user_id", { mode: "number" })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("oauth_access_tokens_user_idx").on(t.userId)],
+);
+
+export const oauthRefreshTokens = pgTable(
+  "oauth_refresh_tokens",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    tokenHash: text("token_hash").notNull().unique(),
+    clientId: bigint("client_id", { mode: "number" })
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: bigint("user_id", { mode: "number" })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    orgId: bigint("org_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** Rotation: redeeming a refresh token retires it and names its successor. */
+    rotatedToId: bigint("rotated_to_id", { mode: "number" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("oauth_refresh_tokens_user_idx").on(t.userId)],
+);
+
 /** Append-only. An audit log with an UPDATE path is a diary. */
 export const auditLog = pgTable(
   "audit_log",

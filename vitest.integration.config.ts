@@ -38,6 +38,11 @@ export default defineConfig({
       CREDENTIAL_MASTER_KEY: "v1:dGVzdC1vbmx5LWtleS1ub3QtYS1yZWFsLXNlY3JldC0=",
       JOBS_ENABLED: "false",
       RATE_LIMIT_ENABLED: "true",
+      // The OAuth issuer. Set here rather than left to a developer's .env
+      // because the discovery documents and the WWW-Authenticate challenge are
+      // asserted byte for byte, and an issuer that moved with the environment
+      // would make those assertions describe the machine instead of the code.
+      PUBLIC_API_URL: "https://api.test.sadhak.online",
     },
   },
 });

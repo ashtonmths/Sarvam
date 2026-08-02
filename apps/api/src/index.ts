@@ -41,6 +41,8 @@ import { graphRoutes } from "./routes/graph.js";
 import { historianRoutes } from "./routes/historian.js";
 import { mcpRoutes } from "./routes/mcp.js";
 import { n8nRoutes } from "./routes/n8n.js";
+import { oauthRoutes } from "./routes/oauth.js";
+import { oauthMetadataRoutes } from "./routes/oauth-metadata.js";
 import { orgRoutes } from "./routes/org.js";
 import { rationaleRoutes } from "./routes/rationale.js";
 import { reflexRoutes } from "./routes/reflex.js";
@@ -173,6 +175,15 @@ app.route("/api/comms", commsRoutes);
 // MCP carries its own API-key auth inside the JSON-RPC envelope, so it mounts
 // outside the session group. The key's org scopes every query.
 app.route("/", mcpRoutes);
+
+// Unauthenticated by design: these are the signposts a client reads on its way
+// to getting a credential, so they cannot sit behind one.
+app.route("/", oauthMetadataRoutes);
+
+// The authorization server itself: registration, consent and token exchange.
+// Its own credential checks live inside it, so it mounts outside the session
+// group like the rest of the machine-facing surface.
+app.route("/", oauthRoutes);
 
 // Slack redirects the browser here after a grant, to PUBLIC_API_URL rather
 // than to the origin that set the session cookie - so no cookie arrives and

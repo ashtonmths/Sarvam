@@ -1,6 +1,6 @@
 import { type Context, Hono } from "hono";
 import { z } from "zod";
-import { verifyApiKey } from "../auth/api-keys.js";
+import { KEY_PREFIX, verifyApiKey } from "../auth/api-keys.js";
 import { ForbiddenError, UnauthorizedError, UserError } from "../errors.js";
 import {
   askDocs,
@@ -14,6 +14,8 @@ import {
   proposeChangeInput,
   queryBlastRadius,
 } from "../mcp/tools.js";
+import { resolveAccessToken } from "./oauth.js";
+import { issuer } from "./oauth-metadata.js";
 
 /**
  * MCP over Streamable HTTP, hand-rolled against the JSON-RPC wire format.
@@ -163,18 +165,47 @@ function rpcError(id: unknown, code: number, message: string) {
   return { jsonrpc: "2.0" as const, id: id ?? null, error: { code, message } };
 }
 
-async function serveMcp(c: Context, key: string | undefined) {
-  if (!key) throw new UnauthorizedError("MCP requires an API key");
+/**
+ * What an unauthenticated caller is told to do next.
+ *
+ * A client that cannot set a header has no way to guess the OAuth flow exists;
+ * this is the thread it pulls. Built lazily because `PUBLIC_API_URL` is
+ * optional — a deployment without it still authenticates by API key, it simply
+ * cannot offer OAuth, and a bare 401 is the honest answer there.
+ */
+function authChallenge(): string | undefined {
+  try {
+    return `Bearer resource_metadata="${issuer()}/.well-known/oauth-protected-resource"`;
+  } catch {
+    return undefined;
+  }
+}
 
+async function contextFromApiKey(key: string): Promise<McpContext | null> {
   const actor = await verifyApiKey(key);
-  if (!actor) throw new UnauthorizedError("Invalid API key");
+  if (!actor) return null;
+  return { orgId: actor.orgId, apiKeyId: actor.keyId, scopes: actor.scopes };
+}
+
+async function contextFromOauthToken(token: string): Promise<McpContext | null> {
+  const actor = await resolveAccessToken(token);
+  if (!actor) return null;
+  return { orgId: actor.orgId, scopes: actor.scopes };
+}
+
+async function serveMcp(c: Context, key: string | undefined) {
+  if (!key) throw new UnauthorizedError("MCP requires an API key", authChallenge());
+
+  // Two credential shapes, one context. An API key is the org's own, minted in
+  // settings; an OAuth token belongs to a person who let a client act as them.
+  // Both arrive as a bearer string and both reduce to `{ orgId, scopes }`, so
+  // every capability check below is unaware of which one it is holding.
+  const ctx = key.startsWith(KEY_PREFIX)
+    ? await contextFromApiKey(key)
+    : await contextFromOauthToken(key);
+  if (!ctx) throw new UnauthorizedError("Invalid API key", authChallenge());
 
   const rpc = rpcSchema.parse(await c.req.json());
-  const ctx: McpContext = {
-    orgId: actor.orgId,
-    apiKeyId: actor.keyId,
-    scopes: actor.scopes,
-  };
 
   switch (rpc.method) {
     case "initialize": {

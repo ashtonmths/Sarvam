@@ -37,7 +37,17 @@ export class UserError extends AppError {
 }
 
 export class UnauthorizedError extends UserError {
-  constructor(message = "Authentication required") {
+  /**
+   * @param challenge Optional `WWW-Authenticate` value. A 401 that does not say
+   *   how to authenticate is a dead end for a machine caller: the MCP
+   *   authorization spec has clients discover the flow from this header, so
+   *   omitting it means a connector can see it is unauthorized and still have
+   *   nowhere to go.
+   */
+  constructor(
+    message = "Authentication required",
+    readonly challenge?: string,
+  ) {
     super(message, { status: 401, type: "unauthorized" });
   }
 }

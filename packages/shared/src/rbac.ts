@@ -19,6 +19,25 @@ export const CAPABILITIES = [
 
 export type Capability = (typeof CAPABILITIES)[number];
 
+/**
+ * What a machine credential may ever hold — an API key or an OAuth grant
+ * alike.
+ *
+ * Deliberately narrower than `CAPABILITIES`. Deleting an organisation,
+ * managing members and minting further keys are things a person does while
+ * signed in and accountable, not powers to hand an integration that will
+ * outlive the conversation that created it. The key form offers exactly this
+ * list, so OAuth advertises exactly this list too — an authorization server
+ * that offered more would be a way around the restriction rather than a
+ * second door to the same rooms.
+ */
+export const INTEGRATION_CAPABILITIES = [
+  "gate:invoke",
+  "graph:read",
+  "rationale:confirm",
+  "connector:manage",
+] as const satisfies readonly Capability[];
+
 export const ROLES = ["owner", "admin", "member", "viewer"] as const;
 export type Role = (typeof ROLES)[number];
 

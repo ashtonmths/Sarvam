@@ -1,7 +1,7 @@
 import { SpanStatusCode } from "@opentelemetry/api";
 import type { Context, ErrorHandler, NotFoundHandler } from "hono";
 import { ZodError } from "zod";
-import { AppError, RateLimitedError } from "../errors.js";
+import { AppError, RateLimitedError, UnauthorizedError } from "../errors.js";
 import { log, withLogContext } from "../log.js";
 import { httpDuration, httpRequests, routeLabel, statusClass } from "../metrics.js";
 import { captureError } from "../sentry.js";
@@ -126,6 +126,9 @@ export const onError: ErrorHandler = (err, c) => {
   if (err instanceof AppError) {
     if (err instanceof RateLimitedError) {
       c.header("Retry-After", String(err.retryAfterSeconds));
+    }
+    if (err instanceof UnauthorizedError && err.challenge) {
+      c.header("WWW-Authenticate", err.challenge);
     }
     // A non-exposed error's detail is logged, never serialized.
     if (!err.expose) {

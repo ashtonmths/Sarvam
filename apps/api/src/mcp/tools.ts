@@ -59,11 +59,28 @@ export const ingestDocumentInput = z.object({
   source_url: z.string().url().optional(),
 });
 
+/**
+ * Who is calling, reduced to what every tool needs.
+ *
+ * Exactly one of `apiKeyId` and `userId` is set: an API key is the
+ * organisation's own credential, an OAuth grant belongs to a person who let a
+ * client act as them. The distinction never reaches a capability check —
+ * `scopes` is the same array either way — but it must reach the audit log,
+ * because "an agent holding Priya's grant added this document" and "an agent
+ * holding the org's key added this document" are different facts about who to
+ * ask.
+ */
 export interface McpContext {
   orgId: number;
-  apiKeyId: number;
+  apiKeyId?: number | undefined;
+  userId?: number | undefined;
   scopes: string[];
   clientName?: string | undefined;
+}
+
+/** `api_key:12` or `user:7` — whichever credential actually arrived. */
+export function actorRef(ctx: McpContext): string {
+  return ctx.apiKeyId ? `api_key:${ctx.apiKeyId}` : `user:${ctx.userId ?? 0}`;
 }
 
 /**
@@ -200,7 +217,7 @@ export function ingestedByLabel(
   source: "pasted_text" | "image",
 ): string {
   const client = (ctx.clientName ?? "an MCP client").slice(0, 60);
-  const via = `api_key:${ctx.apiKeyId} via ${client}`;
+  const via = `${actorRef(ctx)} via ${client}`;
   return source === "image"
     ? `${via} (read from an image by ${client}, not a verbatim copy)`.slice(0, 200)
     : via.slice(0, 200);
@@ -277,7 +294,9 @@ export async function ingestDocument(
     await auditActor(
       "document.uploaded",
       ctx.orgId,
-      { type: "api_key", id: ctx.apiKeyId },
+      ctx.apiKeyId
+        ? { type: "api_key", id: ctx.apiKeyId }
+        : { type: "user", id: ctx.userId ?? 0 },
       { kind: "document", id: result.id },
       {
         title: result.title,
@@ -316,7 +335,7 @@ export async function proposeChange(
     mode: "mcp",
     dryRun: input.dry_run,
     actor: `agent:${change.agent}`,
-    apiKeyId: ctx.apiKeyId,
+    apiKeyId: ctx.apiKeyId ?? null,
   });
 
   return {
