@@ -5449,3 +5449,90 @@
   border-color: var(--block);
   background: var(--block-soft);
 }
+
+/* ------------------------------------------------------------ demo panel */
+
+.demo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.demo__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.demo__row .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.demo__note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.demo__note a {
+  color: var(--thread);
+  font-weight: 550;
+  text-decoration: none;
+}
+.demo__note a:hover {
+  text-decoration: underline;
+}
+
+.demo__result {
+  padding: 14px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+/* The verdict line: what it is, how sure, and whether a migration was in the
+   window — the three things worth seeing before reading a word of prose. */
+.demo__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-bottom: 10px;
+}
+
+.demo__meta strong {
+  color: var(--ink);
+}
+
+.demo__head {
+  margin: 12px 0 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.demo__head:first-of-type {
+  margin-top: 0;
+}
+
+.demo__text {
+  margin: 0;
+  max-width: 70ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.demo__reach {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--ink-faint);
+}

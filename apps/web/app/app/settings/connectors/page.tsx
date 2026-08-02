@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AddConnector } from "../../../../components/app/add-connector";
 import { AlertChannel } from "../../../../components/app/alert-channel";
+import { DemoActions } from "../../../../components/app/demo-actions";
 import { SlackChannels } from "../../../../components/app/slack-channels";
 import { EmptyState } from "../../../../components/app/ui";
 import {
@@ -274,6 +275,13 @@ export default function ConnectorsPane() {
                         ))}
                       </ul>
                     </details>
+                  )}
+
+                  {instance.connector === "n8n" && (
+                    <div className="ccard__extra">
+                      <h4 className="ccard__sub">Demo</h4>
+                      <DemoActions />
+                    </div>
                   )}
 
                   {instance.connector === "slack" && (

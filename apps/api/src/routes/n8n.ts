@@ -8,6 +8,7 @@ import { db } from "../db.js";
 import { NotFoundError } from "../errors.js";
 import { enqueue } from "../jobs/queue.js";
 import { requireAuth, requireCapability } from "../middleware/auth.js";
+import { createDemoWorkflows, simulateWorkflowFailure } from "../n8n/demo.js";
 import { getCredential } from "../vault/vault.js";
 
 export const n8nRoutes = new Hono();
@@ -80,6 +81,21 @@ n8nRoutes.get("/n8n/failures/:id", requireCapability("graph:read"), async (c) =>
   if (!row) throw new NotFoundError();
   return c.json({ failure: row });
 });
+
+/**
+ * Create the demo workflows, and break one on purpose.
+ *
+ * Buttons rather than scripts, because a hosted deployment has no terminal and
+ * "ssh in and run this" is not a demo anyone can give. `connector:manage`
+ * rather than a read capability: both write to the org's own n8n.
+ */
+n8nRoutes.post("/n8n/demo/workflows", requireCapability("connector:manage"), async (c) =>
+  c.json(await createDemoWorkflows(c.get("orgId"))),
+);
+
+n8nRoutes.post("/n8n/demo/simulate", requireCapability("connector:manage"), async (c) =>
+  c.json(await simulateWorkflowFailure(c.get("orgId"))),
+);
 
 n8nRoutes.get("/n8n/account", requireAuth, async (c) => {
   const actor = c.get("actor");

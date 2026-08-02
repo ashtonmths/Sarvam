@@ -20,6 +20,17 @@ const DEMO = {
   org: "Acme Operations",
 };
 
+/**
+ * A second owner on the same organisation.
+ *
+ * Same org rather than a second one on purpose: the demo data, the graph and
+ * the n8n workspace all hang off `acme-operations`, and a separate org would
+ * mean signing in to an empty product.
+ */
+const EXTRA_OWNERS = [
+  { email: "sushanshetty1470@gmail.com", password: "wrkwrkCODE", name: "Sushan Shetty" },
+];
+
 function log(message: string): void {
   console.log(message);
 }
@@ -68,6 +79,44 @@ async function main(): Promise<void> {
     .values({ orgId: org.id, userId: user.id, role: "owner" })
     .onConflictDoNothing();
   log(`user: ${DEMO.email} / ${DEMO.password} (owner)`);
+
+  for (const owner of EXTRA_OWNERS) {
+    const [found] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, owner.email))
+      .limit(1);
+
+    const row =
+      found ??
+      (
+        await db
+          .insert(users)
+          .values({
+            email: owner.email,
+            name: owner.name,
+            passwordHash: await hashPassword(owner.password),
+            emailVerifiedAt: new Date(),
+          })
+          .returning()
+      )[0];
+    if (!row) continue;
+
+    // Re-hashed on every run, so the seeded password is the one that works even
+    // if it was changed in the app since.
+    if (found) {
+      await db
+        .update(users)
+        .set({ passwordHash: await hashPassword(owner.password) })
+        .where(eq(users.id, row.id));
+    }
+
+    await db
+      .insert(members)
+      .values({ orgId: org.id, userId: row.id, role: "owner" })
+      .onConflictDoNothing();
+    log(`user: ${owner.email} / ${owner.password} (owner)`);
+  }
 
   if (!vaultAvailable()) {
     log(
