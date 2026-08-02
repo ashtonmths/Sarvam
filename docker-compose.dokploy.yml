@@ -147,6 +147,23 @@ services:
       # space and mixing them degrades search without failing anything.
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openrouter}
       OPENROUTER_EMBEDDING_MODEL: ${OPENROUTER_EMBEDDING_MODEL:-sentence-transformers/all-minilm-l6-v2}
+
+      # Observability. This container already joins `sadhak-obs` so Prometheus
+      # can reach it, but reachable is not the same as scrapeable.
+      #
+      # /metrics 404s unless a token is configured and presented as a bearer —
+      # deliberately 404 rather than 401, so the endpoint does not advertise
+      # itself. Without this line the monitoring stack comes up looking healthy
+      # while the `sadhak-api` target sits down with a 404, every panel on the
+      # API dashboard empty and nothing on screen saying why. Must match the
+      # value in ops/observability/prometheus/metrics-token.
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+
+      # Traces, to the Tempo on the same network. Absent, `startTracing()`
+      # returns immediately and every span becomes a no-op the runtime
+      # discards — which is the right behaviour with no collector, and the
+      # wrong one now that there is one. 4318 is OTLP/HTTP; 3200 is queries.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://tempo:4318}
       # Connector credentials live in the per-org vault, not here. N8N_BASE_URL
       # stays as the default base for instances that do not override it.
       N8N_BASE_URL: http://n8n:5678
