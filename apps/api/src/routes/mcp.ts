@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { z } from "zod";
 import { verifyApiKey } from "../auth/api-keys.js";
 import { ForbiddenError, UnauthorizedError, UserError } from "../errors.js";
@@ -163,9 +163,7 @@ function rpcError(id: unknown, code: number, message: string) {
   return { jsonrpc: "2.0" as const, id: id ?? null, error: { code, message } };
 }
 
-mcpRoutes.post("/mcp", async (c) => {
-  const bearer = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
-  const key = c.req.header("x-api-key") ?? bearer;
+async function serveMcp(c: Context, key: string | undefined) {
   if (!key) throw new UnauthorizedError("MCP requires an API key");
 
   const actor = await verifyApiKey(key);
@@ -228,7 +226,30 @@ mcpRoutes.post("/mcp", async (c) => {
     default:
       return c.json(rpcError(rpc.id, -32601, `Unknown method: ${rpc.method}`));
   }
+}
+
+/** The header form. What a client that can set headers should always use. */
+mcpRoutes.post("/mcp", (c) => {
+  const bearer = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
+  return serveMcp(c, c.req.header("x-api-key") ?? bearer);
 });
+
+/**
+ * The same server, with the key in the path.
+ *
+ * Claude's "add custom connector" form takes a URL and an optional OAuth client
+ * — there is no field for a static header — so a header-only server cannot be
+ * added there at all. This carries the credential where such a client can put
+ * it, and is a stopgap until the OAuth flow this protocol version actually
+ * specifies exists.
+ *
+ * The cost is that the secret is now a URL: it lands in proxy and CDN logs,
+ * in browser history, and in any screenshot of the connector settings, none of
+ * which is true of a header. Treat a key pasted into a connector as published
+ * the moment it is used — scope it to what that client needs and rotate it on
+ * its own schedule rather than sharing one key with the header callers.
+ */
+mcpRoutes.post("/mcp/k/:key", (c) => serveMcp(c, c.req.param("key")));
 
 async function callTool(name: string, args: Record<string, unknown>, ctx: McpContext) {
   switch (name) {

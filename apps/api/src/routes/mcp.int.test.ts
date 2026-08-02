@@ -101,6 +101,15 @@ async function post(
   });
 }
 
+/** The path-credential form, for the clients that cannot send a header. */
+async function postWithKeyInPath(pathKey: string, body: Rpc): Promise<Response> {
+  return mcpApp().request(`/mcp/k/${pathKey}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 /** POST and read the envelope back, which is what most assertions want. */
 async function rpc(
   body: Rpc | string,
@@ -218,6 +227,60 @@ describe("authentication", () => {
     const res = await post({ jsonrpc: "2.0", id: 1, method: "tools/list" }, auth);
 
     expect(res.status).toBe(401);
+  });
+
+  it("accepts the credential in the path, for a connector form with no header field", async () => {
+    const res = await postWithKeyInPath(key, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/list",
+    });
+
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses a key in the path that matches no row", async () => {
+    const res = await postWithKeyInPath("sadhak_nothing-of-the-sort", {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/list",
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("refuses a revoked key in the path too", async () => {
+    // The path form puts the credential somewhere it gets logged, so it is the
+    // one most likely to need revoking. Revocation has to reach it identically
+    // — a second door that outlives the kill switch would be worse than no
+    // second door.
+    await sql`UPDATE api_keys SET revoked_at = now()`;
+
+    const res = await postWithKeyInPath(key, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/list",
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("gives the path form the same scopes, not a way around them", async () => {
+    // Same credential, same refusals. The URL is a transport detail; it must
+    // not become a privilege.
+    const res = await postWithKeyInPath(key, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "ingest_document",
+        arguments: { title: "Standup", text: "Priya: we shipped the gate." },
+      },
+    });
+    const body = (await res.json()) as RpcResponse;
+
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0]?.text).toContain("connector:manage");
   });
 
   it("checks the credential before reading the body, so a garbage payload cannot leak whether a method exists", async () => {
