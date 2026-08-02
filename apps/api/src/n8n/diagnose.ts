@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { candidatesBefore, windowsFrom } from "../changes/checkpoints.js";
 import { db, sql as raw } from "../db.js";
 import { searchDocuments } from "../documents/retrieve.js";
+import { searchSlack } from "../historian/tools/slack.js";
 import { complete } from "../llm.js";
 import { log } from "../log.js";
 import { traverse } from "../sentinel/traverse.js";
@@ -380,7 +381,21 @@ export async function diagnoseFailure(failureId: number): Promise<void> {
     .filter(Boolean)
     .join(" ")
     .slice(0, 200);
-  const docs = query ? await searchDocuments(row.orgId, query, 4) : [];
+  /**
+   * Both written records, not just the uploaded one.
+   *
+   * This searched documents and stopped, which meant the diagnosis never saw
+   * the place engineers actually explain things to each other. A workflow that
+   * broke at 03:12 is usually discussed in a channel before anyone writes it
+   * down anywhere else, and skipping that made the model reason from the error
+   * and the diff alone — the two things the reader already has.
+   */
+  const [docs, slack] = await Promise.all([
+    query ? searchDocuments(row.orgId, query, 4) : Promise.resolve([]),
+    query
+      ? searchSlack({ orgId: row.orgId }, query)
+      : Promise.resolve({ hits: [], unavailable: "no search terms" }),
+  ]);
 
   const context = [
     `Workflow: ${row.workflowName ?? row.workflowId}`,
@@ -408,6 +423,13 @@ export async function diagnoseFailure(failureId: number): Promise<void> {
     schemaChangeSuspected
       ? "--- note: at least one change in this window looks like a database migration ---"
       : "",
+    slack.hits.length > 0
+      ? `--- what people said in Slack ---\n${slack.hits
+          .slice(0, 6)
+          .map((h) => `[${h.permalink}] ${h.text.slice(0, 400)}`)
+          .join("\n")}`
+      : `--- no Slack context (${slack.unavailable ?? "nothing matched"}) ---`,
+    "",
     docs.length > 0
       ? `--- from written notes ---\n${docs.map((d) => `[${d.permalink}] ${d.title}: ${d.body.slice(0, 400)}`).join("\n")}`
       : "",

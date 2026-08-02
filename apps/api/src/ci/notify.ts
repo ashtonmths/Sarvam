@@ -345,21 +345,20 @@ export function buildN8nAlert(input: {
   cause: string;
   recommendation: string;
   confidence: number;
+  evidence?: Array<{ source: string; detail: string }>;
+  windowsSearched?: number;
+  searchReach?: string;
+  schemaChangeSuspected?: boolean;
+  failureId: number;
   detailUrl: string;
+  workflowUrl?: string | null;
 }): { text: string; blocks: Record<string, unknown>[] } {
-  const impactLine =
-    input.impact.count === 0
-      ? "Nothing recorded downstream of this workflow."
-      : `*${input.impact.count}* dependent${input.impact.count === 1 ? "" : "s"} affected — ` +
-        input.impact.top
-          .slice(0, 3)
-          .map((n) => `\`${n.name}\``)
-          .join(", ");
+  const where = [input.failedNode].filter(Boolean).join("");
 
+  // The push notification. Deliberately the action rather than the title —
+  // "a workflow failed" is not news to anyone who owns one.
   const text = `${input.workflow} failed: ${input.recommendation}`;
 
-  // `fix_pending` is its own shape. The action is a merge, not an
-  // investigation, so the message says that and nothing else competes with it.
   const lead =
     input.state === "fix_pending"
       ? `:hourglass_flowing_sand: *${input.workflow}* failed — a fix may already be open`
@@ -367,55 +366,120 @@ export function buildN8nAlert(input: {
         ? `:grey_question: *${input.workflow}* failed — nothing we shipped explains it`
         : `:rotating_light: *${input.workflow}* failed`;
 
+  /**
+   * Impact first, because it is the question the owner has before any other:
+   * does this matter. A workflow nothing depends on failing at 3am is not the
+   * same event as one five reports read from.
+   */
+  const impactLine =
+    input.impact.count === 0
+      ? "_Nothing recorded downstream._"
+      : `*${input.impact.count}* dependant${input.impact.count === 1 ? "" : "s"} — ` +
+        input.impact.top
+          .slice(0, 3)
+          .map((n) => `\`${n.name}\``)
+          .join(", ");
+
   const blocks: Record<string, unknown>[] = [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: fit(
-          `${lead}\n${impactLine}` +
-            (input.failedNode ? `\nFailed at *${input.failedNode}*` : ""),
-        ),
+        text: fit(`${lead}${where ? `\nFailed at *${where}*` : ""}\n${impactLine}`),
       },
     },
+    { type: "divider" },
     {
       type: "section",
-      text: { type: "mrkdwn", text: `*What to do*\n${input.recommendation}` },
+      text: { type: "mrkdwn", text: fit(`*What to do*\n${input.recommendation}`) },
     },
-    { type: "section", text: { type: "mrkdwn", text: `*Why*\n${input.cause}` } },
+    { type: "section", text: { type: "mrkdwn", text: fit(`*Why*\n${input.cause}`) } },
   ];
+
+  /**
+   * Where the answer came from, named by source.
+   *
+   * Without this the message is an assertion. With it a reader can tell that a
+   * conclusion rests on a Slack thread rather than on the stack trace, and
+   * decide how much to trust it before acting.
+   */
+  const evidence = (input.evidence ?? []).slice(0, 4);
+  if (evidence.length > 0) {
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: fit(
+          `*Evidence*\n${evidence
+            .map((e) => `• _${e.source}_ — ${e.detail.slice(0, 220)}`)
+            .join("\n")}`,
+        ),
+      },
+    });
+  }
+
+  if (input.error) {
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: fit(`*Error*\n\`\`\`${input.error.slice(0, 400)}\`\`\``),
+      },
+    });
+  }
+
+  // How far the search reached, so "we found nothing" can be told apart from
+  // "we did not look very far".
+  const context = [
+    confidenceLabel({
+      cause: input.cause,
+      recommendation: input.recommendation,
+      confidence: input.confidence,
+      evidence: [],
+    }),
+    input.windowsSearched
+      ? `${input.windowsSearched} window${input.windowsSearched === 1 ? "" : "s"} searched${input.searchReach ? ` · ${input.searchReach}` : ""}`
+      : null,
+    input.schemaChangeSuspected ? ":warning: schema change in window" : null,
+  ]
+    .filter(Boolean)
+    .join("  ·  ");
 
   blocks.push({
     type: "context",
-    elements: [
-      {
-        type: "mrkdwn",
-        text: [
-          confidenceLabel({
-            cause: input.cause,
-            recommendation: input.recommendation,
-            confidence: input.confidence,
-            evidence: [],
-          }),
-          input.error ? `\`${input.error.slice(0, 180)}\`` : null,
-        ]
-          .filter(Boolean)
-          .join(" · "),
-      },
-    ],
+    elements: [{ type: "mrkdwn", text: fit(context, 2900) }],
   });
 
-  blocks.push({
-    type: "actions",
-    elements: [
-      {
-        type: "button",
-        text: { type: "plain_text", text: "See the full diagnosis" },
-        url: input.detailUrl,
-        style: "primary",
-      },
-    ],
-  });
+  /**
+   * Actions an engineer can take from where they are standing.
+   *
+   * "Talk about it" opens a thread carrying the evidence, because the useful
+   * conversation happens next to the alert and not in a browser tab someone
+   * has to go and find — and a thread keeps it out of the channel for everyone
+   * who does not own this.
+   */
+  const elements: Record<string, unknown>[] = [
+    {
+      type: "button",
+      text: { type: "plain_text", text: "💬 Talk about it" },
+      action_id: "ci.discuss",
+      value: String(input.failureId),
+      style: "primary",
+    },
+    {
+      type: "button",
+      text: { type: "plain_text", text: "See the full diagnosis" },
+      url: input.detailUrl,
+    },
+  ];
+  if (input.workflowUrl) {
+    elements.push({
+      type: "button",
+      text: { type: "plain_text", text: "Open in n8n" },
+      url: input.workflowUrl,
+    });
+  }
+  blocks.push({ type: "actions", elements });
 
   return { text, blocks };
 }
@@ -450,9 +514,18 @@ export async function postN8nAlert(orgId: number, failureId: number): Promise<bo
     cause: string;
     recommendation: string;
     confidence: number;
+    evidence?: Array<{ source: string; detail: string }>;
+    windowsSearched?: number;
+    searchReach?: string;
+    schemaChangeSuspected?: boolean;
   };
 
   const { text, blocks } = buildN8nAlert({
+    failureId,
+    evidence: d.evidence,
+    windowsSearched: d.windowsSearched,
+    searchReach: d.searchReach,
+    schemaChangeSuspected: d.schemaChangeSuspected,
     workflow: row.workflowName ?? row.workflowId,
     failedNode: row.failedNode,
     error: row.errorMessage,
@@ -487,4 +560,86 @@ export async function postN8nAlert(orgId: number, failureId: number): Promise<bo
 
   log().info({ event: "n8n_alert_posted", failureId, channel }, "n8n: alert posted");
   return true;
+}
+
+/**
+ * Opens a thread on the alert carrying everything the summary left out.
+ *
+ * The channel message is deliberately short; this is where the rest goes, so
+ * the discussion happens beside the alert rather than in a browser tab someone
+ * has to go and find. A thread keeps it out of the way of everyone who does not
+ * own this workflow.
+ */
+export async function discussN8nFailure(
+  failureId: number,
+  slackUserId?: string,
+): Promise<boolean> {
+  // The org comes from the row rather than the click. A Slack payload carries
+  // a channel, and mapping channel to org would be a second source of truth
+  // for something the failure already knows.
+  const [row] = await db
+    .select()
+    .from(n8nExecutionFailures)
+    .where(eq(n8nExecutionFailures.id, failureId));
+  if (!row?.slackTs || !row.slackChannelId || !row.diagnosis) return false;
+
+  const token = await botToken(row.orgId);
+  if (!token) return false;
+
+  const d = row.diagnosis as unknown as {
+    impact?: { count: number; top: Array<{ name: string; kind: string; hops: number }> };
+    evidence?: Array<{ source: string; detail: string }>;
+    windowsSearched?: number;
+    searchReach?: string;
+    precedent?: Array<{ headSha: string; createdAt: string; htmlUrl: string }>;
+  };
+
+  const lines: string[] = [];
+  if (slackUserId) lines.push(`<@${slackUserId}> opened this up.`);
+
+  const top = d.impact?.top ?? [];
+  if (top.length > 0) {
+    lines.push(
+      `*Everything downstream* (${d.impact?.count})\n${top
+        .map(
+          (n) => `• \`${n.name}\` — ${n.kind}, ${n.hops} hop${n.hops === 1 ? "" : "s"}`,
+        )
+        .join("\n")}`,
+    );
+  }
+
+  const evidence = d.evidence ?? [];
+  if (evidence.length > 0) {
+    lines.push(
+      `*All the evidence*\n${evidence
+        .map((e) => `• _${e.source}_ — ${e.detail}`)
+        .join("\n")}`,
+    );
+  }
+
+  if (d.searchReach) {
+    lines.push(
+      `*How far back it looked*\n${d.windowsSearched} window${d.windowsSearched === 1 ? "" : "s"} — ${d.searchReach}`,
+    );
+  }
+
+  // Named questions rather than "any thoughts?", because a thread that opens
+  // with a blank prompt gets no replies.
+  lines.push(
+    "*Worth deciding here*\n" +
+      "• Is the recommendation right, or is there a better fix?\n" +
+      "• Does anything else read from this that the map has not recorded?\n" +
+      "• Should this become a checkpoint once it is resolved?",
+  );
+
+  const posted = await call<{ ts?: string }>(token, "chat.postMessage", {
+    channel: row.slackChannelId,
+    thread_ts: row.slackTs,
+    text: "Diagnosis detail",
+    blocks: [
+      { type: "section", text: { type: "mrkdwn", text: fit(lines.join("\n\n")) } },
+    ],
+  });
+
+  return Boolean(posted?.ts);
 }

@@ -2,6 +2,7 @@ import { roleHas } from "@sadhak/shared/rbac";
 import { members, reflexIncidents, users } from "@sadhak/shared/schema";
 import { eq } from "drizzle-orm";
 import { auditSystem } from "../audit.js";
+import { discussN8nFailure } from "../ci/notify.js";
 import { db } from "../db.js";
 import {
   captureRationale,
@@ -44,6 +45,13 @@ export async function handleSlackInteraction(
 
   const incidentId = Number(action.value);
   if (!Number.isInteger(incidentId)) return;
+
+  // The workflow-diagnosis thread. Its value is a failure id, not an incident
+  // id, so it is handled before the incident actions rather than beside them.
+  if (action.action_id === "ci.discuss") {
+    await discussN8nFailure(incidentId, payload.user?.id);
+    return;
+  }
 
   switch (action.action_id) {
     case "reflex.revert":
