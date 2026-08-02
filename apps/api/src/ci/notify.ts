@@ -352,12 +352,19 @@ export function buildN8nAlert(input: {
   failureId: number;
   detailUrl: string;
   workflowUrl?: string | null;
+  /** Written by the second pass. Absent falls back to rendering the fields. */
+  narrative?:
+    | { headline: string; action: string; why: string; questions: string[] }
+    | undefined;
 }): { text: string; blocks: Record<string, unknown>[] } {
   const where = [input.failedNode].filter(Boolean).join("");
 
+  const action = input.narrative?.action ?? input.recommendation;
+  const why = input.narrative?.why ?? input.cause;
+
   // The push notification. Deliberately the action rather than the title —
   // "a workflow failed" is not news to anyone who owns one.
-  const text = `${input.workflow} failed: ${input.recommendation}`;
+  const text = input.narrative?.headline ?? `${input.workflow} failed: ${action}`;
 
   const lead =
     input.state === "fix_pending"
@@ -385,15 +392,19 @@ export function buildN8nAlert(input: {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: fit(`${lead}${where ? `\nFailed at *${where}*` : ""}\n${impactLine}`),
+        text: fit(
+          input.narrative
+            ? `${lead.split(" ")[0]} *${input.narrative.headline}*${where ? `\nFailed at *${where}*` : ""}\n${impactLine}`
+            : `${lead}${where ? `\nFailed at *${where}*` : ""}\n${impactLine}`,
+        ),
       },
     },
     { type: "divider" },
     {
       type: "section",
-      text: { type: "mrkdwn", text: fit(`*What to do*\n${input.recommendation}`) },
+      text: { type: "mrkdwn", text: fit(`*What to do*\n${action}`) },
     },
-    { type: "section", text: { type: "mrkdwn", text: fit(`*Why*\n${input.cause}`) } },
+    { type: "section", text: { type: "mrkdwn", text: fit(`*Why*\n${why}`) } },
   ];
 
   /**
@@ -518,6 +529,7 @@ export async function postN8nAlert(orgId: number, failureId: number): Promise<bo
     windowsSearched?: number;
     searchReach?: string;
     schemaChangeSuspected?: boolean;
+    narrative?: { headline: string; action: string; why: string; questions: string[] };
   };
 
   const { text, blocks } = buildN8nAlert({
@@ -526,6 +538,7 @@ export async function postN8nAlert(orgId: number, failureId: number): Promise<bo
     windowsSearched: d.windowsSearched,
     searchReach: d.searchReach,
     schemaChangeSuspected: d.schemaChangeSuspected,
+    narrative: d.narrative,
     workflow: row.workflowName ?? row.workflowId,
     failedNode: row.failedNode,
     error: row.errorMessage,
@@ -592,6 +605,7 @@ export async function discussN8nFailure(
     windowsSearched?: number;
     searchReach?: string;
     precedent?: Array<{ headSha: string; createdAt: string; htmlUrl: string }>;
+    narrative?: { questions?: string[] };
   };
 
   const lines: string[] = [];
@@ -623,14 +637,19 @@ export async function discussN8nFailure(
     );
   }
 
-  // Named questions rather than "any thoughts?", because a thread that opens
-  // with a blank prompt gets no replies.
-  lines.push(
-    "*Worth deciding here*\n" +
-      "• Is the recommendation right, or is there a better fix?\n" +
-      "• Does anything else read from this that the map has not recorded?\n" +
-      "• Should this become a checkpoint once it is resolved?",
-  );
+  /**
+   * The questions the narration pass wrote for this specific failure, falling
+   * back to general ones. Named either way, because a thread that opens with
+   * "any thoughts?" gets no replies.
+   */
+  const asked = d.narrative?.questions?.length
+    ? d.narrative.questions
+    : [
+        "Is the recommendation right, or is there a better fix?",
+        "Does anything else read from this that the map has not recorded?",
+        "Should this become a checkpoint once it is resolved?",
+      ];
+  lines.push(`*Worth deciding here*\n${asked.map((q) => `• ${q}`).join("\n")}`);
 
   const posted = await call<{ ts?: string }>(token, "chat.postMessage", {
     channel: row.slackChannelId,

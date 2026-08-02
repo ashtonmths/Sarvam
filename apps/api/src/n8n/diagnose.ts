@@ -39,6 +39,13 @@ export interface ImpactedNode {
   score: number;
 }
 
+export interface Narrative {
+  headline: string;
+  action: string;
+  why: string;
+  questions: string[];
+}
+
 export interface Diagnosis {
   impact: { count: number; top: ImpactedNode[] };
   cause: string;
@@ -181,6 +188,35 @@ export function looksLikeSchemaChange(changes: ChangeRow[]): boolean {
       ),
   );
 }
+
+/**
+ * The second pass: writing the message, not the diagnosis.
+ *
+ * The first call works out what broke. This one decides what an engineer woken
+ * at 3am needs to read first, which is a different job — a correct diagnosis
+ * rendered through a template still opens with a field label, and the reader
+ * has to assemble the point themselves.
+ *
+ * It is given the conclusion plus what the conclusion rests on, and it may not
+ * add to either. Its whole freedom is ordering and phrasing.
+ */
+const NARRATE = `You write the Slack message for a workflow failure that has already been diagnosed.
+
+You are given the diagnosis, what depends on the workflow, and the evidence behind it. Do not add facts. Do not soften the conclusion or hedge one that was stated confidently.
+
+Return JSON only:
+{
+  "headline": "one line: what broke and who it affects. No emoji, no 'Alert:'.",
+  "action": "the single next step, imperative, specific enough to start on",
+  "why": "two sentences at most, the reasoning a reader needs to accept the action",
+  "questions": ["2-3 short questions worth deciding in the thread"]
+}
+
+Rules:
+- The headline names the workflow and the consequence, not the error class.
+- The action is something a person does, not something they investigate.
+- If the diagnosis was inconclusive, say so in the headline rather than implying certainty.
+- No preamble, no restating the JSON keys in prose.`;
 
 const SYSTEM = `You diagnose why an automation workflow failed, for the person who owns it.
 
@@ -452,6 +488,23 @@ export async function diagnoseFailure(failureId: number): Promise<void> {
   const parsed = parseDiagnosis(completion.content);
   if (!parsed) throw new Error("the model did not return a usable diagnosis");
 
+  /**
+   * Compose the message from the finished diagnosis.
+   *
+   * Cheap tier, because this is a writing task over a conclusion that has
+   * already been reached — the expensive reasoning happened above. A failure
+   * here is not fatal: the alert falls back to rendering the fields directly,
+   * which is what it did before this existed.
+   */
+  const narrative = await narrate({
+    workflow: row.workflowName ?? row.workflowId,
+    failedNode: row.failedNode,
+    error: row.errorMessage,
+    parsed,
+    impact,
+    orgId: row.orgId,
+  });
+
   await db
     .update(n8nExecutionFailures)
     .set({
@@ -463,6 +516,7 @@ export async function diagnoseFailure(failureId: number): Promise<void> {
         windowsSearched,
         searchReach,
         schemaChangeSuspected,
+        ...(narrative ? { narrative } : {}),
       } satisfies Diagnosis,
     })
     .where(eq(n8nExecutionFailures.id, failureId));
@@ -528,4 +582,75 @@ export function parseDiagnosis(
           .filter((e) => e.detail)
       : [],
   };
+}
+
+/**
+ * Turns a diagnosis into the message. Returns null rather than throwing: an
+ * alert that reads like a template is worth far more than no alert at all.
+ */
+async function narrate(input: {
+  workflow: string;
+  failedNode: string | null;
+  error: string | null;
+  parsed: {
+    cause: string;
+    recommendation: string;
+    confidence: number;
+    evidence: Array<{ source: string; detail: string }>;
+    inconclusive?: boolean;
+  };
+  impact: { count: number; top: ImpactedNode[] };
+  orgId: number;
+}): Promise<Narrative | null> {
+  try {
+    const completion = await complete({
+      tier: "bulk",
+      orgId: input.orgId,
+      caller: "n8n.narrate",
+      responseFormat: { type: "json_object" },
+      messages: [
+        { role: "system", content: NARRATE },
+        {
+          role: "user",
+          content: [
+            `Workflow: ${input.workflow}`,
+            input.failedNode ? `Failed at: ${input.failedNode}` : null,
+            input.error ? `Error: ${input.error}` : null,
+            `Cause: ${input.parsed.cause}`,
+            `Recommendation: ${input.parsed.recommendation}`,
+            `Confidence: ${input.parsed.confidence}${input.parsed.inconclusive ? " (inconclusive)" : ""}`,
+            input.impact.count > 0
+              ? `Depends on it (${input.impact.count}): ${input.impact.top.map((n) => n.name).join(", ")}`
+              : "Nothing recorded downstream.",
+            input.parsed.evidence.length > 0
+              ? `Evidence:\n${input.parsed.evidence.map((e) => `- ${e.source}: ${e.detail}`).join("\n")}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        },
+      ],
+    });
+
+    const cleaned = (completion.content ?? "")
+      .trim()
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "");
+    const value = JSON.parse(cleaned) as Record<string, unknown>;
+
+    const headline = typeof value.headline === "string" ? value.headline.trim() : "";
+    const action = typeof value.action === "string" ? value.action.trim() : "";
+    if (!headline || !action) return null;
+
+    return {
+      headline,
+      action,
+      why: typeof value.why === "string" ? value.why.trim() : input.parsed.cause,
+      questions: Array.isArray(value.questions)
+        ? value.questions.filter((q): q is string => typeof q === "string").slice(0, 3)
+        : [],
+    };
+  } catch {
+    return null;
+  }
 }
