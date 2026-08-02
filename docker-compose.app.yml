@@ -68,6 +68,19 @@ services:
       GITHUB_APP_ID: ${GITHUB_APP_ID:-}
       GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
       GITHUB_APP_WEBHOOK_SECRET: ${GITHUB_APP_WEBHOOK_SECRET:-}
+
+      # Slack OAuth, so the connector page offers a button rather than a token
+      # paste. Absent, oauthConfigured() is false and the button silently does
+      # not render — which reads as the feature having been removed.
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+
+      # Where Slack sends the browser back. Must match the redirect URL on the
+      # Slack app exactly. Locally that means a tunnel hostname, so this is
+      # normally empty and the OAuth button will report why when clicked
+      # instead of failing silently.
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-}
     ports:
       - "3001:3001"
     volumes:

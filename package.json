@@ -35,7 +35,8 @@
     "openapi:emit": "pnpm --filter @sadhak/api exec tsx scripts/emit-openapi.ts",
     "check:openapi": "pnpm --filter @sadhak/api exec tsx scripts/emit-openapi.ts --check",
     "seed:demo": "pnpm --filter @sadhak/api seed:demo",
-    "seed:workflows": "pnpm --filter @sadhak/api seed:workflows"
+    "seed:workflows": "pnpm --filter @sadhak/api seed:workflows",
+    "simulate:failure": "pnpm --filter @sadhak/api simulate:failure"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

@@ -90,6 +90,34 @@ export default function ConnectorsPane() {
     password: string | null;
   } | null>(null);
 
+  /**
+   * Removes an instance and the credential sealed against it.
+   *
+   * Confirmed by name rather than by a generic "are you sure": the page can
+   * show several instances of the same connector, and the only thing that
+   * distinguishes them is what someone called them.
+   */
+  async function disconnect(instance: { id: number; displayName: string }) {
+    const ok = window.confirm(
+      `Disconnect "${instance.displayName}"?\n\n` +
+        "Its stored credential is destroyed and cannot be recovered — reconnecting means pasting it again. " +
+        "Anything already crawled stays on the map and goes stale rather than disappearing.",
+    );
+    if (!ok) return;
+
+    setBusy(instance.id);
+    setNotice(null);
+    try {
+      await api.delete(`/api/instances/${instance.id}`);
+      setNotice(`Disconnected "${instance.displayName}".`);
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.userMessage : "Could not disconnect it");
+    } finally {
+      setBusy(null);
+      data.reload();
+    }
+  }
+
   async function crawlNow(id: number) {
     setBusy(id);
     setNotice(null);
@@ -358,6 +386,28 @@ export default function ConnectorsPane() {
                       data-testid={`connector-crawl-${instance.connector}`}
                     >
                       {working ? "Working…" : "Crawl now"}
+                    </button>
+                    {/*
+                      Disconnect sits apart from the other two and confirms
+                      first, because the other two are safe to press and this
+                      one is not: the credential is destroyed with the instance
+                      and cannot be read back out of the vault to restore.
+
+                      The graph is deliberately left alone. Nodes crawled from
+                      a system that is no longer connected go stale through
+                      reconciliation rather than vanishing, so a dependency
+                      someone reasoned about yesterday does not disappear
+                      because a token was rotated today.
+                    */}
+                    <span className="ccard__foot-gap" />
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--tiny btn--danger"
+                      disabled={working}
+                      onClick={() => void disconnect(instance)}
+                      data-testid={`connector-delete-${instance.connector}`}
+                    >
+                      Disconnect
                     </button>
                   </footer>
                 </article>

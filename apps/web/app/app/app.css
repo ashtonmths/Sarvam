@@ -5430,3 +5430,22 @@
   outline: 2px solid var(--thread);
   outline-offset: 1px;
 }
+
+/* --------------------------------------------------- disconnect action */
+
+/* Pushes Disconnect away from Test and Crawl now. The first two are safe to
+   press and this one destroys a credential, so it should not sit under a
+   thumb travelling between them. */
+.ccard__foot-gap {
+  flex: 1;
+}
+
+.btn--danger {
+  color: var(--block);
+}
+
+.btn--danger:hover:not(:disabled) {
+  color: var(--block-ink);
+  border-color: var(--block);
+  background: var(--block-soft);
+}
