@@ -59,8 +59,25 @@ export const BOT_SCOPES = [
 /** User scope: the search API, which is the good retrieval path. */
 export const USER_SCOPES = ["search:read"];
 
+/**
+ * Whether the button can actually complete, not merely start.
+ *
+ * PUBLIC_API_URL is part of this because Slack redirects the browser to an
+ * absolute address, and without one there is nowhere to come back to. Checking
+ * only the client id and secret meant the button rendered on any machine with
+ * credentials configured and then failed on click with a 400 — which reads as
+ * the feature being broken rather than as this deployment not having a public
+ * callback address.
+ *
+ * On a laptop that is the normal state: Slack will not redirect to localhost,
+ * so the honest answer is to hide the button and leave the token paste, which
+ * does work. Production sets PUBLIC_API_URL in the compose file, so the button
+ * appears exactly where it can be completed.
+ */
 export function oauthConfigured(): boolean {
-  return Boolean(config.SLACK_CLIENT_ID && config.SLACK_CLIENT_SECRET);
+  return Boolean(
+    config.SLACK_CLIENT_ID && config.SLACK_CLIENT_SECRET && config.PUBLIC_API_URL,
+  );
 }
 
 export function redirectUri(): string {
