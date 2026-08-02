@@ -6,6 +6,7 @@ import { audit } from "../audit.js";
 import { config } from "../config.js";
 import { db } from "../db.js";
 import { seedDemoData } from "../demo/data.js";
+import { expandDemoDatabase } from "../demo/database.js";
 import { NotFoundError } from "../errors.js";
 import { enqueue } from "../jobs/queue.js";
 import { requireAuth, requireCapability } from "../middleware/auth.js";
@@ -122,6 +123,16 @@ n8nRoutes.post("/n8n/demo/simulate", requireCapability("connector:manage"), asyn
       : "schema";
   return c.json(await simulateWorkflowFailure(c.get("orgId"), scenario));
 });
+
+/**
+ * Grows the demo company's database and re-crawls it.
+ *
+ * db/init only runs against an empty volume, so a deployment that has already
+ * booted can only get a later schema this way.
+ */
+n8nRoutes.post("/n8n/demo/database", requireCapability("connector:manage"), async (c) =>
+  c.json(await expandDemoDatabase(c.get("orgId"))),
+);
 
 /** What the buttons render themselves from, so the two cannot drift. */
 n8nRoutes.get("/n8n/demo/scenarios", requireCapability("graph:read"), async (c) =>
