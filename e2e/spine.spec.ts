@@ -175,6 +175,19 @@ test.describe("accessibility", () => {
 
   for (const path of PAGES) {
     test(`${path} has no WCAG AA violations`, async ({ page }) => {
+      // Scan the settled page, not the entrance animation.
+      //
+      // `.graph` fades in from opacity 0 after a 350ms delay, and
+      // `networkidle` fires long before that finishes — so axe was sampling
+      // half-faded text and reporting a contrast failure that no user ever
+      // sees. It surfaced as a flake that tracked the browser version rather
+      // than the code, which is the worst shape a gating test can have.
+      //
+      // Reduced motion is the honest way to hold it still: the stylesheet
+      // already collapses every animation to 0.01ms under this query, so this
+      // is a real rendering of the page — the one a reduced-motion visitor
+      // gets — rather than a timing hack.
+      await page.emulateMedia({ reducedMotion: "reduce" });
       await page.goto(path);
       await page.waitForLoadState("networkidle");
 
