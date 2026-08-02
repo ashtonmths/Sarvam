@@ -318,8 +318,15 @@ describe("initialize", () => {
     const body = (await res.json()) as RpcResponse;
     expect(res.status).toBe(200);
     expect(body.result.protocolVersion).toBe("2025-06-18");
-    expect(body.result.capabilities).toEqual({ tools: {} });
-    expect(body.result.serverInfo).toEqual({ name: "sadhak", version: "1.0.0" });
+    // `listChanged` is stated, not omitted: the server is stateless and pushes
+    // nothing, so a client must not sit waiting for a notification that will
+    // never arrive.
+    expect(body.result.capabilities).toEqual({ tools: { listChanged: false } });
+    expect(body.result.serverInfo).toEqual({
+      name: "sadhak",
+      title: "Sadhak",
+      version: "1.0.0",
+    });
   });
 
   it("accepts the initialized notification without a body", async () => {
@@ -333,16 +340,20 @@ describe("initialize", () => {
 });
 
 describe("tools/list", () => {
-  it("advertises exactly the five tools the product documents", async () => {
+  it("advertises exactly the tools this credential can reach", async () => {
     const res = await post({ jsonrpc: "2.0", id: 1, method: "tools/list" }, auth);
     const body = (await res.json()) as RpcResponse;
 
+    // `ingest_document` is absent because it needs `connector:manage` and this
+    // key holds only gate:invoke and graph:read. Listing is scoped now, so the
+    // set is a function of the credential rather than of the catalog.
     expect(body.result.tools.map((t: { name: string }) => t.name)).toEqual([
       "propose_change",
       "query_blast_radius",
       "get_node",
       "ask_docs",
-      "ingest_document",
+      "ask_slack",
+      "github_activity",
     ]);
   });
 
@@ -351,11 +362,20 @@ describe("tools/list", () => {
     // connected agent decides what to send before this server sees anything,
     // and a tool that silently takes text is one an agent will hand a base64
     // blob to and then report success on.
-    const res = await post({ jsonrpc: "2.0", id: 1, method: "tools/list" }, auth);
+    //
+    // Needs its own key: `ingest_document` is gated on `connector:manage`, so
+    // the shared one cannot see the tool whose description is the subject.
+    const ingestKey = await seedKey(orgId, ["connector:manage"]);
+    const res = await post(
+      { jsonrpc: "2.0", id: 1, method: "tools/list" },
+      { authorization: `Bearer ${ingestKey}` },
+    );
     const body = (await res.json()) as RpcResponse;
     const ingest = body.result.tools.find(
       (t: { name: string }) => t.name === "ingest_document",
     );
+
+    expect(ingest).toBeDefined();
 
     expect(ingest?.description).toContain("IMAGE");
     expect(ingest?.description).toContain("read it yourself");
@@ -391,9 +411,12 @@ describe("tools/list", () => {
     expect(propose?.description).toContain("must not be attempted");
   });
 
-  it("lists the same tools a scope-less key would be refused at call time", async () => {
-    // Listing is deliberately not gated: an agent that cannot see a tool
-    // cannot be told why it may not use it. The refusal belongs at the call.
+  it("shows a scope-less key nothing at all", async () => {
+    // This assertion used to be the exact opposite: list everything, refuse at
+    // the call. That was worse than it reads. A model shown a tool it cannot
+    // call puts it in the plan, gets a 403, and then has to decide whether the
+    // failure was transient — some retry the same call, some abandon the whole
+    // task. A capability that never appears never enters the plan.
     const noScope = await seedKey(orgId, []);
 
     const res = await post(
@@ -401,7 +424,7 @@ describe("tools/list", () => {
       { authorization: `Bearer ${noScope}` },
     );
 
-    expect(((await res.json()) as RpcResponse).result?.tools).toHaveLength(5);
+    expect(((await res.json()) as RpcResponse).result?.tools).toHaveLength(0);
   });
 });
 
@@ -628,7 +651,11 @@ describe("capability enforcement", () => {
     const body = (await res.json()) as RpcResponse;
 
     expect(body.result.isError).toBe(true);
-    expect(body.result.content[0]?.text).toContain("Unknown tool: delete_everything");
+    // The message names the reachable tools rather than just refusing, which is
+    // what turns a dead end into a next step for the agent reading it.
+    expect(body.result.content[0]?.text).toContain('No tool named "delete_everything"');
+    expect(body.result.content[0]?.text).toContain("This credential can call:");
+    expect(body.result.content[0]?.text).toContain("propose_change");
   });
 
   it("reports malformed tool arguments as a tool error the model can fix", async () => {
@@ -671,13 +698,16 @@ describe("known gaps", () => {
     },
   });
 
-  it("GAP: a driver error reaches the caller with the SQL and the org id in it", async () => {
-    // `tools/call` stringifies every thrown error into the tool result, which
-    // is right for a UserError and wrong for anything else: the error taxonomy
-    // exists so a non-exposed fault is logged and never serialized, and this
-    // path bypasses it. A null byte in an id — legal JSON, and a model can
-    // emit one — makes postgres reject the statement, and the reply carries
-    // the generated query, the column list and the internal org id.
+  // CLOSED: this was a gap, and is now a regression guard.
+  //
+  // `tools/call` used to stringify every thrown error into the tool result,
+  // which is right for a UserError and wrong for anything else. A null byte in
+  // an id — legal JSON, and a model can emit one — made postgres reject the
+  // statement, and the reply carried the generated query, the column list and
+  // the internal org id. It now relays only an `AppError` marked safe to
+  // expose. Kept rather than deleted: what closed it is a single `error.expose`
+  // check that a refactor could drop with nothing else noticing.
+  it("does not leak the SQL or the org id when the driver rejects a statement", async () => {
     const res = await post(
       {
         jsonrpc: "2.0",
@@ -690,11 +720,15 @@ describe("known gaps", () => {
       },
       auth,
     );
-    const text = ((await res.json()) as RpcResponse).result.content[0]?.text ?? "";
+    const body = (await res.json()) as RpcResponse;
+    const text = body.result.content[0]?.text ?? "";
 
-    expect(text).toContain("Failed query:");
-    expect(text).toContain('from "nodes"');
-    expect(text).toContain(String(orgId));
+    expect(text).not.toContain("Failed query:");
+    expect(text).not.toContain('from "nodes"');
+    expect(text).not.toContain(String(orgId));
+    // Still a failure the agent can act on, rather than a silent success.
+    expect(body.result.isError).toBe(true);
+    expect(text).toContain("Nothing changed");
   });
 
   it("GAP: clientInfo from initialize never reaches the tool call it precedes", async () => {
@@ -896,14 +930,14 @@ describe("the endpoint's method surface", () => {
       auth,
     );
 
-    expect(body.result.tools).toHaveLength(5);
+    expect(body.result.tools).toHaveLength(6);
   });
 
   it("treats tools/call with no params as a call to no tool", async () => {
     const body = await rpc({ jsonrpc: "2.0", id: 1, method: "tools/call" }, auth);
 
     expect(body.result.isError).toBe(true);
-    expect(body.result.content[0]?.text).toContain("Unknown tool");
+    expect(body.result.content[0]?.text).toContain('No tool named ""');
   });
 });
 
