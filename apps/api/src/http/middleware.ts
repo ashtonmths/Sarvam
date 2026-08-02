@@ -100,7 +100,29 @@ export async function requestLog(c: Context, next: () => Promise<void>) {
       durationMs,
     };
 
-    if (c.req.path === "/health") log().debug(fields);
+    /**
+     * Successful probes and vendor webhooks are debug, not info.
+     *
+     * /health was already demoted for this reason. Everything else routine
+     * kept the same treatment as a real request, and on a deployment with a
+     * GitHub App installed that is overwhelming: a single push produces a
+     * webhook per event, each answered 200 in a few milliseconds, and the log
+     * becomes a wall of identical lines with the one thing being looked for
+     * buried inside it. That is not a viewer problem to solve by scrolling —
+     * a log where the interesting line cannot be seen is not doing its job.
+     *
+     * Only the successful ones. A webhook that 4xxs or 5xxs is exactly what
+     * this log is for and keeps its level, so a rejected Slack signature or a
+     * failed delivery still stands out.
+     */
+    const routine =
+      status < 400 &&
+      (c.req.path === "/health" ||
+        c.req.path === "/healthz" ||
+        c.req.path === "/readyz" ||
+        c.req.path.startsWith("/webhooks/"));
+
+    if (routine) log().debug(fields);
     else if (status >= 500) log().error(fields);
     else if (status >= 400) log().warn(fields);
     else log().info(fields);
