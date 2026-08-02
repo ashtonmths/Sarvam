@@ -106,7 +106,7 @@ export async function revertN8nWorkflow(
 
   const res = await pinnedFetch(
     `${baseUrl}/api/v1/workflows/${workflowId}`,
-    { method: "PUT", headers, body: JSON.stringify(previous.structure) },
+    { method: "PUT", headers, body: JSON.stringify(restorable(previous.structure)) },
     egressOptionsFor(instance),
   );
 
@@ -119,3 +119,33 @@ export async function revertN8nWorkflow(
     detail: `Restored workflow ${workflowId} to the structure captured at ${previous.capturedAt.toISOString()}`,
   };
 }
+
+/**
+ * The four fields n8n's PUT will accept, and nothing else.
+ *
+ * The snapshot is the workflow as the API *returned* it, which carries `id`,
+ * `createdAt`, `updatedAt`, `versionId`, `active`, `tags` and `meta` alongside
+ * the structure. `PUT /api/v1/workflows/:id` validates its body strictly and
+ * rejects the lot with
+ *
+ *   400 request/body must NOT have additional properties
+ *
+ * so every n8n revert failed on a payload built from our own snapshot — the
+ * restore path was unusable against 1.75 while looking correct in the code.
+ * Verified against the running instance: the same body minus these fields is
+ * accepted, and with them it is refused.
+ *
+ * `settings` defaults rather than being omitted, because n8n requires it and a
+ * workflow captured before it had any would otherwise fail the same way.
+ */
+function restorable(structure: unknown): Record<string, unknown> {
+  const source = (structure ?? {}) as Record<string, unknown>;
+  return {
+    name: source.name,
+    nodes: source.nodes ?? [],
+    connections: source.connections ?? {},
+    settings: source.settings ?? {},
+  };
+}
+
+export const __testing = { restorable };
