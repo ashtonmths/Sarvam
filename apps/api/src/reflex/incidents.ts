@@ -4,6 +4,7 @@ import type { BlastRow, ChangeDescriptor, Evidence } from "@sadhak/shared/types"
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { recordDerivedCheckpoint } from "../changes/checkpoints.js";
 import { db } from "../db.js";
+import { reflexDetectSeconds, reflexRepairSeconds } from "../metrics.js";
 
 /**
  * Everything in Reflex hangs off one row per detected change.
@@ -95,6 +96,31 @@ export async function recordDetection(input: DetectedChange): Promise<number | n
     })
     .onConflictDoNothing()
     .returning({ id: reflexIncidents.id });
+
+  /**
+   * MTTD, but only when the vendor told us when the change happened.
+   *
+   * `changeAt` is null for connectors that report no timestamp, and for those
+   * the only other clock available is our own — which would make the interval
+   * measure nothing and report it as zero, dragging the p95 of the detect SLA
+   * down with a number we invented. A missing observation is honest; a
+   * fabricated one is not.
+   *
+   * Inside the `row` guard so a deduplicated redelivery is not counted as a
+   * second detection of the same change.
+   */
+  if (row && input.changeAt) {
+    const seconds = (Date.now() - input.changeAt.getTime()) / 1000;
+    // A vendor clock running ahead of ours yields a negative interval, which
+    // is a clock-skew artefact rather than a detection that happened before
+    // the change did.
+    if (seconds >= 0) {
+      reflexDetectSeconds.observe(seconds, {
+        connector: input.connector,
+        detect_path: input.detectPath,
+      });
+    }
+  }
 
   return row?.id ?? null;
 }
@@ -201,12 +227,28 @@ export async function markReverted(incidentId: number): Promise<boolean> {
       externalId: reflexIncidents.externalId,
       connector: reflexIncidents.connector,
       nodeId: reflexIncidents.nodeId,
+      detectedAt: reflexIncidents.detectedAt,
+      revertedAt: reflexIncidents.revertedAt,
     })
     .from(reflexIncidents)
     .where(eq(reflexIncidents.id, incidentId))
     .limit(1);
 
   if (row) {
+    /**
+     * MTTR, off the two timestamps the row already carries rather than a
+     * clock started in this function. `transition` uses COALESCE, so a revert
+     * that lost the race keeps the original `revertedAt` — reading both back
+     * is what stops the loser recording a second, shorter repair for a repair
+     * it did not perform.
+     */
+    if (row.detectedAt && row.revertedAt) {
+      const seconds = (row.revertedAt.getTime() - row.detectedAt.getTime()) / 1000;
+      if (seconds >= 0) {
+        reflexRepairSeconds.observe(seconds, { connector: row.connector });
+      }
+    }
+
     await recordDerivedCheckpoint({
       orgId: row.orgId,
       kind: "incident_recovered",

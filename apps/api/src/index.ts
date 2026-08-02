@@ -6,7 +6,7 @@ import { constantTimeEqual } from "./crypto/compare.js";
 import { closePools } from "./db.js";
 import { reconcileEmbeddingModel } from "./embed-state.js";
 import { NotFoundError } from "./errors.js";
-import { requestsRemainingToday } from "./historian/budget.js";
+import { requestsRemainingToday, spendThisMonth } from "./historian/budget.js";
 import { beginDraining, readiness } from "./http/health.js";
 import { notFound, onError, requestId, requestLog } from "./http/middleware.js";
 import { identityRateLimit, ipRateLimit, webhookRateLimit } from "./http/rate-limit.js";
@@ -23,11 +23,13 @@ import { log } from "./log.js";
 import {
   llmDailyQuotaRemaining,
   llmRpmWindowUsed,
+  llmSpendUsd,
   registerCollector,
   render,
 } from "./metrics.js";
 import { requireAuth, requireOrg } from "./middleware/auth.js";
 import { openapiDocument } from "./openapi.js";
+import { refreshOpenrouterStatus } from "./openrouter-status.js";
 import { askRoutes } from "./routes/ask.js";
 import { authRoutes } from "./routes/auth.js";
 import { changeRoutes } from "./routes/changes.js";
@@ -74,7 +76,18 @@ registerCollector(async () => {
   llmRpmWindowUsed.set(
     config.LLM_RPM_LIMIT > 0 ? requestsInCurrentWindow() / config.LLM_RPM_LIMIT : 0,
   );
+  llmSpendUsd.set(await spendThisMonth(), { window: "month" });
 });
+
+/**
+ * The provider's own numbers, on its own timer.
+ *
+ * Registered separately from the collector above so a slow or unreachable
+ * vendor cannot delay the local gauges — `render()` settles its collectors
+ * independently, and the two have entirely different failure modes. This one
+ * rate-limits itself internally; it does not call out on every scrape.
+ */
+registerCollector(refreshOpenrouterStatus);
 
 const app = new Hono();
 

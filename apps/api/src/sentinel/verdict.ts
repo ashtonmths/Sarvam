@@ -7,6 +7,7 @@ import type { ChangeDescriptor, VerdictResult } from "@sadhak/shared/types";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db.js";
 import { UserError } from "../errors.js";
+import { verdictCompute, verdictsIssued } from "../metrics.js";
 import { toBlastRows } from "./assemble.js";
 import { verdict as scoreVerdict } from "./score.js";
 import { busFactorByEdge, hydrateHops, traverse } from "./traverse.js";
@@ -82,6 +83,12 @@ export async function renderVerdict(
   const { verdict, evidence } = scoreVerdict(impacted);
 
   const computedInMs = Math.round(performance.now() - started);
+
+  // Observed before the write, so the engine's latency is the engine's and not
+  // the engine plus however long the insert took.
+  verdictCompute.observe(computedInMs);
+  verdictsIssued.inc({ verdict });
+
   const graphVersion = await currentGraphVersion(orgId);
 
   const [row] = await db
@@ -131,6 +138,11 @@ export async function renderUnmappedWarn(
       impact: 0,
     },
   ];
+
+  // Counted like any other decision. An unmapped target still produced a WARN
+  // the caller acted on, and leaving it out would make the distribution
+  // disagree with the verdicts table.
+  verdictsIssued.inc({ verdict: "WARN" });
 
   const [row] = await db
     .insert(verdictsTable)

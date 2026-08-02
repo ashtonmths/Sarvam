@@ -127,8 +127,8 @@ describe("published metrics", () => {
     const obs = new URL("../../../ops/observability/", import.meta.url);
     const referenced = [
       readFileSync(new URL("prometheus/alerts/sadhak.yml", obs), "utf8"),
-      ...["api-health", "database-jobs", "agents-llm", "host"].map((name) =>
-        readFileSync(new URL(`grafana/dashboards/${name}.json`, obs), "utf8"),
+      ...["1-overview-slas", "2-sentinel", "3-historian", "4-infrastructure"].map(
+        (name) => readFileSync(new URL(`grafana/dashboards/${name}.json`, obs), "utf8"),
       ),
     ].join("\n");
 

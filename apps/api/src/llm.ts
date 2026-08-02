@@ -27,7 +27,7 @@
 
 import { config, requireEnv } from "./config.js";
 import { log } from "./log.js";
-import { llmCalls } from "./metrics.js";
+import { llmCalls, llmTokens } from "./metrics.js";
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -218,11 +218,30 @@ async function classify429(res: Response): Promise<Error> {
 }
 
 function logCall(fields: Record<string, unknown>): void {
+  const tier = String(fields.tier ?? "unknown");
+  const caller = String(fields.caller ?? "unknown");
+
   llmCalls.inc({
-    tier: String(fields.tier ?? "unknown"),
-    caller: String(fields.caller ?? "unknown"),
+    tier,
+    caller,
     outcome: fields.ok === true ? "ok" : "error",
   });
+
+  /**
+   * Tokens, split by direction because they are not interchangeable: prompt
+   * tokens grow with how much context a loop drags along and completion
+   * tokens with how much it says, and the two are fixed by different changes.
+   * A failed call reports no usage, so the counters only move on `ok` rather
+   * than recording a zero that would dilute the per-call average.
+   */
+  const promptTokens = Number(fields.promptTokens ?? 0);
+  const completionTokens = Number(fields.completionTokens ?? 0);
+  if (promptTokens > 0) {
+    llmTokens.inc({ tier, caller, direction: "prompt" }, promptTokens);
+  }
+  if (completionTokens > 0) {
+    llmTokens.inc({ tier, caller, direction: "completion" }, completionTokens);
+  }
   // Token counts and costs only — never prompt bodies. Mined content is
   // attacker-influenced text, and a log line is a place it would be read back
   // by a human with more trust than it deserves.

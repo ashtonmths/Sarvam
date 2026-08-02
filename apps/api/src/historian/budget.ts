@@ -39,6 +39,22 @@ export async function requestsRemainingToday(): Promise<number> {
   return Math.max(0, config.LLM_DAILY_REQUEST_CAP - (row?.used ?? 0));
 }
 
+/**
+ * Account-wide spend this month, across every org.
+ *
+ * `llm_usage` is keyed by month, so there is no daily row to sum — a "today"
+ * figure would have to come from the provider, which is exactly what the
+ * OpenRouter poller is for. Publishing only the window the table can answer
+ * keeps the two sources from disagreeing about the same name.
+ */
+export async function spendThisMonth(): Promise<number> {
+  const [row] = await db
+    .select({ spend: sql<string>`COALESCE(SUM(${llmUsage.costUsd}), 0)` })
+    .from(llmUsage)
+    .where(eq(llmUsage.month, firstOfMonth()));
+  return Number(row?.spend ?? 0);
+}
+
 async function orgRequestsToday(orgId: number): Promise<number> {
   const [row] = await db
     .select({ used: sql<number>`COALESCE(SUM(${llmRequests.requests}), 0)::int` })

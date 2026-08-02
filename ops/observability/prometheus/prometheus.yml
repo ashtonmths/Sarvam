@@ -62,6 +62,7 @@ scrape_configs:
           - https://sadhak.online
           - https://api.sadhak.online/healthz
           - https://grafana.sadhak.online
+          - https://n8n.sadhak.online/healthz
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

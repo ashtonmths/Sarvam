@@ -40,6 +40,25 @@ services:
       OPENROUTER_EMBEDDING_MODEL: ${OPENROUTER_EMBEDDING_MODEL:-sentence-transformers/all-minilm-l6-v2}
       PORT: "3001"
       DATABASE_URL: postgres://sadhak:sadhak@db:5432/sadhak
+      # Written to .env by `pnpm obs:up`, and needed here for the same reason
+      # it is needed there: /metrics 404s unless a token is configured and
+      # presented as a bearer. Without this line the observability stack comes
+      # up looking healthy while the sadhak-api scrape target sits `down` with
+      # a 404 — every panel in the API dashboard empty, and nothing saying why.
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      # Traces, to the Tempo in the observability stack.
+      #
+      # Not the value obs-local.sh writes into .env. That one is
+      # http://localhost:4318, which is correct for `pnpm dev` on the host and
+      # wrong from in here, where localhost is this container and the spans go
+      # nowhere. `tempo` below is an extra_hosts alias for the host gateway.
+      #
+      # Set unconditionally rather than gated on the observability stack being
+      # up. The exporter's failure mode when Tempo is absent is to retry and
+      # drop, and tracing.ts installs no diag logger, so it is silent rather
+      # than noisy — a stopped monitoring stack costs a little buffering, not
+      # a log full of connection errors.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       # Read from .env so the vault opens the credentials already stored in the
       # local database. A different key here would leave every connector
       # unreadable and look like data loss.

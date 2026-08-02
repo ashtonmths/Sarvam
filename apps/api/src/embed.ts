@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { env, type FeatureExtractionPipeline, pipeline } from "@huggingface/transformers";
 import { config, requireEnv } from "./config.js";
+import { embeddingDuration, embeddingWindows } from "./metrics.js";
 
 /**
  * Embeddings run locally. Two reasons: it removes a second vendor, and it means
@@ -128,8 +129,28 @@ export function activeEmbeddingModel(): string {
  * duplicating them per provider is how the two drift apart.
  */
 async function runWindows(windows: string[]): Promise<number[][]> {
-  if (config.EMBEDDING_PROVIDER === "openrouter") return embedRemote(windows);
+  /**
+   * The one seam both providers pass through, which is why the timing lives
+   * here rather than in `embed`/`embedAll`. Those two differ only in how they
+   * regroup the result, so instrumenting them would double-count a batch and
+   * miss anything that reaches the model by another route.
+   *
+   * Failures are deliberately not observed: an exception is a provider being
+   * down, and folding a fast failure into a latency histogram makes the p95
+   * improve at exactly the moment embedding stops working.
+   */
+  const provider = config.EMBEDDING_PROVIDER === "openrouter" ? "openrouter" : "local";
+  const started = performance.now();
 
+  const vectors =
+    provider === "openrouter" ? await embedRemote(windows) : await embedLocal(windows);
+
+  embeddingDuration.observe(performance.now() - started, { provider });
+  embeddingWindows.inc({ provider }, windows.length);
+  return vectors;
+}
+
+async function embedLocal(windows: string[]): Promise<number[][]> {
   const run = await getExtractor();
   const output = await run(windows, { pooling: "mean", normalize: true });
   const flat = Array.from(output.data as Float32Array);
