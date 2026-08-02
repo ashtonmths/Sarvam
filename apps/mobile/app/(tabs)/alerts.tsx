@@ -157,7 +157,9 @@ export default function Alerts() {
     }
   }, [pingsOn]);
 
-  const blocks = alerts.filter((a) => a.kind === "block").length;
+  // Blocks and failed workflows both stopped something. Counting only blocks
+  // showed "0 needing attention" beside a list of broken workflows.
+  const blocks = alerts.filter((a) => a.kind === "block" || a.kind === "workflow").length;
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
@@ -233,7 +235,17 @@ export default function Alerts() {
                   <View
                     style={[
                       s.dot,
-                      { backgroundColor: a.kind === "block" ? T.block : T.warn },
+                      {
+                        // Three kinds now, and a workflow failure is not a
+                        // drift finding — colouring both amber made a broken
+                        // filing look like a map that had drifted.
+                        backgroundColor:
+                          a.kind === "block"
+                            ? T.block
+                            : a.kind === "workflow"
+                              ? T.block
+                              : T.warn,
+                      },
                     ]}
                   />
                 }

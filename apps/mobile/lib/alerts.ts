@@ -97,9 +97,21 @@ export const PINGS_SUPPORTED = IS_WEB ? webNotify !== null : true;
 /** Why pings are off, for the screen to show instead of a dead switch. */
 export const PINGS_UNAVAILABLE_REASON = "This browser has no notification support.";
 
+interface WorkflowFailure {
+  id: number;
+  workflowName: string | null;
+  diagnosisState: string;
+  detectedAt: string;
+  diagnosedAt: string | null;
+  diagnosis: {
+    recommendation?: string;
+    narrative?: { headline?: string; action?: string };
+  } | null;
+}
+
 export interface Alert {
   id: string;
-  kind: "block" | "drift";
+  kind: "block" | "drift" | "workflow";
   title: string;
   body: string;
   at: string;
@@ -208,9 +220,10 @@ export async function ping(alert: Alert) {
 export async function fetchAlerts(): Promise<Alert[]> {
   const out: Alert[] = [];
 
-  const [decisions, drift] = await Promise.allSettled([
+  const [decisions, drift, workflows] = await Promise.allSettled([
     api.get<Page<DecisionRow>>("/api/gate/decisions?limit=20"),
     api.get<DriftSummary>("/api/drift/summary"),
+    api.get<{ items: WorkflowFailure[] }>("/api/n8n/failures?limit=10"),
   ]);
 
   if (decisions.status === "fulfilled") {
@@ -226,6 +239,32 @@ export async function fetchAlerts(): Promise<Alert[]> {
         title: "Change blocked",
         body: `${d.change.operation ?? "change"} ${target ?? ""}`.trim(),
         at: d.createdAt,
+      });
+    }
+  }
+
+  /**
+   * A workflow that failed and has been explained.
+   *
+   * Only once it is diagnosed, which is the difference between a phone that
+   * buzzes with "something broke" and one that buzzes with what to do about it.
+   * The gap is seconds, and waking someone twice for one failure is how an
+   * alert app gets its notifications turned off.
+   */
+  if (workflows.status === "fulfilled") {
+    for (const f of workflows.value.items ?? []) {
+      if (f.diagnosisState !== "diagnosed" && f.diagnosisState !== "fix_pending")
+        continue;
+
+      const d = f.diagnosis ?? {};
+      out.push({
+        id: `workflow-${f.id}`,
+        kind: "workflow",
+        title: d.narrative?.headline ?? `${f.workflowName ?? "A workflow"} failed`,
+        // The action, not the error. It is what a phone screen has room for and
+        // the only part that is any use before you open anything.
+        body: d.narrative?.action ?? d.recommendation ?? "Diagnosed — open for detail",
+        at: f.diagnosedAt ?? f.detectedAt,
       });
     }
   }
