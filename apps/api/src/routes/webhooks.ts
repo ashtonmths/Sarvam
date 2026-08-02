@@ -8,6 +8,7 @@ import { verifyHmacSha256 } from "../crypto/compare.js";
 import { db } from "../db.js";
 import { verifyWebhookSignature } from "../github/app.js";
 import { enqueue } from "../jobs/queue.js";
+import { log } from "../log.js";
 import { handleSlackInteraction } from "../reflex/interactions.js";
 
 /**
@@ -333,9 +334,28 @@ webhookRoutes.post("/webhooks/slack/events", async (c) => {
     return c.text(body.challenge);
   }
 
-  if (!verifySlack(raw, timestamp, signature)) return c.json({ ok: false }, 401);
+  const rejected = slackAuthReason(raw, timestamp, signature);
+  if (rejected) {
+    log().warn(
+      { event: "slack_event_rejected", reason: rejected, slackEvent: body.event?.type },
+      `slack: event rejected (${rejected})`,
+    );
+    return c.json({ ok: false }, 401);
+  }
 
   const event = body.event;
+
+  // Every accepted event, so an unanswered mention can be told apart from one
+  // that never arrived.
+  log().info(
+    {
+      event: "slack_event_received",
+      slackEvent: event?.type,
+      hasThread: Boolean(event?.thread_ts),
+      isBot: Boolean(event?.bot_id),
+    },
+    `slack: event received (${event?.type ?? "none"})`,
+  );
   // Never answer ourselves. A bot that replies to its own messages in a thread
   // it is already in produces an unbounded conversation with nobody.
   if (
@@ -374,19 +394,45 @@ webhookRoutes.post("/webhooks/slack/interactions", async (c) => {
 });
 
 function verifySlack(raw: string, timestamp: string, signature: string): boolean {
+  return slackAuthReason(raw, timestamp, signature) === null;
+}
+
+/**
+ * Why a Slack request was rejected, or null if it was not.
+ *
+ * verifySlack answered a bare false for five different problems — no signing
+ * secret configured, no timestamp, no signature, a stale timestamp, a bad
+ * digest — and the route turned that into a 401 with nothing logged. Slack
+ * shows a delivery failure on its side and we showed nothing on ours, which
+ * leaves "Slack is not sending" and "we are refusing it" indistinguishable.
+ *
+ * The reason never contains the secret or the digest. It says which check
+ * failed, which is the part that tells you what to change.
+ */
+function slackAuthReason(
+  raw: string,
+  timestamp: string,
+  signature: string,
+): string | null {
   const secret = config.SLACK_SIGNING_SECRET;
-  if (!secret || !timestamp || !signature) return false;
+  if (!secret) return "SLACK_SIGNING_SECRET is not set on this deployment";
+  if (!timestamp) return "no x-slack-request-timestamp header";
+  if (!signature) return "no x-slack-signature header";
 
   // Slack's documented replay window.
   const age = Math.abs(Date.now() / 1000 - Number(timestamp));
-  if (!Number.isFinite(age) || age > 300) return false;
+  if (!Number.isFinite(age)) return "unparseable timestamp";
+  if (age > 300) return `timestamp is ${Math.round(age)}s old, outside the 300s window`;
 
-  return verifyHmacSha256({
+  const ok = verifyHmacSha256({
     rawBody: `v0:${timestamp}:${raw}`,
     key: secret,
     presented: signature,
     prefix: "v0=",
   });
+  return ok
+    ? null
+    : "signature did not match — the signing secret here is not the one the Slack app is using";
 }
 
 /* ---------------------------------------------- Airtable and n8n ingress */
