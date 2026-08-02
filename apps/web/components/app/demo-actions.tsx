@@ -186,17 +186,6 @@ export function DemoActions() {
           <Workflow size={15} strokeWidth={2} aria-hidden />
           {busy === "create" ? "Creating…" : "Create demo workflows"}
         </button>
-
-        <button
-          type="button"
-          className="btn btn--ghost"
-          disabled={busy !== null}
-          onClick={() => void create()}
-          data-testid="demo-create-workflows"
-        >
-          <Workflow size={15} strokeWidth={2} aria-hidden />
-          {busy === "create" ? "Creating…" : "Create demo workflows"}
-        </button>
       </div>
 
       {/* One button per branch of the diagnosis. A vendor outage stopping
