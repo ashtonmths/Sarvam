@@ -501,7 +501,16 @@ async function seedWorkflowFailure(orgId: number): Promise<void> {
   `) as unknown as Array<{ id: number }>;
   if (!instance) return;
 
-  await raw`DELETE FROM n8n_execution_failures WHERE org_id = ${orgId} AND execution_id >= 900000`;
+  /**
+   * Cleared by workflow name, not by a high id range.
+   *
+   * This used execution_id 900001 to stay out of the way of real executions,
+   * and that number became the poller's high-water mark for the instance — so
+   * every genuine execution, which n8n numbers from 1, sorted below it and was
+   * skipped forever. The seeded row is now numbered like a real one and
+   * identified by what it is instead.
+   */
+  await raw`DELETE FROM n8n_execution_failures WHERE org_id = ${orgId} AND workflow_id = 'wf-quarterly-vat'`;
 
   const [node] = (await raw`
     SELECT id FROM nodes WHERE org_id = ${orgId} AND name = 'public.eu_vat_report' LIMIT 1
@@ -538,7 +547,7 @@ async function seedWorkflowFailure(orgId: number): Promise<void> {
       (org_id, instance_id, execution_id, workflow_id, workflow_name, node_id, mode,
        failed_node, error_message, started_at, stopped_at, detect_path, detected_at,
        diagnosis_state, diagnosis, diagnosed_at)
-    VALUES (${orgId}, ${instance.id}, 900001, 'wf-quarterly-vat', 'Quarterly VAT filing',
+    VALUES (${orgId}, ${instance.id}, 1, 'wf-quarterly-vat', 'Quarterly VAT filing',
             ${node?.id ?? null}, 'trigger', 'Postgres · read invoices',
             'column "vat_rate" does not exist',
             ${hoursAgo(13).toISOString()}::timestamptz,
