@@ -1,0 +1,717 @@
+{
+  "uid": "sadhak-sentinel",
+  "title": "Sadhak / 2 · Sentinel Decision Engine",
+  "description": "How fast the deterministic gate decides, and what it decides. No model is in this path.",
+  "tags": ["sadhak", "sentinel", "verdicts"],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "timezone": "browser",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Decision latency",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Graph latency p95",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sadhak_verdict_compute_ms_bucket[30m])))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "noValue": "Nothing recorded in this window",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 40
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "Blast-radius traversal and scoring only — no HTTP, no auth, no model. Amber past the ~40ms design target.\n\nPercentiles: n% of events were at or under this value.\np50 - the median. Half were faster; this is the typical experience.\np95 - 1 in 20 were slower. Objectives are written against this because it catches a bad tail that an average hides.\np99 - 1 in 100 were slower. The worst realistic case. A p99 far above p95 means a small group of events behaves very differently.\nNo average is shown on purpose: one 10-second outlier and a thousand fast events average to a number nobody experienced."
+    },
+    {
+      "type": "stat",
+      "title": "Graph latency p99",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(sadhak_verdict_compute_ms_bucket[30m])))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "noValue": "Nothing recorded in this window",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 250
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "The worst realistic decision. If this sits far above p95, a small set of changes is traversing a much larger blast radius than the rest.\n\nPercentiles: n% of events were at or under this value.\np50 - the median. Half were faster; this is the typical experience.\np95 - 1 in 20 were slower. Objectives are written against this because it catches a bad tail that an average hides.\np99 - 1 in 100 were slower. The worst realistic case. A p99 far above p95 means a small group of events behaves very differently.\nNo average is shown on purpose: one 10-second outlier and a thousand fast events average to a number nobody experienced."
+    },
+    {
+      "type": "stat",
+      "title": "Verdicts / sec",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum(rate(sadhak_verdicts_total[5m]))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "Nothing recorded in this window",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "How often the gate is asked anything at all. Zero here while the API dashboard shows traffic means nothing is invoking the gate."
+    },
+    {
+      "type": "stat",
+      "title": "BLOCK share",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum(rate(sadhak_verdicts_total{verdict=\"BLOCK\"}[30m])) / clamp_min(sum(rate(sadhak_verdicts_total[30m])), 0.0001)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "Nothing recorded in this window",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "A gate that has quietly stopped blocking looks identical to a healthy one on latency alone. This is the panel that tells them apart."
+    },
+    {
+      "type": "heatmap",
+      "title": "Graph latency distribution",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 16,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum by (le) (rate(sadhak_verdict_compute_ms_bucket[5m]))",
+          "refId": "A",
+          "legendFormat": "{{le}}",
+          "format": "heatmap"
+        }
+      ],
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "mode": "scheme",
+          "scheme": "Turbo",
+          "steps": 64,
+          "reverse": false,
+          "fill": "dark-orange",
+          "exponent": 0.5,
+          "min": 0
+        },
+        "yAxis": {
+          "unit": "ms",
+          "axisPlacement": "left"
+        },
+        "legend": {
+          "show": true
+        },
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "cellValues": {},
+        "filterValues": {
+          "le": 1e-9
+        }
+      },
+      "description": "The whole distribution rather than a percentile. A bimodal shape here is a cache or a traversal depth problem that a p95 would average away."
+    },
+    {
+      "type": "piechart",
+      "title": "Verdict distribution",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 16,
+        "y": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum by (verdict) (increase(sadhak_verdicts_total[6h]))",
+          "refId": "A",
+          "legendFormat": "{{verdict}}"
+        }
+      ],
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["percent"],
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": ["value"]
+        },
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          }
+        },
+        "overrides": []
+      },
+      "description": "Decisions over the dashboard window."
+    },
+    {
+      "type": "timeseries",
+      "title": "Verdicts / sec by decision",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum by (verdict) (rate(sadhak_verdicts_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{verdict}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "Nothing recorded in this window",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": true,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisSoftMin": 0,
+            "insertNulls": false,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "BLOCK"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "WARN"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "APPROVE"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "description": "APPROVE green, WARN amber, BLOCK red. BLOCK means the mutation is never forwarded; WARN is usually a target the graph has not mapped yet."
+    },
+    {
+      "type": "timeseries",
+      "title": "Engine latency percentiles",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(sadhak_verdict_compute_ms_bucket[30m])))",
+          "refId": "A",
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sadhak_verdict_compute_ms_bucket[30m])))",
+          "refId": "B",
+          "legendFormat": "p95"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(sadhak_verdict_compute_ms_bucket[30m])))",
+          "refId": "C",
+          "legendFormat": "p99"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "noValue": "Nothing recorded in this window",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": true,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0,
+            "insertNulls": false,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 40
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "Traversal and scoring time.\n\nPercentiles: n% of events were at or under this value.\np50 - the median. Half were faster; this is the typical experience.\np95 - 1 in 20 were slower. Objectives are written against this because it catches a bad tail that an average hides.\np99 - 1 in 100 were slower. The worst realistic case. A p99 far above p95 means a small group of events behaves very differently.\nNo average is shown on purpose: one 10-second outlier and a thousand fast events average to a number nobody experienced.\n\nDashed line is the ~40ms graph latency objective."
+    },
+    {
+      "type": "timeseries",
+      "title": "Engine time vs total request time",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sadhak_verdict_compute_ms_bucket[30m])))",
+          "refId": "A",
+          "legendFormat": "engine p95"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sadhak_http_request_duration_ms_bucket[30m])))",
+          "refId": "B",
+          "legendFormat": "http p95"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "noValue": "Nothing recorded in this window",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": true,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0,
+            "insertNulls": false,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "The gap between these two is overhead outside the engine — auth, serialisation, network. Widening while the engine is flat means the regression is not in the graph. Both are p95.\n\nPercentiles: n% of events were at or under this value.\np50 - the median. Half were faster; this is the typical experience.\np95 - 1 in 20 were slower. Objectives are written against this because it catches a bad tail that an average hides.\np99 - 1 in 100 were slower. The worst realistic case. A p99 far above p95 means a small group of events behaves very differently.\nNo average is shown on purpose: one 10-second outlier and a thousand fast events average to a number nobody experienced."
+    }
+  ]
+}

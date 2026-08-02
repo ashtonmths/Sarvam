@@ -1,0 +1,1129 @@
+{
+  "uid": "sadhak-overview",
+  "title": "Sadhak / 1 · Overview & SLAs",
+  "description": "The two published objectives — 2s to detect, 10s to repair — and whether the service underneath them is healthy.",
+  "tags": ["sadhak", "slas", "reflex"],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "timezone": "browser",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Reflex — detect and repair SLAs",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Detect p95",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sadhak_reflex_detect_seconds_bucket[30m])))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Nothing recorded in this window",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "Upstream change to detection, 95th percentile — 19 of every 20 changes were noticed at least this fast. The published objective is 2s; amber past it, red past 5s.\n\nPercentiles: n% of events were at or under this value.\np50 - the median. Half were faster; this is the typical experience.\np95 - 1 in 20 were slower. Objectives are written against this because it catches a bad tail that an average hides.\np99 - 1 in 100 were slower. The worst realistic case. A p99 far above p95 means a small group of events behaves very differently.\nNo average is shown on purpose: one 10-second outlier and a thousand fast events average to a number nobody experienced."
+    },
+    {
+      "type": "stat",
+      "title": "Repair p95",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sadhak_reflex_repair_seconds_bucket[30m])))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Nothing recorded in this window",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "Detection to completed revert, 95th percentile. Objective is 10s.\n\nPercentiles: n% of events were at or under this value.\np50 - the median. Half were faster; this is the typical experience.\np95 - 1 in 20 were slower. Objectives are written against this because it catches a bad tail that an average hides.\np99 - 1 in 100 were slower. The worst realistic case. A p99 far above p95 means a small group of events behaves very differently.\nNo average is shown on purpose: one 10-second outlier and a thousand fast events average to a number nobody experienced."
+    },
+    {
+      "type": "gauge",
+      "title": "Detected within 2s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum(rate(sadhak_reflex_detect_seconds_bucket{le=\"2\"}[30m])) / sum(rate(sadhak_reflex_detect_seconds_count[30m]))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "minVizWidth": 75,
+        "minVizHeight": 75,
+        "sizing": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 1,
+          "noValue": "Nothing recorded in this window",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.9
+              },
+              {
+                "color": "green",
+                "value": 0.95
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "Share of detections inside the SLA. Read off a bucket boundary rather than interpolated, so it is exact."
+    },
+    {
+      "type": "gauge",
+      "title": "Repaired within 10s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum(rate(sadhak_reflex_repair_seconds_bucket{le=\"10\"}[30m])) / sum(rate(sadhak_reflex_repair_seconds_count[30m]))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "minVizWidth": 75,
+        "minVizHeight": 75,
+        "sizing": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 1,
+          "noValue": "Nothing recorded in this window",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.9
+              },
+              {
+                "color": "green",
+                "value": 0.95
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "Share of reverts inside the SLA."
+    },
+    {
+      "type": "timeseries",
+      "title": "Detect latency percentiles",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(sadhak_reflex_detect_seconds_bucket[30m])))",
+          "refId": "A",
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sadhak_reflex_detect_seconds_bucket[30m])))",
+          "refId": "B",
+          "legendFormat": "p95"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(sadhak_reflex_detect_seconds_bucket[30m])))",
+          "refId": "C",
+          "legendFormat": "p99"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Nothing recorded in this window",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": true,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0,
+            "insertNulls": false,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "Only changes whose vendor reported a timestamp appear here. Where none was reported the interval would be measured against our own clock, so it is not observed at all rather than recorded as zero.\n\nPercentiles: n% of events were at or under this value.\np50 - the median. Half were faster; this is the typical experience.\np95 - 1 in 20 were slower. Objectives are written against this because it catches a bad tail that an average hides.\np99 - 1 in 100 were slower. The worst realistic case. A p99 far above p95 means a small group of events behaves very differently.\nNo average is shown on purpose: one 10-second outlier and a thousand fast events average to a number nobody experienced.\n\nDashed line is the 2s detect objective."
+    },
+    {
+      "type": "timeseries",
+      "title": "Repair latency percentiles",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(sadhak_reflex_repair_seconds_bucket[30m])))",
+          "refId": "A",
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sadhak_reflex_repair_seconds_bucket[30m])))",
+          "refId": "B",
+          "legendFormat": "p95"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(sadhak_reflex_repair_seconds_bucket[30m])))",
+          "refId": "C",
+          "legendFormat": "p99"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Nothing recorded in this window",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": true,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0,
+            "insertNulls": false,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "Detection to completed revert.\n\nPercentiles: n% of events were at or under this value.\np50 - the median. Half were faster; this is the typical experience.\np95 - 1 in 20 were slower. Objectives are written against this because it catches a bad tail that an average hides.\np99 - 1 in 100 were slower. The worst realistic case. A p99 far above p95 means a small group of events behaves very differently.\nNo average is shown on purpose: one 10-second outlier and a thousand fast events average to a number nobody experienced.\n\nDashed line is the 10s repair objective."
+    },
+    {
+      "type": "timeseries",
+      "title": "Detections / sec by connector and path",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum by (connector, detect_path) (rate(sadhak_reflex_detect_seconds_count[5m]))",
+          "refId": "A",
+          "legendFormat": "{{connector}} · {{detect_path}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "Nothing recorded in this window",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": true,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisSoftMin": 0,
+            "insertNulls": false,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "push and poll are split deliberately: they have different latencies by construction, and one blended number describes neither."
+    },
+    {
+      "type": "timeseries",
+      "title": "Repairs / sec by connector",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum by (connector) (rate(sadhak_reflex_repair_seconds_count[5m]))",
+          "refId": "A",
+          "legendFormat": "{{connector}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "Nothing recorded in this window",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": true,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisSoftMin": 0,
+            "insertNulls": false,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "How often reverts complete, split by connector. A connector that detects but never repairs shows as this going quiet while the detect chart beside it stays busy."
+    },
+    {
+      "type": "row",
+      "title": "Service health",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "5xx ratio (5m)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 23
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum(rate(sadhak_http_requests_total{status=\"5xx\"}[5m])) / sum(rate(sadhak_http_requests_total[5m]))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "Nothing recorded in this window",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.02
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "The number the error budget is spent from."
+    },
+    {
+      "type": "stat",
+      "title": "Requests / sec",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 23
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum(rate(sadhak_http_requests_total[5m]))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "Nothing recorded in this window",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "Total HTTP throughput across every route. Context for the ratios either side: a 5xx ratio means something very different at 0.1 req/s than at 100."
+    },
+    {
+      "type": "stat",
+      "title": "Verdict path p95",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 23
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sadhak_http_request_duration_ms_bucket[30m])))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "noValue": "Nothing recorded in this window",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 250
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "End to end, including auth and serialisation. The engine's own time is on the Sentinel dashboard.\n\nPercentiles: n% of events were at or under this value.\np50 - the median. Half were faster; this is the typical experience.\np95 - 1 in 20 were slower. Objectives are written against this because it catches a bad tail that an average hides.\np99 - 1 in 100 were slower. The worst realistic case. A p99 far above p95 means a small group of events behaves very differently.\nNo average is shown on purpose: one 10-second outlier and a thousand fast events average to a number nobody experienced."
+    },
+    {
+      "type": "stat",
+      "title": "Rate-limited / sec",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 23
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum(rate(sadhak_rate_limit_decisions_total{outcome=\"limited\"}[5m]))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "titleSize": 13
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "Nothing recorded in this window",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "Requests refused by a rate limiter. A sustained rise on the ip tier is either a misconfigured client or someone probing."
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate by status class",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum by (status) (rate(sadhak_http_requests_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "Nothing recorded in this window",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": true,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisSoftMin": 0,
+            "insertNulls": false,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "5xx"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "2xx"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "description": "Stacked, so total height is total traffic. 2xx green, 5xx red: a 5xx is our fault and spends the error budget, a 4xx is usually the caller and does not."
+    },
+    {
+      "type": "timeseries",
+      "title": "Rate-limit decisions by tier",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "sadhak-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "sadhak-prometheus"
+          },
+          "expr": "sum by (tier, outcome) (rate(sadhak_rate_limit_decisions_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{tier}} · {{outcome}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "Nothing recorded in this window",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": true,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0,
+            "insertNulls": false,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "Four tiers with different jobs: ip defends one replica from unauthenticated floods, auth makes credential stuffing expensive, key and org are per-customer budgets shared across replicas through Postgres."
+    }
+  ]
+}
