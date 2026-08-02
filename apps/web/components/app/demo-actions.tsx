@@ -34,14 +34,21 @@ interface SimulateResult {
   } | null;
 }
 
-export function DemoActions() {
-  const [busy, setBusy] = useState<"data" | "create" | "simulate" | null>(null);
+/**
+ * Seeding the dataset, on its own.
+ *
+ * Separated from the workflow buttons because it has nothing to do with n8n —
+ * it writes transcripts, commits and checkpoints — and living on the n8n card
+ * meant an org with no n8n connector had no way to reach the one action that
+ * makes every other page worth opening.
+ */
+export function SeedDemoData() {
+  const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<SimulateResult | null>(null);
 
-  async function seedData() {
-    setBusy("data");
+  async function run() {
+    setBusy(true);
     setError(null);
     setNote(null);
     try {
@@ -50,9 +57,43 @@ export function DemoActions() {
     } catch (err) {
       setError(err instanceof ApiError ? err.userMessage : "That did not work.");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
+
+  return (
+    <div className="demo">
+      <p className="panel__caption">
+        Transcripts, commit history, checkpoints, rationale, thirty days of gate decisions
+        and one reverted incident — the data every other page reads. Safe to press twice.
+      </p>
+      <div className="demo__row">
+        <button
+          type="button"
+          className="btn btn--ink"
+          disabled={busy}
+          onClick={() => void run()}
+          data-testid="demo-seed-data"
+        >
+          <Database size={15} strokeWidth={2} aria-hidden />
+          {busy ? "Seeding…" : "Seed demo data"}
+        </button>
+      </div>
+      {note && <p className="demo__note">{note}</p>}
+      {error && (
+        <div className="banner banner--warn" role="status">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function DemoActions() {
+  const [busy, setBusy] = useState<"create" | "simulate" | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<SimulateResult | null>(null);
 
   async function create() {
     setBusy("create");
@@ -89,23 +130,21 @@ export function DemoActions() {
   return (
     <div className="demo">
       <p className="panel__caption">
-        Transcripts, commit history and checkpoints first, then four workflows in your own
-        n8n, then one broken on purpose. The failure is a real execution — n8n runs it, it
-        throws, and everything after that is the path a genuine failure takes.
+        Four workflows in your own n8n, then one broken on purpose. The failure is a real
+        execution — n8n runs it, it throws, and everything after that is the path a
+        genuine failure takes.
       </p>
 
       <div className="demo__row">
-        {/* First, because the other two are about workflows and this is what
-            makes every other page in the product worth opening. */}
         <button
           type="button"
           className="btn btn--ink"
           disabled={busy !== null}
-          onClick={() => void seedData()}
-          data-testid="demo-seed-data"
+          onClick={() => void create()}
+          data-testid="demo-create-workflows"
         >
-          <Database size={15} strokeWidth={2} aria-hidden />
-          {busy === "data" ? "Seeding…" : "Seed demo data"}
+          <Workflow size={15} strokeWidth={2} aria-hidden />
+          {busy === "create" ? "Creating…" : "Create demo workflows"}
         </button>
 
         <button

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AddConnector } from "../../../../components/app/add-connector";
 import { AlertChannel } from "../../../../components/app/alert-channel";
-import { DemoActions } from "../../../../components/app/demo-actions";
+import { DemoActions, SeedDemoData } from "../../../../components/app/demo-actions";
 import { SlackChannels } from "../../../../components/app/slack-channels";
 import { EmptyState } from "../../../../components/app/ui";
 import {
@@ -204,6 +204,11 @@ export default function ConnectorsPane() {
           be added.
         </div>
       )}
+
+      <section className="panel" style={{ marginBottom: 16 }}>
+        <h2 className="panel__title">Demo data</h2>
+        <SeedDemoData />
+      </section>
 
       <section className="panel">
         <div className="panel__head">
@@ -410,7 +415,7 @@ export default function ConnectorsPane() {
                     <span className="ccard__foot-gap" />
                     <button
                       type="button"
-                      className="btn btn--ghost btn--tiny btn--danger"
+                      className="btn btn--danger-ghost btn--tiny"
                       disabled={working}
                       onClick={() => void disconnect(instance)}
                       data-testid={`connector-delete-${instance.connector}`}
