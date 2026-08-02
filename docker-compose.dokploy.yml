@@ -399,7 +399,7 @@ services:
       - ./ops/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafanadata:/var/lib/grafana
     expose:
-      - "3000"
+      - "3002"
     # Same label, same reason as the api and web above: Traefik picks among
     # whatever networks a container offers, and the choice is not stable across
     # recreation. This one offers two.
