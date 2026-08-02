@@ -1,9 +1,11 @@
 "use client";
 
+import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { ApiError, api } from "../../lib/api";
 import { API_URL } from "../../lib/env";
 import { useQuery } from "../../lib/queries";
+import { Select } from "./select";
 
 /**
  * Connecting a system, from the app.
@@ -142,6 +144,7 @@ export function AddConnector({
 }) {
   const [open, setOpen] = useState(false);
   const [slug, setSlug] = useState("");
+  const [showCredential, setShowCredential] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Whether the deployment has Slack OAuth credentials. Asked of the server
@@ -157,6 +160,8 @@ export function AddConnector({
     setSlug("");
     setError(null);
     setManual(false);
+    // Never leave a revealed credential on screen for the next connector.
+    setShowCredential(false);
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -253,23 +258,28 @@ export function AddConnector({
 
       <div className="field">
         <label htmlFor="connector">System</label>
-        <select
+        {/*
+          The shared dropdown, not a native select. select.tsx exists so that
+          "native select arrows never fight our border box" — and this form was
+          the one place still using the browser's, which is why it looked
+          borrowed from a different product.
+        */}
+        <Select
           id="connector"
-          name="connector"
           value={slug}
-          required
-          onChange={(event) => {
-            setSlug(event.target.value);
+          testid="connector-select"
+          onChange={(next) => {
+            setSlug(next);
             setError(null);
           }}
-        >
-          <option value="">Choose one</option>
-          {slugs.map((option) => (
-            <option key={option.slug} value={option.slug}>
-              {option.displayName}
-            </option>
-          ))}
-        </select>
+          options={[
+            { value: "", label: "Choose one" },
+            ...slugs.map((option) => ({
+              value: option.slug,
+              label: option.displayName,
+            })),
+          ]}
+        />
       </div>
 
       {slug === "slack" && oauth.data?.configured && (
@@ -324,14 +334,47 @@ export function AddConnector({
 
           <div className="field">
             <label htmlFor="credential">{form.credentialLabel}</label>
-            <input
-              id="credential"
-              name="credential"
-              type="password"
-              placeholder={form.credentialPlaceholder}
-              autoComplete="off"
-              required
-            />
+            {/*
+              Masked by default, revealable on demand.
+
+              A connection string is sixty characters of host, port, database
+              and password typed by hand, and a single wrong character fails as
+              "could not connect" — indistinguishable from a firewall, a wrong
+              port, or a role that does not exist. Masking it protects against a
+              shoulder in the room and costs the ability to check your own
+              typing, which is the more common problem by far.
+
+              It stays a password field when hidden, so browsers and password
+              managers still treat it as a secret, and the toggle resets on
+              submit rather than leaving a credential on screen.
+            */}
+            <div className="field__reveal">
+              <input
+                id="credential"
+                name="credential"
+                type={showCredential ? "text" : "password"}
+                placeholder={form.credentialPlaceholder}
+                autoComplete="off"
+                spellCheck={false}
+                required
+              />
+              <button
+                type="button"
+                className="field__reveal-toggle"
+                onClick={() => setShowCredential((v) => !v)}
+                aria-pressed={showCredential}
+                aria-label={
+                  showCredential ? "Hide the credential" : "Show the credential"
+                }
+                title={showCredential ? "Hide" : "Show"}
+              >
+                {showCredential ? (
+                  <EyeOff size={15} strokeWidth={2} aria-hidden />
+                ) : (
+                  <Eye size={15} strokeWidth={2} aria-hidden />
+                )}
+              </button>
+            </div>
             <p className="field__help">{form.credentialHelp}</p>
           </div>
 

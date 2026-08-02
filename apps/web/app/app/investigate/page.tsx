@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Select } from "../../../components/app/select";
 import { EmptyState, PageHead } from "../../../components/app/ui";
 import { api } from "../../../lib/api";
 import { useQuery } from "../../../lib/queries";
@@ -172,18 +173,19 @@ export default function InvestigatePage() {
 
           <div className="field">
             <label htmlFor="repo">Repository</label>
-            <select
+            <Select
               id="repo"
               value={repoFullName}
-              onChange={(e) => setRepoFullName(e.target.value)}
-            >
-              <option value="">Every tracked repository</option>
-              {repoItems.map((repo) => (
-                <option key={repo.id} value={repo.fullName}>
-                  {repo.fullName}
-                </option>
-              ))}
-            </select>
+              testid="investigate-repo-select"
+              onChange={setRepoFullName}
+              options={[
+                { value: "", label: "Every tracked repository" },
+                ...repoItems.map((repo) => ({
+                  value: repo.fullName,
+                  label: repo.fullName,
+                })),
+              ]}
+            />
           </div>
 
           <div className="field">

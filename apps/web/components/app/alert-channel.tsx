@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ApiError, api } from "../../lib/api";
 import { useQuery } from "../../lib/queries";
+import { Select } from "./select";
 
 /**
  * Where Sadhak posts when something breaks.
@@ -68,38 +69,38 @@ export function AlertChannel() {
 
       <div className="field">
         <label htmlFor="alert-channel">Channel</label>
-        <select
+        <Select
           id="alert-channel"
           value={current}
-          disabled={busy || channels.loading}
-          onChange={(e) => save({ slackChannelId: e.target.value || null })}
-        >
-          <option value="">No channel — nothing is posted</option>
-          {list.map((channel) => (
-            <option key={channel.id} value={channel.id}>
-              #{channel.name}
-              {channel.isPrivate ? " (private)" : ""}
-            </option>
-          ))}
-        </select>
+          testid="alert-channel-select"
+          onChange={(next) => save({ slackChannelId: next || null })}
+          options={[
+            { value: "", label: "No channel — nothing is posted" },
+            ...list.map((channel) => ({
+              value: channel.id,
+              label: `#${channel.name}${channel.isPrivate ? " (private)" : ""}`,
+            })),
+          ]}
+        />
       </div>
 
       <div className="field">
         <label htmlFor="alert-threshold">Post when a verdict is at least</label>
-        <select
+        <Select
           id="alert-threshold"
           value={settings.data?.alertThreshold ?? "WARN"}
-          disabled={busy}
-          onChange={(e) =>
-            save({ alertThreshold: e.target.value as Settings["alertThreshold"] })
+          testid="alert-threshold-select"
+          onChange={(next) =>
+            save({ alertThreshold: next as Settings["alertThreshold"] })
           }
-        >
-          {/* APPROVE last and described plainly: a ping per green change is
-              precisely how this bot gets muted. */}
-          <option value="BLOCK">BLOCK — only changes that were stopped</option>
-          <option value="WARN">WARN — anything with surfaced impact</option>
-          <option value="APPROVE">APPROVE — every decision, including green ones</option>
-        </select>
+          options={[
+            { value: "BLOCK", label: "BLOCK — only changes that were stopped" },
+            { value: "WARN", label: "WARN — anything with surfaced impact" },
+            // Last, and described plainly: a ping per green change is exactly
+            // how this bot gets muted.
+            { value: "APPROVE", label: "APPROVE — every decision, including green ones" },
+          ]}
+        />
       </div>
 
       {/*

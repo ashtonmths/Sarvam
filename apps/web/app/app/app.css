@@ -5383,3 +5383,50 @@
   font-size: 11.5px;
   color: var(--approve);
 }
+
+/* ------------------------------------------------- revealable credential */
+
+/* The toggle sits inside the field rather than beside it, so the input keeps
+   its full width and the control cannot be mistaken for a form action. */
+.field__reveal {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.field__reveal input {
+  width: 100%;
+  /* Room for the button, so a long connection string never runs under it. */
+  padding-right: 40px;
+}
+
+.field__reveal-toggle {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.field__reveal-toggle:hover {
+  color: var(--ink);
+}
+
+/* Revealed is a state worth seeing at a glance — it means a secret is legible
+   on screen right now. */
+.field__reveal-toggle[aria-pressed="true"] {
+  color: var(--thread);
+}
+
+.field__reveal-toggle:focus-visible {
+  outline: 2px solid var(--thread);
+  outline-offset: 1px;
+}
