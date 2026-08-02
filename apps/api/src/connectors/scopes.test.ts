@@ -48,6 +48,89 @@ describe("slack oauth requests what the descriptor publishes", () => {
   });
 });
 
+describe("the GitHub descriptor covers every endpoint the code calls", () => {
+  /**
+   * The GitHub equivalent of the Slack test above, and it exists because the
+   * same drift already happened: the descriptor published metadata, contents
+   * and pull_requests while `mcp/github.ts` had grown calls to deployments,
+   * workflow runs and check runs. An App created from that list answers 403 on
+   * four of `github_activity`'s nine actions.
+   *
+   * The failure is silent in the worst way — `perRepo` files a 403 as a note
+   * and the sweep returns no rows, which reads as "nothing is broken". And it
+   * is expensive to correct later: adding a permission to a GitHub App forces
+   * every existing installation through re-approval.
+   *
+   * Scanned against the source rather than a hand-kept list, so a new endpoint
+   * family fails here rather than in a customer's install.
+   */
+  const GITHUB_CALLERS = [
+    "../mcp/github.ts",
+    "../changes/github-client.ts",
+    "../github/app.ts",
+    "../ci/logs.ts",
+  ];
+
+  const ENDPOINT_SCOPES: Array<{ endpoint: RegExp; scope: string; calls: string }> = [
+    {
+      endpoint: /\/(commits|contents)\b/,
+      scope: "contents:read",
+      calls: "commits, file contents",
+    },
+    {
+      endpoint: /\/pulls\b/,
+      scope: "pull_requests:read",
+      calls: "pull requests and their files",
+    },
+    { endpoint: /check-runs\b/, scope: "checks:read", calls: "check runs on a commit" },
+    {
+      endpoint: /\/deployments\b/,
+      scope: "deployments:read",
+      calls: "deployments and their statuses",
+    },
+    {
+      endpoint: /\/actions\/(runs|jobs)\b/,
+      scope: "actions:read",
+      calls: "workflow runs and job logs",
+    },
+  ];
+
+  const source = GITHUB_CALLERS.map((path) =>
+    readFileSync(new URL(path, import.meta.url), "utf8"),
+  ).join("\n");
+
+  const declared = new Set(
+    [
+      ...getConnector("github").descriptor.readScopes,
+      ...getConnector("github").descriptor.writeScopes,
+    ].map((s) => s.scope),
+  );
+
+  for (const { endpoint, scope, calls } of ENDPOINT_SCOPES) {
+    it(`declares ${scope}, without which ${calls} return 403`, () => {
+      // Only assert on families the code actually reaches. A scope declared
+      // for an endpoint nobody calls is a permission asked for and unused.
+      if (!endpoint.test(source)) return;
+      expect(declared).toContain(scope);
+    });
+  }
+
+  /**
+   * The one deliberate omission, pinned so it stays deliberate. Reading branch
+   * protection needs `administration:read`, which carries repository settings,
+   * collaborators and deploy keys — too broad to take for one banner.
+   * `isCheckRequired` treats the resulting 403 as "unknown" rather than "not
+   * enforcing", which is the whole reason the omission is safe.
+   */
+  it("does not ask for administration:read, and tolerates the 403 that follows", () => {
+    expect(declared).not.toContain("administration:read");
+    expect(source).toContain("protection/required_status_checks");
+    expect(readFileSync(new URL("../github/app.ts", import.meta.url), "utf8")).toContain(
+      'if (message.includes("GitHub 403") || message.includes("GitHub 401")) return null;',
+    );
+  });
+});
+
 describe("baseUrlFor", () => {
   const instance = (connector: string, config: Record<string, unknown> = {}) =>
     ({ id: 1, connector, config }) as never;

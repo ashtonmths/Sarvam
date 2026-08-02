@@ -125,8 +125,27 @@ function clip(text: string, max: number): string {
   return flat.length > max ? `${flat.slice(0, max)}…` : flat;
 }
 
-export const NOTHING_FOUND =
-  "Nothing in the Slack channels this organisation has connected mentions that. Either it was not discussed in those channels, or the channel it was discussed in has not been connected for mining.";
+/**
+ * The empty answer, which has to say which kind of empty it is.
+ *
+ * One sentence used to cover both — "either it was not discussed, or the
+ * channel has not been connected for mining" — and that sentence is unreadable
+ * in the only way that matters. An admin who has connected every channel in the
+ * workspace reads it as "your channels are not connected" and goes to check a
+ * setting that is already correct; an admin who has connected none reads it as
+ * "we looked and it is not there" and never connects any. The count is the
+ * whole difference, so the count is stated.
+ */
+export function nothingFound(channelsSearched: number): string {
+  if (channelsSearched < 0) {
+    return "Slack could not be searched, so nothing here says whether the subject was discussed. The reason is below.";
+  }
+  if (channelsSearched === 0) {
+    return "No Slack channel is connected for mining, so nothing was searched — this is not evidence that the subject was never discussed. An admin connects channels in connector settings, under the Slack connector.";
+  }
+  const plural = channelsSearched === 1 ? "channel" : "channels";
+  return `Searched the ${channelsSearched} Slack ${plural} this organisation has connected for mining, and nothing in them matches. It may have been discussed in a channel that is not connected, or not in Slack at all.`;
+}
 
 /**
  * Collects the messages, deduplicated by permalink and numbered once.
@@ -142,7 +161,7 @@ async function gather(
   ctx: McpContext,
   input: Input,
   notes: string[],
-): Promise<SlackSource[]> {
+): Promise<{ sources: SlackSource[]; channelsSearched: number }> {
   const [live, mined] = await Promise.allSettled([
     searchSlack({ orgId: ctx.orgId }, input.question),
     retrieveRationale(ctx.orgId, input.question, {
@@ -165,6 +184,9 @@ async function gather(
     ts: string;
     authored_at: string | null;
   }> = [];
+  // Unknown rather than zero when the search threw: "we looked at no channels"
+  // is a claim, and a rejected promise is not evidence for it.
+  let channelsSearched = -1;
 
   if (live.status === "rejected") {
     notes.push(
@@ -172,6 +194,7 @@ async function gather(
     );
   } else {
     if (live.value.unavailable) notes.push(live.value.unavailable);
+    channelsSearched = live.value.channelsSearched;
     hits = live.value.hits;
     for (const hit of hits) {
       add({
@@ -232,7 +255,10 @@ async function gather(
     }
   }
 
-  return [...byPermalink.values()].map((source, i) => ({ ...source, n: i + 1 }));
+  return {
+    sources: [...byPermalink.values()].map((source, i) => ({ ...source, n: i + 1 })),
+    channelsSearched,
+  };
 }
 
 /**
@@ -278,7 +304,10 @@ export function renderAskSlackText(
   if (result.sources.length === 0) {
     lines.push(result.answer);
     if (result.notes.length > 0) {
-      lines.push("", "Why there was nothing to search:");
+      // Not "why there was nothing to search" any more: an empty answer from a
+      // workspace with twenty connected channels is a search that ran, and a
+      // heading that says otherwise sends the reader to the wrong setting.
+      lines.push("", "Caveats on what was searched:");
       for (const note of result.notes) lines.push(`  - ${note}`);
     }
     return lines.join("\n");
@@ -325,7 +354,7 @@ export function renderAskSlackText(
 
 export async function askSlack(ctx: McpContext, input: Input) {
   const notes: string[] = [];
-  const sources = await gather(ctx, input, notes);
+  const { sources, channelsSearched } = await gather(ctx, input, notes);
 
   /**
    * No messages, no model call. Retrieval finding nothing is already the
@@ -334,7 +363,7 @@ export async function askSlack(ctx: McpContext, input: Input) {
    */
   if (sources.length === 0) {
     const structured = {
-      answer: NOTHING_FOUND,
+      answer: nothingFound(channelsSearched),
       reasoning: null,
       grounded: false,
       unavailable: null,

@@ -57,7 +57,11 @@ export const nodeRefInput = z.object({
     .string()
     .min(1)
     .describe(
-      'The node\'s identifier inside that system — e.g. a Postgres "schema.table.column", an Airtable field id, an n8n workflow id. Not its human-readable name.',
+      "The node's address as the crawler recorded it, which is path-shaped and not the node's display name. " +
+        "postgres: <connectorInstanceId>/db/<database>/column/<schema>.<table>.<column> — also .../table/<schema>.<name> and .../view/<schema>.<name>. " +
+        "airtable: base/<id>, table/<id>, field/<id>. " +
+        "n8n: workflow/<id>, workflow/<id>/node/<nodeId>, credential/<id>. " +
+        "If you do not already have this exact string, do not guess it — a near miss resolves to nothing rather than to something close. Ask ask_docs, or read it off a previous verdict or blast-radius result, which carry it.",
     ),
 });
 
