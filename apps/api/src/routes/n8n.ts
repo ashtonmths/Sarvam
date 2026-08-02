@@ -5,6 +5,7 @@ import { z } from "zod";
 import { audit } from "../audit.js";
 import { config } from "../config.js";
 import { db } from "../db.js";
+import { seedDemoData } from "../demo/data.js";
 import { NotFoundError } from "../errors.js";
 import { enqueue } from "../jobs/queue.js";
 import { requireAuth, requireCapability } from "../middleware/auth.js";
@@ -91,6 +92,17 @@ n8nRoutes.get("/n8n/failures/:id", requireCapability("graph:read"), async (c) =>
  */
 n8nRoutes.post("/n8n/demo/workflows", requireCapability("connector:manage"), async (c) =>
   c.json(await createDemoWorkflows(c.get("orgId"))),
+);
+
+/**
+ * Writes the demo dataset — transcripts, commit history, checkpoints, rationale,
+ * metrics, an incident — into this organisation.
+ *
+ * Beside the other demo endpoints because it is the same act: making a fresh
+ * deployment worth looking at, from a UI with no terminal behind it.
+ */
+n8nRoutes.post("/n8n/demo/data", requireCapability("connector:manage"), async (c) =>
+  c.json(await seedDemoData(c.get("orgId"))),
 );
 
 n8nRoutes.post("/n8n/demo/simulate", requireCapability("connector:manage"), async (c) =>

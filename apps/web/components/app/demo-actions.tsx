@@ -1,6 +1,6 @@
 "use client";
 
-import { PlayCircle, Workflow } from "lucide-react";
+import { Database, PlayCircle, Workflow } from "lucide-react";
 import { useState } from "react";
 import { ApiError, api } from "../../lib/api";
 
@@ -35,10 +35,24 @@ interface SimulateResult {
 }
 
 export function DemoActions() {
-  const [busy, setBusy] = useState<"create" | "simulate" | null>(null);
+  const [busy, setBusy] = useState<"data" | "create" | "simulate" | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SimulateResult | null>(null);
+
+  async function seedData() {
+    setBusy("data");
+    setError(null);
+    setNote(null);
+    try {
+      const r = await api.post<{ log: string[] }>("/api/n8n/demo/data");
+      setNote(r.log.join(" · "));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.userMessage : "That did not work.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function create() {
     setBusy("create");
@@ -75,15 +89,28 @@ export function DemoActions() {
   return (
     <div className="demo">
       <p className="panel__caption">
-        Four workflows in your own n8n, then one broken on purpose. The failure is a real
-        execution — n8n runs it, it throws, and everything after that is the path a
-        genuine failure takes.
+        Transcripts, commit history and checkpoints first, then four workflows in your own
+        n8n, then one broken on purpose. The failure is a real execution — n8n runs it, it
+        throws, and everything after that is the path a genuine failure takes.
       </p>
 
       <div className="demo__row">
+        {/* First, because the other two are about workflows and this is what
+            makes every other page in the product worth opening. */}
         <button
           type="button"
           className="btn btn--ink"
+          disabled={busy !== null}
+          onClick={() => void seedData()}
+          data-testid="demo-seed-data"
+        >
+          <Database size={15} strokeWidth={2} aria-hidden />
+          {busy === "data" ? "Seeding…" : "Seed demo data"}
+        </button>
+
+        <button
+          type="button"
+          className="btn btn--ghost"
           disabled={busy !== null}
           onClick={() => void create()}
           data-testid="demo-create-workflows"
