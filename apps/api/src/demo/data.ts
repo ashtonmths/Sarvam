@@ -86,6 +86,56 @@ Fix: the comparison was removed. The column is authoritative for what was charge
 Lena Fischer: Worth saying explicitly — this incident is the reason someone proposed dropping the column. The drift was real, the conclusion drawn from it was wrong.`,
   },
   {
+    title: "Incident review — dunning emailed 900 paid invoices",
+    when: daysAgo(58),
+    speaker: "Dev Kulkarni",
+    body: `Dev Kulkarni: The dunning workflow emailed roughly nine hundred customers whose invoices were already paid.
+
+What happened: the overdue query filters on issued_at older than thirty days. It never checked paid_at, because when it was written every invoice in the table was unpaid — the payments integration landed two months later and nobody revisited the filter.
+
+Marcus Webb: This is the second time an assumption baked into a workflow outlived the thing that made it true. The map knows the workflow reads invoices; it does not know the workflow assumes something about them.
+
+Lena Fischer: Can we record that assumption somewhere it will be found?
+
+Dev Kulkarni: That is what the rationale is for. I will write it against the edge.
+
+DECISIONS
+1. The dunning filter must include paid_at IS NULL. Shipped.
+2. Assumptions a workflow makes about data are worth recording as rationale, not just as comments in the node.
+3. Suppression list added: no customer receives more than one chase per invoice per week.`,
+  },
+  {
+    title: "Design note — why the filing reads Postgres directly",
+    when: daysAgo(72),
+    speaker: "Priya Raman",
+    body: `Priya Raman: Recording this because it looks wrong and is deliberate.
+
+The Quarterly VAT filing reads the invoices table directly rather than going through our API. The API paginates and applies the current tax configuration; the filing needs a consistent snapshot as of the quarter end, with the rates as charged.
+
+Going through the API would give us the right numbers most of the time and silently wrong ones whenever a rate changed mid-quarter, which is precisely when the filing matters.
+
+The cost of this decision is that schema changes reach the filing without any deploy of ours. That is a real cost and we are choosing it knowingly. The mitigation is the dependency graph: the gate warns when something the filing reads is about to change.
+
+Tom Okafor: And if nobody reads the warning?
+Priya Raman: Then the workflow fails at 03:00 on the first of the month and we find out that way. Which is worse, but not silent.`,
+  },
+  {
+    title: "Onboarding — what the billing graph actually means",
+    when: daysAgo(15),
+    speaker: null,
+    body: `Notes for anyone new to the billing systems.
+
+public.invoices is the ledger of what was charged. It is append-mostly: rows are corrected by issuing a credit note, never by editing amount_cents in place. If you find yourself writing an UPDATE against it, stop and ask.
+
+invoices.vat_rate is the rate applied at issue. It is not the current rate and must never be backfilled from one. See the Billing Schema Review.
+
+customers.country comes from the billing address. The EU VAT report groups on it because the tax authority cares where the customer is established.
+
+public.eu_vat_report is a view, not a table. It is filed quarterly. It has no owner in the code — changing anything it reads changes the filing.
+
+The n8n workflows are the moving parts. Quarterly VAT filing and Nightly invoice reconciliation both read invoices directly; the others go through the API.`,
+  },
+  {
     title: "Runbook — Quarterly VAT filing workflow",
     when: daysAgo(45),
     speaker: null,
@@ -139,6 +189,41 @@ const COMMITS = [
     author: "dev",
     at: hoursAgo(38),
     paths: ["apps/web/app/app/exports/page.tsx"],
+  },
+  {
+    sha: "1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a90",
+    title: "add paid_at to the dunning filter so paid invoices are skipped",
+    author: "dev",
+    at: hoursAgo(52),
+    paths: ["apps/api/src/billing/dunning.ts"],
+  },
+  {
+    sha: "4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f20",
+    title: "index invoices on issued_at for the quarterly snapshot",
+    author: "priya",
+    at: hoursAgo(46),
+    paths: ["db/migrations/0029_index_invoices_issued_at.sql"],
+  },
+  {
+    sha: "8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b60",
+    title: "stop the reconciliation job comparing historical and live rates",
+    author: "tom",
+    at: hoursAgo(41),
+    paths: ["apps/api/src/billing/reconcile.ts", "apps/api/src/billing/rates.ts"],
+  },
+  {
+    sha: "3e5b7d9f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e10",
+    title: "cache the tax service response for the length of a run",
+    author: "tom",
+    at: hoursAgo(33),
+    paths: ["apps/api/src/billing/rates.ts"],
+  },
+  {
+    sha: "6c8e0a2d4f6b8d0f2a4c6e8b0d2f4a6c8e0b2d40",
+    title: "bump the invoice export page size to 500",
+    author: "dev",
+    at: hoursAgo(27),
+    paths: ["apps/web/app/app/exports/page.tsx", "apps/api/src/routes/exports.ts"],
   },
   {
     sha: "9d1f3b5a7c9e1d3f5b7a9c1e3d5f7b9a1c3e5d70",
@@ -279,6 +364,21 @@ async function seedRationale(orgId: number): Promise<void> {
     [
       "drafted",
       "The reconciliation job must not compare vat_rate against the live tax service rate. Expected divergence is not an error.",
+      link,
+    ],
+    [
+      "confirmed",
+      "The dunning workflow must filter on paid_at IS NULL. It was written when every invoice in the table was unpaid, and that assumption outlived the payments integration by two months.",
+      link,
+    ],
+    [
+      "confirmed",
+      "public.invoices is append-mostly. Rows are corrected by issuing a credit note, never by editing amount_cents in place.",
+      link,
+    ],
+    [
+      "drafted",
+      "The Quarterly VAT filing reads Postgres directly rather than through the API, because the filing needs a consistent snapshot with rates as charged. The cost is that schema changes reach it without a deploy.",
       link,
     ],
   ];

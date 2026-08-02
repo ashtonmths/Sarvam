@@ -3,6 +3,7 @@
 import { Database, PlayCircle, Workflow } from "lucide-react";
 import { useState } from "react";
 import { ApiError, api } from "../../lib/api";
+import { useQuery } from "../../lib/queries";
 
 /**
  * The demo, without a terminal.
@@ -91,7 +92,14 @@ export function SeedDemoData() {
 }
 
 export function DemoActions() {
-  const [busy, setBusy] = useState<"create" | "simulate" | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  /**
+   * Rendered from the API rather than hard-coded, so adding a scenario on the
+   * server adds a button here without a second edit that can be forgotten.
+   */
+  const scenarios = useQuery<{
+    scenarios: Array<{ key: string; label: string; blurb: string; expect: string }>;
+  }>("/api/n8n/demo/scenarios");
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SimulateResult | null>(null);
@@ -112,13 +120,13 @@ export function DemoActions() {
     }
   }
 
-  async function simulate() {
-    setBusy("simulate");
+  async function simulate(scenario: string) {
+    setBusy(scenario);
     setError(null);
     setNote(null);
     setResult(null);
     try {
-      setResult(await api.post<SimulateResult>("/api/n8n/demo/simulate"));
+      setResult(await api.post<SimulateResult>("/api/n8n/demo/simulate", { scenario }));
     } catch (err) {
       setError(err instanceof ApiError ? err.userMessage : "That did not work.");
     } finally {
@@ -158,17 +166,30 @@ export function DemoActions() {
           <Workflow size={15} strokeWidth={2} aria-hidden />
           {busy === "create" ? "Creating…" : "Create demo workflows"}
         </button>
+      </div>
 
-        <button
-          type="button"
-          className="btn btn--ghost"
-          disabled={busy !== null}
-          onClick={() => void simulate()}
-          data-testid="demo-simulate-failure"
-        >
-          <PlayCircle size={15} strokeWidth={2} aria-hidden />
-          {busy === "simulate" ? "Running and diagnosing…" : "Break one and diagnose it"}
-        </button>
+      {/* One button per branch of the diagnosis. A vendor outage stopping
+          before the model is as much a demonstration as a schema change being
+          explained, and the label says which to expect. */}
+      <h4 className="demo__head">Break one on purpose</h4>
+      <div className="demo__scenarios">
+        {(scenarios.data?.scenarios ?? []).map((sc) => (
+          <button
+            key={sc.key}
+            type="button"
+            className="btn btn--ghost demo__scenario"
+            disabled={busy !== null}
+            onClick={() => void simulate(sc.key)}
+            data-testid={`demo-simulate-${sc.key}`}
+            title={sc.blurb}
+          >
+            <PlayCircle size={14} strokeWidth={2} aria-hidden />
+            <span className="demo__scenario-label">
+              {busy === sc.key ? "Running…" : sc.label}
+            </span>
+            <span className="demo__scenario-expect">{sc.expect}</span>
+          </button>
+        ))}
       </div>
 
       {note && <p className="demo__note">{note}</p>}

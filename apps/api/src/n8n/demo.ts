@@ -274,7 +274,57 @@ export async function createDemoWorkflows(
  * finds it and the diagnosis runs — the same path a genuine failure takes, so
  * what the demo shows is the product working rather than a screenshot of it.
  */
-export async function simulateWorkflowFailure(orgId: number): Promise<{
+
+/**
+ * The failures worth being able to produce on demand.
+ *
+ * Each one lands in a different branch of the diagnosis, which is the part
+ * worth demonstrating: the pipeline is not one path that always ends in an
+ * explanation. A vendor outage should stop before the model and say so; a
+ * failure whose fix is already open should recommend the merge and stop; only
+ * the schema case should spend a reasoning call.
+ */
+export const SCENARIOS = {
+  schema: {
+    label: "Schema change",
+    workflow: "Quarterly VAT filing — run now",
+    node: "Postgres · read invoices",
+    error: 'column "vat_rate" does not exist',
+    expect: "diagnosed",
+    blurb: "A migration dropped a column the workflow reads.",
+  },
+  vendor: {
+    label: "Vendor outage",
+    workflow: "Nightly invoice reconciliation — run now",
+    node: "Avalara · fetch rate",
+    error: "connect ETIMEDOUT 52.14.221.9:443 — tax service did not respond",
+    expect: "unrelated",
+    blurb: "Nothing we shipped explains it, so it stops before the model.",
+  },
+  credential: {
+    label: "Expired credential",
+    workflow: "New customer onboarding — run now",
+    node: "Slack · notify sales",
+    error: "invalid_auth — token_revoked",
+    expect: "unrelated",
+    blurb: "A revoked token. Also ours to notice, not ours to have caused.",
+  },
+  code: {
+    label: "Bad deploy",
+    workflow: "Dunning — overdue invoice chase — run now",
+    node: "Build chase list",
+    error: "TypeError: Cannot read properties of undefined (reading 'amount_cents')",
+    expect: "diagnosed",
+    blurb: "A shape change in the code the workflow depends on.",
+  },
+} as const;
+
+export type ScenarioKey = keyof typeof SCENARIOS;
+
+export async function simulateWorkflowFailure(
+  orgId: number,
+  scenario: ScenarioKey = "schema",
+): Promise<{
   failureId: number | null;
   state: string;
   diagnosis: unknown;
@@ -284,16 +334,17 @@ export async function simulateWorkflowFailure(orgId: number): Promise<{
   const ws = await workspace(orgId);
   const headers = { "X-N8N-API-KEY": ws.apiKey, "content-type": "application/json" };
 
+  const chosen = SCENARIOS[scenario] ?? SCENARIOS.schema;
+
   const definition = {
-    name: FAILING_WORKFLOW,
+    name: chosen.workflow,
     nodes: [
       {
         id: "t1",
-        name: "Run filing",
-        // A schedule trigger rather than a manual one: the public API rejects
-        // a workflow whose only trigger is manual ("no node to start the
-        // workflow"). It never actually fires — the run below is started by
-        // hand — but it satisfies the validation.
+        name: "Run it",
+        // A schedule trigger rather than a manual one: the public API rejects a
+        // workflow whose only trigger is manual. It never fires — the run below
+        // is started by hand — but it satisfies the validation.
         type: "n8n-nodes-base.scheduleTrigger",
         typeVersion: 1,
         position: [0, 0],
@@ -301,22 +352,19 @@ export async function simulateWorkflowFailure(orgId: number): Promise<{
       },
       {
         id: "t2",
-        name: "Postgres · read invoices",
+        name: chosen.node,
         type: "n8n-nodes-base.code",
         typeVersion: 1,
         position: [220, 0],
         parameters: {
-          // The real query this stands in for is in the seeded workflow. Here
-          // it throws what Postgres would throw once the column is gone, so the
-          // execution fails the way the incident actually failed.
-          jsCode: `throw new Error('column "vat_rate" does not exist');`,
+          // Throws what the real node would throw, so the execution fails the
+          // way the incident it stands for actually failed.
+          jsCode: `throw new Error(${JSON.stringify(chosen.error)});`,
         },
       },
     ],
     connections: {
-      "Run filing": {
-        main: [[{ node: "Postgres · read invoices", type: "main", index: 0 }]],
-      },
+      "Run it": { main: [[{ node: chosen.node, type: "main", index: 0 }]] },
     },
     settings: { executionOrder: "v1" },
   };
@@ -325,7 +373,7 @@ export async function simulateWorkflowFailure(orgId: number): Promise<{
   const existing = (await listed.json()) as {
     data?: Array<{ id: string; name: string }>;
   };
-  const found = (existing.data ?? []).find((w) => w.name === FAILING_WORKFLOW);
+  const found = (existing.data ?? []).find((w) => w.name === chosen.workflow);
 
   const saved = await fetch(
     found

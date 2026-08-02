@@ -9,7 +9,12 @@ import { seedDemoData } from "../demo/data.js";
 import { NotFoundError } from "../errors.js";
 import { enqueue } from "../jobs/queue.js";
 import { requireAuth, requireCapability } from "../middleware/auth.js";
-import { createDemoWorkflows, simulateWorkflowFailure } from "../n8n/demo.js";
+import {
+  createDemoWorkflows,
+  SCENARIOS,
+  type ScenarioKey,
+  simulateWorkflowFailure,
+} from "../n8n/demo.js";
 import { getCredential } from "../vault/vault.js";
 
 export const n8nRoutes = new Hono();
@@ -105,8 +110,29 @@ n8nRoutes.post("/n8n/demo/data", requireCapability("connector:manage"), async (c
   c.json(await seedDemoData(c.get("orgId"))),
 );
 
-n8nRoutes.post("/n8n/demo/simulate", requireCapability("connector:manage"), async (c) =>
-  c.json(await simulateWorkflowFailure(c.get("orgId"))),
+/**
+ * Break one on purpose. The scenario decides which branch of the diagnosis it
+ * lands in, which is the part worth being able to show on demand.
+ */
+n8nRoutes.post("/n8n/demo/simulate", requireCapability("connector:manage"), async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { scenario?: string };
+  const scenario =
+    body.scenario && body.scenario in SCENARIOS
+      ? (body.scenario as ScenarioKey)
+      : "schema";
+  return c.json(await simulateWorkflowFailure(c.get("orgId"), scenario));
+});
+
+/** What the buttons render themselves from, so the two cannot drift. */
+n8nRoutes.get("/n8n/demo/scenarios", requireCapability("graph:read"), async (c) =>
+  c.json({
+    scenarios: Object.entries(SCENARIOS).map(([key, v]) => ({
+      key,
+      label: v.label,
+      blurb: v.blurb,
+      expect: v.expect,
+    })),
+  }),
 );
 
 n8nRoutes.get("/n8n/account", requireAuth, async (c) => {
