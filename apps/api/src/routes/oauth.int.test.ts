@@ -4,6 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createSession, SESSION_COOKIE } from "../auth/session.js";
 import { closePools, sql } from "../db.js";
 import { onError } from "../http/middleware.js";
+import { securityHeaders } from "../http/security.js";
 import { mcpRoutes } from "./mcp.js";
 import { oauthRoutes } from "./oauth.js";
 import { oauthMetadataRoutes } from "./oauth-metadata.js";
@@ -48,6 +49,15 @@ function app() {
   a.route("/", oauthMetadataRoutes);
   a.route("/", oauthRoutes);
   a.route("/", mcpRoutes);
+  return a;
+}
+
+/** The same routes with the edge middleware `index.ts` puts in front of them. */
+function edgeMountedApp() {
+  const a = new Hono();
+  a.use("*", securityHeaders);
+  a.onError(onError);
+  a.route("/", oauthRoutes);
   return a;
 }
 
@@ -199,6 +209,38 @@ describe("discovery", () => {
     expect(res.headers.get("www-authenticate")).toBe(
       `Bearer resource_metadata="${ISSUER}/.well-known/oauth-protected-resource"`,
     );
+  });
+});
+
+describe("the content security policy", () => {
+  it("lets the consent form submit to itself", async () => {
+    // Under form-action 'none' the browser blocks the page's own POST, so the
+    // grant can never be given and the whole flow dies at the last step with
+    // nothing on the server to show for it.
+    const { cookie } = await seedPerson();
+    const { body: client } = await registerClient();
+    const { challenge } = pkce();
+
+    const res = await edgeMountedApp().request(
+      `/oauth/authorize?${new URLSearchParams(authorizeParams(client.client_id, challenge))}`,
+      { headers: { cookie } },
+    );
+    const csp = res.headers.get("content-security-policy") ?? "";
+
+    expect(csp).toContain("form-action 'self'");
+    expect(csp).not.toContain("form-action 'none'");
+  });
+
+  it("still refuses to be a form target anywhere else", async () => {
+    // The exception is one route wide. Everything else keeps the CSP an API
+    // that serves no HTML should carry.
+    const res = await edgeMountedApp().request("/oauth/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "nonsense" }).toString(),
+    });
+
+    expect(res.headers.get("content-security-policy")).toContain("form-action 'none'");
   });
 });
 

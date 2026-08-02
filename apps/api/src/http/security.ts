@@ -26,29 +26,66 @@ export const DEFAULT_BODY_LIMIT_BYTES = 256 * 1024;
  */
 export const WEBHOOK_BODY_LIMIT_BYTES = 5 * 1024 * 1024;
 
+const SHARED_HEADERS = {
+  strictTransportSecurity: "max-age=15552000; includeSubDomains",
+  xContentTypeOptions: "nosniff",
+  referrerPolicy: "no-referrer",
+  xFrameOptions: "DENY",
+  // Irrelevant to a JSON API and actively awkward for cross-origin fetches
+  // from the web app, which is a different origin by design.
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: false,
+  crossOriginOpenerPolicy: false,
+} as const;
+
 /**
  * `Strict-Transport-Security` covers api/n8n subdomains because all of them
  * are TLS. The CSP is the one an API that serves no HTML should carry: it can
  * load nothing and be framed by no one, so an XSS-shaped bug in a JSON error
  * body has no reachable sink.
  */
-export const securityHeaders: MiddlewareHandler = secureHeaders({
-  strictTransportSecurity: "max-age=15552000; includeSubDomains",
-  xContentTypeOptions: "nosniff",
-  referrerPolicy: "no-referrer",
-  xFrameOptions: "DENY",
+const strictHeaders = secureHeaders({
+  ...SHARED_HEADERS,
   contentSecurityPolicy: {
     defaultSrc: ["'none'"],
     frameAncestors: ["'none'"],
     baseUri: ["'none'"],
     formAction: ["'none'"],
   },
-  // Irrelevant to a JSON API and actively awkward for cross-origin fetches
-  // from the web app, which is a different origin by design.
-  crossOriginEmbedderPolicy: false,
-  crossOriginResourcePolicy: false,
-  crossOriginOpenerPolicy: false,
 });
+
+/**
+ * The one exception, and the reason it is an exception rather than a loosening.
+ *
+ * The OAuth consent screen is the only HTML this API serves, and it is a form:
+ * under `form-action 'none'` the browser blocks its own submission, so the
+ * grant can never be given. It needs `'self'` — which permits posting back
+ * here and nowhere else, so the page still cannot be turned into a way to send
+ * a visitor's input to somebody else's server.
+ *
+ * `style-src 'unsafe-inline'` is for the page's own <style> block. There is no
+ * `script-src` at all, so nothing on this page can execute, and every value
+ * interpolated into it is HTML-escaped at the point of interpolation.
+ */
+const consentHeaders = secureHeaders({
+  ...SHARED_HEADERS,
+  contentSecurityPolicy: {
+    defaultSrc: ["'none'"],
+    frameAncestors: ["'none'"],
+    baseUri: ["'none'"],
+    formAction: ["'self'"],
+    styleSrc: ["'unsafe-inline'"],
+  },
+});
+
+/**
+ * Chosen per path rather than set once, because `secureHeaders` writes its
+ * headers on the way out — a route handler that set its own CSP would simply
+ * be overwritten on the unwind, and the exception has to be made here or not
+ * at all.
+ */
+export const securityHeaders: MiddlewareHandler = (c, next) =>
+  c.req.path === "/oauth/authorize" ? consentHeaders(c, next) : strictHeaders(c, next);
 
 /**
  * Browser callers only. `WEB_ORIGINS` is an exact-match allowlist with no
