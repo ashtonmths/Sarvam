@@ -368,7 +368,8 @@ export const SCENARIOS = {
     label: "Vendor outage",
     workflow: "Nightly invoice reconciliation — run now",
     node: "Avalara · fetch rate",
-    error: "connect ETIMEDOUT 52.14.221.9:443 — tax service did not respond",
+    error:
+      "ETIMEDOUT reaching the Avalara tax service after 30s — no response from the rate endpoint",
     expect: "unrelated",
     blurb: "Nothing we shipped explains it, so it stops before the model.",
   },
@@ -376,7 +377,7 @@ export const SCENARIOS = {
     label: "Expired credential",
     workflow: "New customer onboarding — run now",
     node: "Slack · notify sales",
-    error: "invalid_auth — token_revoked",
+    error: "invalid_auth — the Slack token for this workflow was revoked",
     expect: "unrelated",
     blurb: "A revoked token. Also ours to notice, not ours to have caused.",
   },
