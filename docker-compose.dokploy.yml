@@ -252,6 +252,16 @@ services:
       - api
     expose:
       - "3000"
+    # Same label the api carries, and for the same reason.
+    #
+    # 4c81657 fixed this for the api and left web alone, reasoning that two
+    # networks meant one plausible choice. That was wrong. Traefik picks among
+    # whatever a container offers and the choice is not stable across
+    # recreation, so "it has worked so far" was luck rather than a property —
+    # and it ran out on the first deploy that recreated this container, which
+    # came back 502 while the api beside it was fine.
+    labels:
+      - "traefik.docker.network=dokploy-network"
     networks:
       - default
       - dokploy-network
