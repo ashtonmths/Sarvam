@@ -284,6 +284,77 @@ export async function createDemoWorkflows(
  * failure whose fix is already open should recommend the merge and stop; only
  * the schema case should spend a reasoning call.
  */
+
+/**
+ * Records the execution we just caused, by id, instead of waiting for a poll.
+ *
+ * The poller advances a high-water mark per instance and only looks at ids
+ * above it, which is right for a background sweep and wrong here: the seeded
+ * failure uses execution id 900001, so on an instance that has ever been
+ * seeded every real execution — which n8n numbers from 1 — sits below the mark
+ * and is skipped forever. The demo reported "n8n ran it but no failed
+ * execution was captured" while n8n's own list showed the error plainly.
+ *
+ * Reading back the specific execution removes the ordering assumption
+ * altogether. onConflictDoNothing keeps it idempotent against the poller
+ * finding the same row later.
+ */
+async function captureExecution(
+  orgId: number,
+  ws: Workspace,
+  workflowId: string,
+): Promise<number | null> {
+  const headers = { "X-N8N-API-KEY": ws.apiKey };
+
+  const listed = await fetch(
+    `${ws.baseUrl}/api/v1/executions?workflowId=${encodeURIComponent(workflowId)}&status=error&limit=1&includeData=true`,
+    { headers },
+  );
+  if (!listed.ok) return null;
+
+  const body = (await listed.json()) as {
+    data?: Array<{
+      id: number | string;
+      workflowId?: string;
+      mode?: string;
+      startedAt?: string;
+      stoppedAt?: string;
+      workflowData?: { name?: string };
+      data?: {
+        resultData?: {
+          lastNodeExecuted?: string;
+          error?: { message?: string; description?: string };
+        };
+      };
+    }>;
+  };
+  const execution = body.data?.[0];
+  if (!execution) return null;
+
+  const result = execution.data?.resultData;
+  const [node] = (await raw`
+    SELECT id FROM nodes
+    WHERE org_id = ${orgId} AND external_id LIKE ${`%workflow/${workflowId}`}
+    LIMIT 1
+  `) as unknown as Array<{ id: number }>;
+
+  const [row] = (await raw`
+    INSERT INTO n8n_execution_failures
+      (org_id, instance_id, execution_id, workflow_id, workflow_name, node_id, mode,
+       failed_node, error_message, started_at, stopped_at, detect_path)
+    VALUES (${orgId}, ${ws.instanceId}, ${Number(execution.id)}, ${workflowId},
+            ${execution.workflowData?.name ?? null}, ${node?.id ?? null},
+            ${execution.mode ?? null}, ${result?.lastNodeExecuted ?? null},
+            ${result?.error?.message ?? result?.error?.description ?? null},
+            ${execution.startedAt ?? null}::timestamptz,
+            ${execution.stoppedAt ?? null}::timestamptz, 'poll')
+    ON CONFLICT (instance_id, execution_id) DO UPDATE SET workflow_id = EXCLUDED.workflow_id
+    RETURNING id
+  `) as unknown as Array<{ id: number }>;
+
+  return row ? Number(row.id) : null;
+}
+
 export const SCENARIOS = {
   schema: {
     label: "Schema change",
@@ -297,7 +368,8 @@ export const SCENARIOS = {
     label: "Vendor outage",
     workflow: "Nightly invoice reconciliation — run now",
     node: "Avalara · fetch rate",
-    error: "connect ETIMEDOUT 52.14.221.9:443 — tax service did not respond",
+    error:
+      "ETIMEDOUT reaching the Avalara tax service after 30s — no response from the rate endpoint",
     expect: "unrelated",
     blurb: "Nothing we shipped explains it, so it stops before the model.",
   },
@@ -305,7 +377,7 @@ export const SCENARIOS = {
     label: "Expired credential",
     workflow: "New customer onboarding — run now",
     node: "Slack · notify sales",
-    error: "invalid_auth — token_revoked",
+    error: "invalid_auth — the Slack token for this workflow was revoked",
     expect: "unrelated",
     blurb: "A revoked token. Also ours to notice, not ours to have caused.",
   },
@@ -421,13 +493,12 @@ export async function simulateWorkflowFailure(
 
   // n8n writes the execution asynchronously.
   await new Promise((resolve) => setTimeout(resolve, 2500));
-  await pollN8nExecutionFailures(orgId);
 
-  const [row] = (await raw`
-    SELECT id FROM n8n_execution_failures
-    WHERE org_id = ${orgId} AND execution_id < 900000
-    ORDER BY detected_at DESC LIMIT 1
-  `) as unknown as Array<{ id: number }>;
+  // The sweep still runs, so anything else that failed meanwhile is picked up,
+  // but the run we caused is captured by id rather than by watermark.
+  await pollN8nExecutionFailures(orgId).catch(() => undefined);
+  const captured = await captureExecution(orgId, ws, workflow.id);
+  const row = captured === null ? undefined : { id: captured };
   if (!row) {
     return {
       failureId: null,

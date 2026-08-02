@@ -1,6 +1,6 @@
 "use client";
 
-import { Database, PlayCircle, Workflow } from "lucide-react";
+import { Boxes, Database, PlayCircle, Workflow } from "lucide-react";
 import { useState } from "react";
 import { ApiError, api } from "../../lib/api";
 import { useQuery } from "../../lib/queries";
@@ -104,6 +104,24 @@ export function DemoActions() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SimulateResult | null>(null);
 
+  async function expandDb() {
+    setBusy("db");
+    setError(null);
+    setNote(null);
+    try {
+      const r = await api.post<{ relations: number; nodes: number; edges: number }>(
+        "/api/n8n/demo/database",
+      );
+      setNote(
+        `${r.relations} relations in the demo database — ${r.nodes} nodes and ${r.edges} edges after crawling.`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.userMessage : "That did not work.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function create() {
     setBusy("create");
     setError(null);
@@ -145,6 +163,19 @@ export function DemoActions() {
       </p>
 
       <div className="demo__row">
+        {/* Before the workflows, because it is what gives the graph — and so
+            every impact number — something to be about. */}
+        <button
+          type="button"
+          className="btn btn--ghost"
+          disabled={busy !== null}
+          onClick={() => void expandDb()}
+          data-testid="demo-expand-db"
+        >
+          <Boxes size={15} strokeWidth={2} aria-hidden />
+          {busy === "db" ? "Building…" : "Expand demo database"}
+        </button>
+
         <button
           type="button"
           className="btn btn--ink"

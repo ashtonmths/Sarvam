@@ -662,3 +662,22 @@ export async function discussN8nFailure(
 
   return Boolean(posted?.ts);
 }
+
+/** Posts a reply into a failure's existing alert thread. */
+export async function postThreadReply(failureId: number, text: string): Promise<boolean> {
+  const [row] = await db
+    .select()
+    .from(n8nExecutionFailures)
+    .where(eq(n8nExecutionFailures.id, failureId));
+  if (!row?.slackTs || !row.slackChannelId) return false;
+
+  const token = await botToken(row.orgId);
+  if (!token) return false;
+
+  const posted = await call<{ ts?: string }>(token, "chat.postMessage", {
+    channel: row.slackChannelId,
+    thread_ts: row.slackTs,
+    text: fit(text),
+  });
+  return Boolean(posted?.ts);
+}

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { connectorInstances, githubInstallations } from "@sadhak/shared/schema";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { handleSlackMention } from "../ci/mention.js";
 import { config } from "../config.js";
 import { verifyHmacSha256 } from "../crypto/compare.js";
 import { db } from "../db.js";
@@ -293,6 +294,66 @@ async function enqueueCheck(payload: GithubPayload): Promise<void> {
 }
 
 /* -------------------------------------------------------------- Slack */
+
+/**
+ * Slack Events. Where a question asked in a thread arrives.
+ *
+ * Separate endpoint from interactions because Slack posts them differently —
+ * events are JSON, interactions are form-encoded — and because the URL
+ * verification handshake has to answer before anything is configured.
+ *
+ * Acked immediately and answered on a floating promise. Slack retries anything
+ * it does not hear back from within three seconds, and a model call is not
+ * finishing in three seconds, so doing the work inline would post the same
+ * answer three times.
+ */
+webhookRoutes.post("/webhooks/slack/events", async (c) => {
+  const raw = await c.req.text();
+  const timestamp = c.req.header("x-slack-request-timestamp") ?? "";
+  const signature = c.req.header("x-slack-signature") ?? "";
+
+  const body = JSON.parse(raw) as {
+    type?: string;
+    challenge?: string;
+    event?: {
+      type?: string;
+      text?: string;
+      user?: string;
+      channel?: string;
+      thread_ts?: string;
+      ts?: string;
+      bot_id?: string;
+    };
+  };
+
+  // The handshake Slack sends when the URL is first saved. It is unsigned by
+  // definition — there is no secret agreed yet — so it answers before the
+  // signature check rather than being rejected by it.
+  if (body.type === "url_verification" && body.challenge) {
+    return c.text(body.challenge);
+  }
+
+  if (!verifySlack(raw, timestamp, signature)) return c.json({ ok: false }, 401);
+
+  const event = body.event;
+  // Never answer ourselves. A bot that replies to its own messages in a thread
+  // it is already in produces an unbounded conversation with nobody.
+  if (
+    event?.type === "app_mention" &&
+    !event.bot_id &&
+    event.thread_ts &&
+    event.channel
+  ) {
+    void handleSlackMention({
+      channel: event.channel,
+      threadTs: event.thread_ts,
+      text: event.text ?? "",
+      user: event.user,
+    }).catch(() => undefined);
+  }
+
+  return c.json({ ok: true });
+});
 
 webhookRoutes.post("/webhooks/slack/interactions", async (c) => {
   const raw = await c.req.text();
