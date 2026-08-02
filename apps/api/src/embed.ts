@@ -140,13 +140,20 @@ async function runWindows(windows: string[]): Promise<number[][]> {
    * improve at exactly the moment embedding stops working.
    */
   const provider = config.EMBEDDING_PROVIDER === "openrouter" ? "openrouter" : "local";
+  // Which model, not just which provider. Swapping the embedding model changes
+  // both the latency profile and the vectors themselves, so a chart that could
+  // not tell them apart would blend two incomparable distributions.
+  const model =
+    provider === "openrouter"
+      ? (config.OPENROUTER_EMBEDDING_MODEL ?? "unknown")
+      : EMBEDDING_MODEL;
   const started = performance.now();
 
   const vectors =
     provider === "openrouter" ? await embedRemote(windows) : await embedLocal(windows);
 
-  embeddingDuration.observe(performance.now() - started, { provider });
-  embeddingWindows.inc({ provider }, windows.length);
+  embeddingDuration.observe(performance.now() - started, { provider, model });
+  embeddingWindows.inc({ provider, model }, windows.length);
   return vectors;
 }
 

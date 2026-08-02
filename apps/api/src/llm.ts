@@ -220,10 +220,21 @@ async function classify429(res: Response): Promise<Error> {
 function logCall(fields: Record<string, unknown>): void {
   const tier = String(fields.tier ?? "unknown");
   const caller = String(fields.caller ?? "unknown");
+  /**
+   * Which model actually served the call, not which one was configured.
+   *
+   * OpenRouter routes a slug to whichever provider is available, and the two
+   * can differ — a `:free` variant that is saturated falls back. Labelling
+   * from the response is what makes "which models are we really using" a
+   * question the dashboard can answer. Cardinality is bounded by the two
+   * configured slugs plus whatever they fall back to.
+   */
+  const model = String(fields.model ?? "unknown");
 
   llmCalls.inc({
     tier,
     caller,
+    model,
     outcome: fields.ok === true ? "ok" : "error",
   });
 
@@ -237,10 +248,10 @@ function logCall(fields: Record<string, unknown>): void {
   const promptTokens = Number(fields.promptTokens ?? 0);
   const completionTokens = Number(fields.completionTokens ?? 0);
   if (promptTokens > 0) {
-    llmTokens.inc({ tier, caller, direction: "prompt" }, promptTokens);
+    llmTokens.inc({ tier, caller, model, direction: "prompt" }, promptTokens);
   }
   if (completionTokens > 0) {
-    llmTokens.inc({ tier, caller, direction: "completion" }, completionTokens);
+    llmTokens.inc({ tier, caller, model, direction: "completion" }, completionTokens);
   }
   // Token counts and costs only — never prompt bodies. Mined content is
   // attacker-influenced text, and a log line is a place it would be read back
