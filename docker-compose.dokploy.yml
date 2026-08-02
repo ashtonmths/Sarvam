@@ -283,8 +283,205 @@ services:
       - default
       - dokploy-network
 
+  # ------------------------------------------------------- observability
+  #
+  # In this file rather than only in ops/observability/docker-compose.
+  # observability.yml, because Dokploy deploys one compose file from git — and
+  # a second stack that nobody deploys is a monitoring stack that does not
+  # exist. The blackbox probe said so plainly: grafana.sadhak.online was down
+  # while the app beside it was up.
+  #
+  # The standalone file still works for running the stack on its own; these are
+  # the same images and the same config, on the network the api already joins.
+
+  loki:
+    image: grafana/loki:3.3.2
+    restart: unless-stopped
+    <<: *logging
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./ops/observability/loki/loki.yml:/etc/loki/loki.yml:ro
+      - lokidata:/loki
+    networks: [sadhak-obs]
+    mem_limit: 512m
+
+  # Alloy ships container logs into Loki over the Docker socket, mounted
+  # read-only and never exposed over TCP. That is a real security surface and
+  # it is registered in the threat model; see the config header.
+  alloy:
+    image: grafana/alloy:v1.5.1
+    restart: unless-stopped
+    <<: *logging
+    depends_on: [loki]
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./ops/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloydata:/var/lib/alloy/data
+    networks: [sadhak-obs]
+    mem_limit: 128m
+
+  # No SADHAK_LOG_ENV here on purpose: the config defaults to `prod`, and this
+  # is the deployment that does not get to set an environment variable by hand.
+  tempo:
+    image: grafana/tempo:2.7.0
+    restart: unless-stopped
+    <<: *logging
+    command: -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - ./ops/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempodata:/var/tempo
+    networks: [sadhak-obs]
+    mem_limit: 512m
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    restart: unless-stopped
+    <<: *logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ./ops/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/observability/prometheus/alerts:/etc/prometheus/alerts:ro
+      - promdata:/prometheus
+    # Generated from the same variable the api reads, rather than bind-mounted
+    # from ops/observability/prometheus/metrics-token.
+    #
+    # That file is written by scripts/obs-local.sh and is gitignored, so it does
+    # not exist in a deploy that clones this repo — Docker would create a
+    # directory in its place and Prometheus would fail to read a credential that
+    # looks present. Sourcing both sides from METRICS_TOKEN also removes the
+    # footgun of the two drifting: a mismatch answers 404 to a request that
+    # carries a token, which reads exactly like the endpoint being disabled.
+    configs:
+      - source: metrics_token
+        target: /etc/prometheus/metrics-token
+    networks: [sadhak-obs]
+    mem_limit: 512m
+
+  # Mounts the tracked `.example` URLs.
+  #
+  # The real ones are gitignored, and Dokploy deploys from git, so a compose
+  # file referencing them would fail to start on every deploy. With the
+  # placeholders the config loads, rules evaluate, and alerts group and route
+  # and appear in the Alertmanager UI — only the final delivery hop is missing.
+  # Replace the two files on the host to actually page anyone.
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    restart: unless-stopped
+    <<: *logging
+    volumes:
+      - ./ops/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./ops/observability/alertmanager/slack-webhook-url.example:/etc/alertmanager/slack-webhook-url:ro
+      - ./ops/observability/alertmanager/watchdog-url.example:/etc/alertmanager/watchdog-url:ro
+      - alertmanagerdata:/alertmanager
+    networks: [sadhak-obs]
+    mem_limit: 128m
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    restart: unless-stopped
+    <<: *logging
+    depends_on: [loki, prometheus, tempo]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?set GF_SECURITY_ADMIN_PASSWORD}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: https://grafana.sadhak.online
+    volumes:
+      - ./ops/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    expose:
+      - "3000"
+    # Same label, same reason as the api and web above: Traefik picks among
+    # whatever networks a container offers, and the choice is not stable across
+    # recreation. This one offers two.
+    labels:
+      - "traefik.docker.network=dokploy-network"
+    networks:
+      - dokploy-network
+      - sadhak-obs
+    mem_limit: 256m
+
+  # The exporters the infrastructure dashboard reads. Without them `pg_*`,
+  # `node_*`, `container_*` and `probe_*` have no source and that dashboard
+  # renders empty with nothing on it saying why.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    <<: *logging
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/host/root
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    networks: [sadhak-obs]
+    mem_limit: 128m
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    restart: unless-stopped
+    <<: *logging
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [sadhak-obs]
+    mem_limit: 256m
+
+  # On `default` as well, because that is where the database is. The standalone
+  # stack reaches it across the host gateway instead, having no other route.
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    restart: unless-stopped
+    <<: *logging
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATA_SOURCE_NAME: postgres://sadhak:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/sadhak?sslmode=disable
+    networks:
+      - default
+      - sadhak-obs
+    mem_limit: 128m
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    restart: unless-stopped
+    <<: *logging
+    networks: [sadhak-obs]
+    mem_limit: 128m
+
+configs:
+  # Inline content, interpolated at deploy time. Empty when METRICS_TOKEN is
+  # unset, which Prometheus presents as an empty bearer and /metrics answers
+  # 404 to — the same outcome as no token at all, and visible as a down target
+  # rather than as a container that will not start.
+  metrics_token:
+    content: ${METRICS_TOKEN:-}
+
 volumes:
   pgdata:
+  lokidata:
+  # Kept across restarts: dropping it throws away Alloy's read positions, and
+  # the next start replays every container log file it can still see.
+  alloydata:
+  tempodata:
+  promdata:
+  alertmanagerdata:
+  grafanadata:
 
   #
   # n8n's data, with a name that can be changed from Dokploy.
