@@ -282,6 +282,30 @@ mcpRoutes.post("/mcp", (c) => {
  */
 mcpRoutes.post("/mcp/k/:key", (c) => serveMcp(c, c.req.param("key")));
 
+/**
+ * "We are here, we just do not do that" — which is a different answer from
+ * "there is nothing here".
+ *
+ * Streamable HTTP lets a client open a server-to-client SSE stream with GET,
+ * and terminate a session with DELETE. This server is stateless and pushes
+ * nothing, so it supports neither; the spec's answer for that is 405, and it
+ * says so precisely because a 404 tells a client the endpoint does not exist.
+ * A client that probes for the stream and reads "not found" can reasonably
+ * conclude it has the wrong URL and abandon a connection that would otherwise
+ * have worked over POST alone.
+ */
+const methodNotAllowed = (c: Context) =>
+  c.json(
+    rpcError(null, -32601, "This server is stateless: use POST for every request."),
+    405,
+    { Allow: "POST" },
+  );
+
+mcpRoutes.get("/mcp", methodNotAllowed);
+mcpRoutes.delete("/mcp", methodNotAllowed);
+mcpRoutes.get("/mcp/k/:key", methodNotAllowed);
+mcpRoutes.delete("/mcp/k/:key", methodNotAllowed);
+
 async function callTool(name: string, args: Record<string, unknown>, ctx: McpContext) {
   switch (name) {
     case "propose_change": {

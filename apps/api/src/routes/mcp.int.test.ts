@@ -456,13 +456,31 @@ describe("the JSON-RPC envelope", () => {
     expect(res.status).toBe(400);
   });
 
-  it("serves only POST — a GET on the endpoint is not a stream", async () => {
-    // Streamable HTTP allows a server-opened SSE channel on GET. This server
-    // is stateless and does not offer one; the assertion pins that a client
-    // trying gets a clean refusal rather than a hang.
+  it("refuses a stream probe with 405 — present, but not a stream", async () => {
+    // Streamable HTTP allows a server-opened SSE channel on GET. This server is
+    // stateless and does not offer one, and the spec's answer for that is 405.
+    // It was 404 until a connector failed to finish connecting: "not found" is
+    // grounds to conclude the URL is wrong and abandon a session that works
+    // perfectly over POST, where "method not allowed" names the endpoint as
+    // real and the method as the part that is not.
     const res = await mcpApp().request("/mcp", { method: "GET", headers: auth });
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(405);
+    expect(res.headers.get("allow")).toBe("POST");
+  });
+
+  it("refuses a session teardown the same way", async () => {
+    // DELETE is how a client ends a session. Stateless: there is nothing to
+    // end, but the endpoint is still there.
+    const res = await mcpApp().request("/mcp", { method: "DELETE", headers: auth });
+
+    expect(res.status).toBe(405);
+  });
+
+  it("answers the path-credential form identically", async () => {
+    const res = await mcpApp().request("/mcp/k/whatever", { method: "GET" });
+
+    expect(res.status).toBe(405);
   });
 });
 
@@ -840,7 +858,9 @@ describe("a successful tool call over the wire", () => {
 });
 
 describe("the endpoint's method surface", () => {
-  it.each(["PUT", "PATCH", "DELETE"])("does not answer %s", async (method) => {
+  // GET and DELETE are part of the transport and answer 405; these are not
+  // part of it at all, so there is nothing to say about them but 404.
+  it.each(["PUT", "PATCH"])("does not answer %s", async (method) => {
     const res = await mcpApp().request("/mcp", { method, headers: auth });
 
     expect(res.status).toBe(404);
