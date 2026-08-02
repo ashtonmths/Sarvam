@@ -123,5 +123,172 @@ services:
     ports:
       - "3005:3000"
 
+  # ------------------------------------------------------------ monitoring
+  #
+  # Prometheus and Grafana alongside the app, so `up` brings the dashboards
+  # with it instead of needing a second command.
+  #
+  # This is not the full observability stack. `pnpm obs:up` also runs Loki,
+  # Tempo, Alloy and four exporters, and it publishes Grafana and Prometheus on
+  # these same ports — so run one or the other, never both, or the second will
+  # fail to bind. What is here is the pair that answers "is the API healthy",
+  # which is the reason to have monitoring open while working on the API.
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    restart: unless-stopped
+    depends_on:
+      - api
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    volumes:
+      # A config of its own rather than the production one. That file scrapes
+      # exporters, Loki, Tempo and Alertmanager, none of which exist here, so
+      # reusing it would fill /targets with red for services that were never
+      # meant to be running.
+      - ./ops/observability/prometheus/prometheus.app.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/observability/prometheus/metrics-token:/etc/prometheus/metrics-token:ro
+      - promdata:/prometheus
+    ports:
+      - "9090:9090"
+
+  # Logs and traces, so Grafana's Explore is usable rather than pointing at
+  # datasources that are not running.
+  loki:
+    image: grafana/loki:3.3.2
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./ops/observability/loki/loki.yml:/etc/loki/loki.yml:ro
+      - lokidata:/loki
+    mem_limit: 512m
+    ports:
+      # Loki ships no web UI, so opening this in a browser correctly 404s.
+      # Published for curl and health checks; Grafana Explore is the interface.
+      - "3100:3100"
+
+  # Alloy ships container logs into Loki over the Docker socket. Mounted
+  # read-only and never exposed over TCP — the config header treats this as a
+  # real security surface, and it is.
+  #
+  # Worth knowing what changes here versus `pnpm obs:up`: there the API runs on
+  # the host under `pnpm dev` and its logs never reach Loki. In this compose the
+  # API is a container, so its logs do.
+  alloy:
+    image: grafana/alloy:v1.5.1
+    restart: unless-stopped
+    depends_on: [loki]
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./ops/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloydata:/var/lib/alloy/data
+    environment:
+      # Without this the collector defaults to `prod`, and every query run on a
+      # laptop reads {env="prod"} — the one time that matters is when somebody
+      # is looking at their own machine and believes they are looking at the
+      # VPS. The config header says so; this is the overlay that honours it.
+      SADHAK_LOG_ENV: local
+    mem_limit: 128m
+
+  # Tempo. This is also what makes OTEL_EXPORTER_OTLP_ENDPOINT above resolve:
+  # `tempo` is a sibling service on this network, so unlike the obs-stack path
+  # there is no host-gateway alias to keep working.
+  tempo:
+    image: grafana/tempo:2.7.0
+    restart: unless-stopped
+    command: -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - ./ops/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempodata:/var/tempo
+    mem_limit: 512m
+    ports:
+      # 3200 for queries and health, 4318 for OTLP/HTTP ingest. Published so
+      # curl and a host-run `pnpm dev` can both reach it.
+      - "3200:3200"
+      - "4318:4318"
+
+  # The four exporters the infrastructure dashboard reads.
+  #
+  # Prometheus scrapes the API for everything Sadhak measures about itself, but
+  # `pg_*`, `node_*`, `container_*` and `probe_*` have no other source — without
+  # these, dashboard 4 renders entirely empty and nothing on it says why.
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Straight to the compose service. The observability stack reaches the
+      # database across the host gateway because it runs on its own network;
+      # here `db` is a sibling, so there is no gateway hop to configure.
+      DATA_SOURCE_NAME: postgres://sadhak:sadhak@db:5432/sadhak?sslmode=disable
+    mem_limit: 128m
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/host/root
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    mem_limit: 128m
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    mem_limit: 256m
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    restart: unless-stopped
+    mem_limit: 128m
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-sadhak-dev}
+      # Anonymous viewing is off; this publishes org counts and traffic volume.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      # The same dashboards the production stack provisions, so a panel fixed
+      # in one is fixed in both. Datasources are separate because the URL of
+      # Prometheus differs between the two compose files.
+      - ./ops/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./ops/observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./ops/observability/grafana/provisioning-app/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "3002:3000"
+
 volumes:
   models:
+  promdata:
+  grafanadata:
+  lokidata:
+  # Kept across restarts on purpose: dropping it throws away Alloy's read
+  # positions, and the next start replays every container log file it can see.
+  alloydata:
+  tempodata:

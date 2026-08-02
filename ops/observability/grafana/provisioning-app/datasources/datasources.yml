@@ -1,0 +1,52 @@
+# Datasources for the local app stack (docker-compose.app.yml).
+#
+# Separate from provisioning/datasources/datasources.yml because the service
+# URLs differ between the two stacks — there Prometheus, Loki and Tempo sit on
+# the external `sadhak-obs` network, here they are siblings of the api.
+#
+# The uids must stay `sadhak-prometheus`, `sadhak-loki` and `sadhak-tempo`: the
+# dashboards are shared between both stacks and reference them by uid, and
+# `pnpm check:obs` fails on any dashboard naming a uid provisioning does not
+# declare.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: sadhak-prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 15s
+
+  - name: Loki
+    type: loki
+    uid: sadhak-loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      # The join that makes tracing worth opening: a log line carries traceId,
+      # and this turns it into a link into Tempo. Without it the two signals
+      # live in separate tabs and people stop crossing between them.
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"traceId":"(\w+)"'
+          url: "$${__value.raw}"
+          datasourceUid: sadhak-tempo
+
+  - name: Tempo
+    type: tempo
+    uid: sadhak-tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      # And the reverse direction: from a span, find the log lines it produced.
+      tracesToLogsV2:
+        datasourceUid: sadhak-loki
+        filterByTraceID: true
+        spanStartTimeShift: -2m
+        spanEndTimeShift: 2m
+      serviceMap:
+        datasourceUid: sadhak-prometheus

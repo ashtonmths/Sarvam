@@ -1,0 +1,76 @@
+# Prometheus for the local app stack (docker-compose.app.yml).
+#
+# Deliberately smaller than prometheus.yml. That one belongs to the full
+# observability stack and scrapes four exporters, Loki, Tempo and Alertmanager
+# — none of which run here, so reusing it would fill /targets with red for
+# services nobody started and bury a genuinely broken API scrape among them.
+#
+# `api` resolves natively on the compose network here, so unlike the
+# `pnpm obs:up` path there is no host-gateway alias to maintain.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    stack: local-app
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # The reason this file exists. /metrics 404s unless METRICS_TOKEN is set on
+  # the api container and presented as a bearer, so a missing token shows here
+  # as a 404 rather than as a connection error.
+  - job_name: sadhak-api
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics-token
+    static_configs:
+      - targets: ["api:3001"]
+
+  # Everything below feeds dashboard 4. The job names match the production
+  # config so the same dashboards work against either stack.
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  # Loki and Tempo expose their own metrics. Scraped so "is the log pipeline
+  # healthy" is answerable from the same place as everything else, rather than
+  # by noticing that Explore has gone quiet.
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+
+  - job_name: tempo
+    static_configs:
+      - targets: ["tempo:3200"]
+
+  # End-to-end TLS from outside the app: proves the certificate is valid and
+  # the whole path works, which no internal scrape can tell you. These are the
+  # public URLs, so from a laptop this reports on production, not localhost.
+  - job_name: blackbox-https
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://sadhak.online
+          - https://api.sadhak.online/healthz
+          - https://n8n.sadhak.online/healthz
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
