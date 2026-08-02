@@ -57,35 +57,57 @@ const strictHeaders = secureHeaders({
 /**
  * The one exception, and the reason it is an exception rather than a loosening.
  *
- * The OAuth consent screen is the only HTML this API serves, and it is a form:
- * under `form-action 'none'` the browser blocks its own submission, so the
- * grant can never be given. It needs `'self'` — which permits posting back
- * here and nowhere else, so the page still cannot be turned into a way to send
- * a visitor's input to somebody else's server.
+ * The OAuth consent screen is the only HTML this API serves, and it is a form.
+ * Under `form-action 'none'` the browser blocked its own submission, so the
+ * grant could never be given — but `'self'` alone was not enough either, and
+ * the reason is worth writing down.
+ *
+ * `form-action` is checked against the *redirect* a submission follows, not
+ * only its immediate target. Consent posts back here and this server answers
+ * with a 302 to the client's callback, so the browser weighs that callback
+ * against the directive and refuses — while naming the original action URL in
+ * the error, which makes it read as though same-origin were being rejected.
+ *
+ * So the callback's origin has to be named. It is not a wildcard and not
+ * configuration: it is the exact `redirect_uri` this request was validated
+ * against, which the handler already checked is one the client registered.
  *
  * `style-src 'unsafe-inline'` is for the page's own <style> block. There is no
  * `script-src` at all, so nothing on this page can execute, and every value
  * interpolated into it is HTML-escaped at the point of interpolation.
  */
-const consentHeaders = secureHeaders({
-  ...SHARED_HEADERS,
-  contentSecurityPolicy: {
-    defaultSrc: ["'none'"],
-    frameAncestors: ["'none'"],
-    baseUri: ["'none'"],
-    formAction: ["'self'"],
-    styleSrc: ["'unsafe-inline'"],
-  },
-});
+export function consentCsp(redirectOrigin: string | null): string {
+  const formAction = redirectOrigin ? `'self' ${redirectOrigin}` : "'self'";
+  return [
+    "default-src 'none'",
+    "frame-ancestors 'none'",
+    "base-uri 'none'",
+    "style-src 'unsafe-inline'",
+    `form-action ${formAction}`,
+  ].join("; ");
+}
+
+/** The consent route's non-CSP armor. Its CSP is the handler's to set. */
+const consentBaseHeaders = secureHeaders({ ...SHARED_HEADERS });
 
 /**
  * Chosen per path rather than set once, because `secureHeaders` writes its
  * headers on the way out — a route handler that set its own CSP would simply
- * be overwritten on the unwind, and the exception has to be made here or not
- * at all.
+ * be overwritten on the unwind.
+ *
+ * On the consent route the CSP is deliberately left to the handler, which is
+ * the only place that knows the validated callback origin. Anything on that
+ * path that does not set one — an early rejection, say — still gets the strict
+ * policy, so a missing header is never how a response ends up unprotected.
  */
-export const securityHeaders: MiddlewareHandler = (c, next) =>
-  c.req.path === "/oauth/authorize" ? consentHeaders(c, next) : strictHeaders(c, next);
+export const securityHeaders: MiddlewareHandler = async (c, next) => {
+  if (c.req.path !== "/oauth/authorize") return strictHeaders(c, next);
+
+  await consentBaseHeaders(c, next);
+  if (!c.res.headers.get("content-security-policy")) {
+    c.header("content-security-policy", consentCsp(null));
+  }
+};
 
 /**
  * Browser callers only. `WEB_ORIGINS` is an exact-match allowlist with no

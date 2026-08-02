@@ -19,6 +19,7 @@ import { z } from "zod";
 import { resolveSession, SESSION_COOKIE } from "../auth/session.js";
 import { config } from "../config.js";
 import { db } from "../db.js";
+import { consentCsp } from "../http/security.js";
 import { issuer } from "./oauth-metadata.js";
 
 /**
@@ -233,6 +234,12 @@ oauthRoutes.get("/oauth/authorize", async (c) => {
       "none of the requested scopes are available to you",
     );
   }
+
+  // The callback this grant will end at, named in the policy so the browser
+  // will follow the redirect the submission produces. Safe to name because it
+  // is the value already checked against the client's registered list above,
+  // not whatever the request asked for.
+  c.header("content-security-policy", consentCsp(new URL(q.redirect_uri).origin));
 
   return c.html(
     consentPage({ client: client.clientName, scopes: granted, query: c.req.query() }),

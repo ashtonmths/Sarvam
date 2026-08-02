@@ -231,6 +231,37 @@ describe("the content security policy", () => {
     expect(csp).not.toContain("form-action 'none'");
   });
 
+  it("names the callback origin, because form-action is checked on the redirect", async () => {
+    // Consent posts here and this server answers with a 302 to the client's
+    // callback. The browser weighs that callback against form-action, so
+    // 'self' alone blocks the submission — while naming this origin in the
+    // error, which reads as though same-origin were being refused.
+    const { cookie } = await seedPerson();
+    const { body: client } = await registerClient();
+    const { challenge } = pkce();
+
+    const res = await edgeMountedApp().request(
+      `/oauth/authorize?${new URLSearchParams(authorizeParams(client.client_id, challenge))}`,
+      { headers: { cookie } },
+    );
+
+    expect(res.headers.get("content-security-policy")).toContain(
+      "form-action 'self' https://claude.ai",
+    );
+  });
+
+  it("names no origin at all when the request never got that far", async () => {
+    // An unknown client is rejected before any redirect_uri is validated, and
+    // an unvalidated origin must never reach the policy.
+    const res = await edgeMountedApp().request(
+      "/oauth/authorize?response_type=code&client_id=nope&redirect_uri=https%3A%2F%2Fevil.test%2Fcb&code_challenge=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&code_challenge_method=S256",
+    );
+    const csp = res.headers.get("content-security-policy") ?? "";
+
+    expect(csp).toContain("form-action 'self'");
+    expect(csp).not.toContain("evil.test");
+  });
+
   it("still refuses to be a form target anywhere else", async () => {
     // The exception is one route wide. Everything else keeps the CSP an API
     // that serves no HTML should carry.
