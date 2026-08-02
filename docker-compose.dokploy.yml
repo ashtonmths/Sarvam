@@ -175,6 +175,19 @@ services:
       # allowlist their way to the cloud metadata endpoint.
       EGRESS_ALLOW_PRIVATE_HOSTS: n8n,db
 
+      # Raised for the demo, and only because of the mobile Alerts screen.
+      #
+      # It polls every 5s and each tick is two requests, so one phone sitting on
+      # that screen spends 24/min of this budget continuously. The default of 60
+      # holds two such devices; a room of them shares one NAT address and the
+      # third person starts collecting 429s mid-demo.
+      #
+      # This is a presentation setting, not a considered limit. It weakens a
+      # real control — the per-IP tier is what refuses an unauthenticated flood
+      # before anything touches Postgres — so it wants lowering again, or the
+      # poll lengthening, once the screen is not being shown live.
+      RATE_LIMIT_IP_PER_MIN: "300"
+
       # GitHub. The token is the fallback the change store and the Historian
       # use where no App installation covers a repository; the App is what the
       # merge gate needs to post a Check Run. All optional — the API boots and

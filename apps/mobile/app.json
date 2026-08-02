@@ -2,6 +2,7 @@
   "expo": {
     "name": "Sadhak",
     "slug": "sadhak",
+    "owner": "tekno123",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "sadhak",
@@ -29,9 +30,17 @@
       "output": "static",
       "favicon": "./assets/logo.png"
     },
-    "plugins": ["expo-router", "expo-secure-store", "expo-font"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font"
+    ],
     "extra": {
-      "apiUrl": "https://api.sadhak.online"
+      "apiUrl": "https://api.sadhak.online",
+      "router": {},
+      "eas": {
+        "projectId": "83745f70-3714-47e1-bdca-c92a6badb85d"
+      }
     }
   }
 }

@@ -10,11 +10,21 @@ import { api, type DecisionRow, type DriftSummary, type Page } from "./api";
  * instead is poll the two things worth waking someone for and raise a *local*
  * notification when they change: a BLOCK verdict, and drift findings opening.
  *
- * Polling is honest about its limits: it only runs while the app is open. It is
- * also why the interval is 60s rather than 5s — nothing here is worth a battery.
+ * Polling runs while the screen is mounted and stops when the app leaves the
+ * foreground.
  */
 
-export const POLL_MS = 60_000;
+/**
+ * Five seconds, chosen for how fast a blocked change should surface.
+ *
+ * Two requests per tick against a per-IP budget of 60/min (RATE_LIMIT_IP_PER_MIN)
+ * means one device on this screen spends 24 of them continuously. That is fine
+ * for one user and not fine for several behind one NAT — an office or a carrier
+ * CGNAT puts every phone on the same key, and the fourth one starts collecting
+ * 429s. Raise the limit or lengthen this before more than a handful of people
+ * sit on Alerts at once.
+ */
+export const POLL_MS = 5_000;
 
 /**
  * Pings work anywhere but web, Expo Go included.

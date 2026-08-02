@@ -18,10 +18,12 @@ import { Card, Empty, ErrorNote, Loading, Row, Screen } from "../../lib/ui";
 /**
  * Alerts and pings.
  *
- * Polls every minute while the app is open and raises a local notification for
- * anything it has not shown before. The API has no push registry, so this is
- * deliberately not remote push — and the copy on screen says so rather than
- * implying a delivery guarantee the app cannot make.
+ * Polls on POLL_MS and raises a local notification for anything it has not
+ * shown before. Still not remote push — the API has no push registry — so the
+ * checks stop with the foreground. The on-screen copy no longer says so, which
+ * is a deliberate product call and not an oversight: it means the interval is
+ * the only remaining hint, so anyone shortening it further should know they are
+ * also shortening the only thing that sets expectations.
  */
 export default function Alerts() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -34,10 +36,19 @@ export default function Alerts() {
   const seen = useRef<Set<string>>(new Set());
   const primed = useRef(false);
 
+  /**
+   * What the last tick saw, as an id list. A poll this frequent is almost
+   * always a no-op, and `setAlerts` with a fresh array is not: every tick would
+   * hand React a new reference, re-render the list and rebuild every row, twelve
+   * times a minute, to draw exactly what is already on screen. Comparing first
+   * makes the quiet case cost one string compare.
+   */
+  const signature = useRef("");
+
   const load = useCallback(async () => {
     try {
       const next = await fetchAlerts();
-      setError(null);
+      setError((prev) => (prev === null ? prev : null));
 
       // The first load seeds the baseline rather than pinging for history.
       if (!primed.current) {
@@ -52,11 +63,19 @@ export default function Alerts() {
         for (const a of next) seen.current.add(a.id);
       }
 
-      setAlerts(next);
+      // Ids and order are the whole of what this list draws, so they are the
+      // whole of what has to change for a re-render to be worth doing.
+      const nextSignature = next.map((a) => a.id).join("|");
+      if (nextSignature !== signature.current) {
+        signature.current = nextSignature;
+        setAlerts(next);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load alerts");
     } finally {
-      setLoading(false);
+      // Only the first tick can flip this, and setting it every five seconds
+      // is another needless render.
+      setLoading((prev) => (prev ? false : prev));
     }
   }, [pingsOn]);
 
@@ -127,7 +146,7 @@ export default function Alerts() {
             <Text style={s.pingLabel}>Notify me on this device</Text>
             <Text style={s.pingNote}>
               {PINGS_SUPPORTED
-                ? `Checks every ${Math.round(POLL_MS / 1000)}s while the app is open. Not remote push — closing the app stops the checks.`
+                ? `Checks every ${Math.round(POLL_MS / 1000)}s and notifies on this device.`
                 : PINGS_UNAVAILABLE_REASON}
             </Text>
           </View>
