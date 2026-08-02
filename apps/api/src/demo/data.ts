@@ -271,11 +271,34 @@ async function seedDocuments(orgId: number): Promise<void> {
 }
 
 async function seedChanges(orgId: number): Promise<number | null> {
-  const [repo] = (await raw`
+  /**
+   * Creates the repository if the org has none, rather than skipping.
+   *
+   * Skipping was silent and cost the whole feature: a fresh deployment has no
+   * tracked repository, so the seeded commits went nowhere, the investigate
+   * page read "0 changes across 0 repositories", and the workflow diagnosis
+   * found no change in any window and concluded "nothing we shipped explains
+   * this" every single time. The demo looked like it worked and could not
+   * reach its own headline case.
+   *
+   * The row is the same shape the GitHub App writes, so a real installation
+   * later adopts it by (org, owner, name) rather than creating a second.
+   */
+  let [repo] = (await raw`
     SELECT id FROM repositories WHERE org_id = ${orgId} ORDER BY id LIMIT 1
   `) as unknown as Array<{ id: number }>;
+
   if (!repo) {
-    log("changes: skipped, no repository is tracked yet");
+    [repo] = (await raw`
+      INSERT INTO repositories (org_id, owner, name, default_branch)
+      VALUES (${orgId}, 'ashtonmths', 'sarvam', 'main')
+      ON CONFLICT (org_id, owner, name) DO UPDATE SET default_branch = EXCLUDED.default_branch
+      RETURNING id
+    `) as unknown as Array<{ id: number }>;
+    log("repository: ashtonmths/sarvam created so changes have somewhere to hang");
+  }
+  if (!repo) {
+    log("changes: skipped, no repository could be created");
     return null;
   }
 
