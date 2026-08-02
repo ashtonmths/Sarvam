@@ -13,7 +13,8 @@
     "db:migrate": "tsx src/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "seed:demo": "tsx src/seed-demo.ts"
+    "seed:demo": "tsx src/seed-demo.ts",
+    "seed:workflows": "tsx src/seed-workflows.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",

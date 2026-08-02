@@ -34,7 +34,8 @@
     "check:claims": "tsx scripts/check-docs-claims.ts",
     "openapi:emit": "pnpm --filter @sadhak/api exec tsx scripts/emit-openapi.ts",
     "check:openapi": "pnpm --filter @sadhak/api exec tsx scripts/emit-openapi.ts --check",
-    "seed:demo": "pnpm --filter @sadhak/api seed:demo"
+    "seed:demo": "pnpm --filter @sadhak/api seed:demo",
+    "seed:workflows": "pnpm --filter @sadhak/api seed:workflows"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
