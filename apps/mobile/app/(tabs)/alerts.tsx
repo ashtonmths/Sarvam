@@ -1,5 +1,6 @@
+import { Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, StyleSheet, Switch, Text, View } from "react-native";
+import { AppState, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import {
   type Alert,
   askPermission,
@@ -31,6 +32,7 @@ export default function Alerts() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pingsOn, setPingsOn] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   // Ids already surfaced, so a poll does not re-ping the same block forever.
   const seen = useRef<Set<string>>(new Set());
@@ -118,6 +120,43 @@ export default function Alerts() {
     if (!granted) setError("Notifications are off for Sadhak in system settings.");
   }, []);
 
+  /**
+   * Fires one notification on demand.
+   *
+   * Every other ping is a side effect of an alert the org did not have a moment
+   * ago, which is correct and untestable: turning the switch on shows nothing,
+   * because the first poll seeds a baseline rather than replaying history. So
+   * there was no way to confirm notifications worked short of breaking
+   * something in production and waiting.
+   *
+   * It asks for permission if the switch is off, since "nothing happened" is
+   * the one outcome a test button must never produce.
+   */
+  const sendTestPing = useCallback(async () => {
+    setTesting(true);
+    setError(null);
+    try {
+      const granted = pingsOn || (await askPermission());
+      if (!granted) {
+        setError("Notifications are off for Sadhak in system settings.");
+        return;
+      }
+      setPingsOn(true);
+      await ping({
+        // Shaped like a real block alert rather than a lorem string: what is
+        // being checked is whether a real one would read well on the lock
+        // screen. `test` keeps it honest to anyone reading over a shoulder.
+        id: `test-${Date.now()}`,
+        kind: "block",
+        title: "Change blocked",
+        body: "delete invoices.vat_rate · test",
+        at: new Date().toISOString(),
+      });
+    } finally {
+      setTesting(false);
+    }
+  }, [pingsOn]);
+
   const blocks = alerts.filter((a) => a.kind === "block").length;
 
   return (
@@ -144,11 +183,11 @@ export default function Alerts() {
         <View style={s.pingRow}>
           <View style={s.pingBody}>
             <Text style={s.pingLabel}>Notify me on this device</Text>
-            <Text style={s.pingNote}>
-              {PINGS_SUPPORTED
-                ? `Checks every ${Math.round(POLL_MS / 1000)}s and notifies on this device.`
-                : PINGS_UNAVAILABLE_REASON}
-            </Text>
+            {/* Nothing to say when it works. The note is only worth the space
+                when the switch cannot do what its label promises. */}
+            {PINGS_SUPPORTED ? null : (
+              <Text style={s.pingNote}>{PINGS_UNAVAILABLE_REASON}</Text>
+            )}
           </View>
           <Switch
             value={pingsOn}
@@ -159,6 +198,21 @@ export default function Alerts() {
             ios_backgroundColor={T.line}
           />
         </View>
+
+        {PINGS_SUPPORTED ? (
+          <Pressable
+            onPress={() => void sendTestPing()}
+            disabled={testing}
+            accessibilityRole="button"
+            accessibilityLabel="Send a test notification"
+            style={({ pressed }) => [s.test, pressed && s.testPressed]}
+          >
+            <Feather name="bell" size={13} color={T.thread} />
+            <Text style={s.testText}>
+              {testing ? "Sending…" : "Send a test notification"}
+            </Text>
+          </Pressable>
+        ) : null}
       </Card>
 
       {loading ? <Loading /> : null}
@@ -207,6 +261,20 @@ const s = StyleSheet.create({
   countTextBad: { color: T.blockInk },
 
   pingRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  test: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 14,
+    paddingVertical: 11,
+    borderRadius: 99,
+    borderWidth: 1,
+    borderColor: T.line,
+    backgroundColor: T.card,
+  },
+  testPressed: { backgroundColor: T.threadSoft, borderColor: T.thread },
+  testText: { fontFamily: body("600"), fontSize: 13, color: T.thread },
   pingBody: { flex: 1 },
   pingLabel: { fontFamily: body("600"), fontSize: 14, color: T.ink },
   pingNote: {
