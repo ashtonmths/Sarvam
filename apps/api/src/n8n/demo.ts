@@ -1,6 +1,7 @@
 import { connectorInstances } from "@sadhak/shared/schema";
 import { and, eq } from "drizzle-orm";
 import { runCrawl } from "../cartographer/index.js";
+import { postN8nAlert } from "../ci/notify.js";
 import { db, sql as raw } from "../db.js";
 import { UserError } from "../errors.js";
 import { log } from "../log.js";
@@ -273,9 +274,13 @@ export async function createDemoWorkflows(
  * finds it and the diagnosis runs — the same path a genuine failure takes, so
  * what the demo shows is the product working rather than a screenshot of it.
  */
-export async function simulateWorkflowFailure(
-  orgId: number,
-): Promise<{ failureId: number | null; state: string; diagnosis: unknown }> {
+export async function simulateWorkflowFailure(orgId: number): Promise<{
+  failureId: number | null;
+  state: string;
+  diagnosis: unknown;
+  /** Whether Slack accepted it, and if not, why — never a silent nothing. */
+  slack: { posted: boolean; reason?: string };
+}> {
   const ws = await workspace(orgId);
   const headers = { "X-N8N-API-KEY": ws.apiKey, "content-type": "application/json" };
 
@@ -375,7 +380,14 @@ export async function simulateWorkflowFailure(
     WHERE org_id = ${orgId} AND execution_id < 900000
     ORDER BY detected_at DESC LIMIT 1
   `) as unknown as Array<{ id: number }>;
-  if (!row) return { failureId: null, state: "not_captured", diagnosis: null };
+  if (!row) {
+    return {
+      failureId: null,
+      state: "not_captured",
+      diagnosis: null,
+      slack: { posted: false, reason: "nothing was captured to post" },
+    };
+  }
 
   await diagnoseFailure(Number(row.id));
 
@@ -383,9 +395,24 @@ export async function simulateWorkflowFailure(
     SELECT diagnosis_state, diagnosis FROM n8n_execution_failures WHERE id = ${row.id}
   `) as unknown as Array<{ diagnosis_state: string; diagnosis: unknown }>;
 
+  /**
+   * Post it. This was missing, and the omission was invisible: the button
+   * diagnosed correctly, returned a diagnosis, and never told anyone — so a
+   * second run looked like Slack silently dropping a duplicate rather than
+   * like the alert never being sent.
+   */
+  const posted = await postN8nAlert(orgId, Number(row.id));
+
   return {
     failureId: Number(row.id),
     state: done?.diagnosis_state ?? "unknown",
     diagnosis: done?.diagnosis ?? null,
+    slack: posted
+      ? { posted: true }
+      : {
+          posted: false,
+          reason:
+            "Slack did not accept it. The usual causes are no channel set, the bot not being in the channel, or no Slack connected — the API log records which.",
+        },
   };
 }

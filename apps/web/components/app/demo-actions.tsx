@@ -23,6 +23,7 @@ interface WorkflowResult {
 interface SimulateResult {
   failureId: number | null;
   state: string;
+  slack?: { posted: boolean; reason?: string };
   diagnosis: {
     cause?: string;
     recommendation?: string;
@@ -217,6 +218,13 @@ export function DemoActions() {
                   {d.windowsSearched === 1 ? "" : "s"} — {d.searchReach}
                 </p>
               )}
+              {/* Said out loud, because a diagnosis nobody was told about is
+                  the failure mode this whole path exists to avoid. */}
+              <p className="demo__reach">
+                {result.slack?.posted
+                  ? "Posted to Slack."
+                  : `Not posted to Slack — ${result.slack?.reason ?? "no reason recorded"}`}
+              </p>
               <p className="demo__note">
                 <a href={`/app/workflows/${result.failureId}`}>
                   See the full diagnosis →
