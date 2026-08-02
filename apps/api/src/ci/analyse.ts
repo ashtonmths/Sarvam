@@ -322,10 +322,7 @@ export async function analyseFailure(failureId: number): Promise<void> {
 
   const query = slackQueryFor(step?.stepName ?? null, excerpt);
   const slack = query
-    ? await searchSlack(
-        { orgId: row.orgId, edgeId: 0, seenUrls: new Set(), seenContent: new Map() },
-        query,
-      )
+    ? await searchSlack({ orgId: row.orgId }, query)
     : { hits: [], unavailable: "No search terms could be derived from the failure." };
 
   // Uploaded notes are searched with the same terms. A runbook or a postmortem

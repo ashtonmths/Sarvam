@@ -1,3 +1,4 @@
+import { searchSlack, tsToIso } from "../historian/tools/slack.js";
 import { complete, LlmDisabledError, LlmQuotaExhaustedError } from "../llm.js";
 import { type DocumentHit, searchDocuments } from "./retrieve.js";
 
@@ -18,6 +19,25 @@ import { type DocumentHit, searchDocuments } from "./retrieve.js";
 const SOURCES = 8;
 
 /**
+ * Slack is searched live rather than mirrored into the document corpus.
+ *
+ * A synced copy would rank in one embedding space with the documents, which is
+ * tidier — but it is also stale by exactly the interval nobody tunes, and the
+ * questions worth asking here ("what did we decide", "is this still true") are
+ * the ones where a day-old answer is a wrong answer. Live costs a request per
+ * ask and gives up cross-source ranking; that trade is the right way round for
+ * a tool whose whole claim is that you can check what it told you.
+ *
+ * Capped low. These are appended to eight document chunks, and the point is to
+ * catch the decision that was made in a thread and never written down — not to
+ * turn the prompt into a channel dump.
+ */
+const SLACK_SOURCES = 5;
+
+/** Slack messages run long and repetitive; the tail is rarely the substance. */
+const SLACK_EXCERPT = 400;
+
+/**
  * The instruction that makes this different from a chat window.
  *
  * The whole product claim is that an answer is worth having only when you can
@@ -28,6 +48,8 @@ const SOURCES = 8;
  * is exactly the thing a reader has no way to catch.
  */
 const SYSTEM = `You answer questions about an engineering organisation using only the numbered sources provided.
+
+Sources are of two kinds. A document is written and usually reviewed; a Slack message is a moment in a conversation and may be superseded by a later one. Weigh them accordingly, and say when a thread and a document disagree.
 
 Rules:
 - Use only the sources. Do not add background knowledge, plausible detail, or anything you were not given.
@@ -42,6 +64,9 @@ export const NO_SOURCES_ANSWER =
 
 export interface AskSource {
   n: number;
+  /** Which corpus this came from, so a reader can weigh a thread against a
+   * minuted decision rather than seeing one undifferentiated list. */
+  kind: "document" | "slack";
   title: string;
   speaker: string | null;
   permalink: string;
@@ -55,37 +80,102 @@ export interface AskAnswer {
   grounded: boolean;
   /** Set only when retrieval succeeded but the model could not be called. */
   unavailable?: string;
+  /**
+   * Sources that could not be consulted, said out loud.
+   *
+   * Slack being unconnected and Slack being searched-and-empty are different
+   * facts, and collapsing them lets a reader believe a thread was checked when
+   * it never was. That belief is the one this product exists to remove.
+   */
+  notes?: string[];
+}
+
+function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 /** The citation list a reader checks the answer against. */
 function citations(hits: DocumentHit[]): AskSource[] {
   return hits.map((hit, i) => ({
     n: i + 1,
+    kind: "document" as const,
     title: hit.title,
     speaker: hit.speaker,
     permalink: hit.permalink,
     occurredAt: hit.occurredAt,
-    excerpt: hit.body.length > 240 ? `${hit.body.slice(0, 240)}…` : hit.body,
+    excerpt: clip(hit.body, 240),
   }));
 }
 
 export async function askDocuments(orgId: number, question: string): Promise<AskAnswer> {
-  const hits = await searchDocuments(orgId, question, SOURCES);
+  /**
+   * Both corpora at once. Slack is a network call to a third party and
+   * documents are a local index, so running them in series would spend the
+   * slower one's latency on every question for no reason. `allSettled`
+   * because Slack throwing must cost Slack's sources, never the answer.
+   */
+  const [documents, slack] = await Promise.allSettled([
+    searchDocuments(orgId, question, SOURCES),
+    searchSlack({ orgId }, question),
+  ]);
+
+  const docHits = documents.status === "fulfilled" ? documents.value : [];
+  const notes: string[] = [];
+
+  if (documents.status === "rejected") {
+    notes.push("The document index could not be searched, so this answer omits it.");
+  }
+
+  let slackSources: AskSource[] = [];
+  if (slack.status === "rejected") {
+    notes.push("Slack could not be reached, so this answer omits it.");
+  } else {
+    if (slack.value.unavailable) notes.push(slack.value.unavailable);
+    slackSources = slack.value.hits.slice(0, SLACK_SOURCES).map((hit, i) => ({
+      // Numbered after the documents, so `[1]` means the same thing in the
+      // prose and in the list below it.
+      n: docHits.length + i + 1,
+      kind: "slack" as const,
+      title: `Slack · ${hit.author}`,
+      speaker: hit.author,
+      permalink: hit.permalink,
+      occurredAt: hit.authored_at
+        ? new Date(hit.authored_at)
+        : (() => {
+            const iso = tsToIso(hit.ts);
+            return iso ? new Date(iso) : null;
+          })(),
+      excerpt: clip(hit.text, SLACK_EXCERPT),
+    }));
+  }
+
+  const sources = [...citations(docHits), ...slackSources];
 
   /**
    * No sources, no model call. Retrieval returning nothing is already the
    * answer, and spending a request to have the model say so costs a slot from
    * a shared per-minute budget to produce a worse version of this sentence.
    */
-  if (hits.length === 0) {
-    return { answer: NO_SOURCES_ANSWER, sources: [], grounded: false };
+  if (sources.length === 0) {
+    return {
+      answer: NO_SOURCES_ANSWER,
+      sources: [],
+      grounded: false,
+      ...(notes.length > 0 ? { notes } : {}),
+    };
   }
 
-  const context = hits
-    .map((hit, i) => {
-      const when = hit.occurredAt ? hit.occurredAt.toISOString().slice(0, 10) : "undated";
-      const who = hit.speaker ? `, ${hit.speaker}` : "";
-      return `[${i + 1}] ${hit.title} (${when}${who})\n${hit.body}`;
+  const context = sources
+    .map((source) => {
+      const when = source.occurredAt
+        ? source.occurredAt.toISOString().slice(0, 10)
+        : "undated";
+      const who = source.speaker ? `, ${source.speaker}` : "";
+      const full =
+        source.kind === "document"
+          ? (docHits[source.n - 1]?.body ?? source.excerpt)
+          : source.excerpt;
+      return `[${source.n}] ${source.title} (${when}${who})\n${full}`;
     })
     .join("\n\n");
 
@@ -105,8 +195,9 @@ export async function askDocuments(orgId: number, question: string): Promise<Ask
       // Returned whether or not the model cited them. The reader decides
       // whether the answer is supported, which they cannot do if the evidence
       // is filtered to whatever the model happened to mention.
-      sources: citations(hits),
+      sources,
       grounded: true,
+      ...(notes.length > 0 ? { notes } : {}),
     };
   } catch (error) {
     /**
@@ -122,8 +213,9 @@ export async function askDocuments(orgId: number, question: string): Promise<Ask
           error instanceof LlmDisabledError
             ? "The model is switched off for this deployment. These are the passages that match your question."
             : "The model's request budget is spent for now. These are the passages that match your question.",
-        sources: citations(hits),
+        sources,
         grounded: false,
+        ...(notes.length > 0 ? { notes } : {}),
       };
     }
     throw error;

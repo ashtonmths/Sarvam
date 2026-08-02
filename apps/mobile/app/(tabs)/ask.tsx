@@ -124,6 +124,13 @@ export default function Ask() {
           {answer.answer ? (
             <Card title="Answer">
               <Text style={s.answer}>{answer.answer}</Text>
+              {/* An unsearched source that says nothing looks exactly like one
+                  that found nothing, so the difference is stated. */}
+              {answer.notes?.map((note) => (
+                <Text key={note} style={s.note}>
+                  {note}
+                </Text>
+              ))}
             </Card>
           ) : null}
 
@@ -150,7 +157,13 @@ export default function Ask() {
                     <Text style={s.sourceTitle} numberOfLines={1}>
                       {source.title}
                     </Text>
-                    <Feather name="external-link" size={13} color={T.inkFaint} />
+                    {/* A thread and a minuted decision carry different weight;
+                        an undifferentiated list hides that. */}
+                    <Feather
+                      name={source.kind === "slack" ? "message-circle" : "file-text"}
+                      size={13}
+                      color={T.inkFaint}
+                    />
                   </View>
                   {source.speaker || source.occurredAt ? (
                     <Label>
@@ -196,6 +209,16 @@ const s = StyleSheet.create({
   promptText: { fontFamily: body("500"), fontSize: 13.5, color: T.inkSoft, flex: 1 },
 
   answer: { fontFamily: body("400"), fontSize: 15, lineHeight: 23, color: T.ink },
+  note: {
+    fontFamily: body("400"),
+    fontSize: 12,
+    lineHeight: 17,
+    color: T.inkFaint,
+    marginTop: 12,
+    paddingLeft: 10,
+    borderLeftWidth: 2,
+    borderLeftColor: T.line,
+  },
 
   source: {
     paddingVertical: 13,

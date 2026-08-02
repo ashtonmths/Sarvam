@@ -268,6 +268,7 @@ function askAnswer(overrides: Partial<AskAnswer> = {}): AskAnswer {
     sources: [
       {
         n: 1,
+        kind: "document",
         title: "Billing sync handover",
         speaker: "Priya",
         permalink: "https://sadhak.test/app/documents/4#chunk-2",
@@ -302,6 +303,7 @@ describe("renderAskText", () => {
           ...askAnswer().sources,
           {
             n: 2,
+            kind: "document",
             title: "Q1 planning",
             speaker: null,
             permalink: "https://sadhak.test/app/documents/9#chunk-0",

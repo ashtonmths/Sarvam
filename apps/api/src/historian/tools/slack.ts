@@ -87,7 +87,20 @@ export interface SearchResult {
   unavailable?: string;
 }
 
-export async function searchSlack(ctx: LoopCtx, query: string): Promise<SearchResult> {
+/**
+ * All this search needs of a caller. `LoopCtx` satisfies it structurally, so
+ * Historian is unchanged — but /ask can search Slack too without inventing an
+ * `edgeId` and two tracking maps that mean nothing outside the loop.
+ */
+export interface SlackSearchCtx {
+  orgId: number;
+  signal?: AbortSignal | undefined;
+}
+
+export async function searchSlack(
+  ctx: SlackSearchCtx,
+  query: string,
+): Promise<SearchResult> {
   const channels = await scopedChannels(ctx.orgId);
   if (channels.length === 0) {
     return {

@@ -17,6 +17,7 @@ import { ApiError, api } from "../../lib/api";
 
 interface Source {
   n: number;
+  kind: "document" | "slack";
   title: string;
   speaker: string | null;
   permalink: string;
@@ -29,6 +30,8 @@ interface AskResponse {
   sources: Source[];
   grounded: boolean;
   unavailable?: string;
+  /** Corpora that could not be consulted — said out loud, never implied. */
+  notes?: string[];
 }
 
 export function AskAi() {
@@ -143,6 +146,12 @@ export function AskAi() {
 
                 {result.answer && <p className="ask__answer">{result.answer}</p>}
 
+                {result.notes?.map((note) => (
+                  <p key={note} className="ask__note">
+                    {note}
+                  </p>
+                ))}
+
                 {result.sources.length > 0 && (
                   <>
                     <h3 className="ask__sources-title">Sources</h3>
@@ -153,6 +162,13 @@ export function AskAi() {
                             [{source.n}] {source.title}
                             {source.speaker ? ` · ${source.speaker}` : ""}
                           </a>
+                          {/* A thread and a minuted decision carry different
+                              weight; an undifferentiated list hides that. */}
+                          <span
+                            className={`tag tag--tiny${source.kind === "slack" ? " tag--thread" : ""}`}
+                          >
+                            {source.kind}
+                          </span>
                           <p className="ask__source-excerpt">{source.excerpt}</p>
                         </li>
                       ))}

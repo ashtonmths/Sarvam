@@ -168,6 +168,7 @@ export interface Page<T> {
 /** Mirrors `AskAnswer` in the API's documents/ask.ts. */
 export interface AskSource {
   n: number;
+  kind: "document" | "slack";
   title: string;
   speaker: string | null;
   permalink: string;
@@ -181,4 +182,6 @@ export interface AskAnswer {
   grounded: boolean;
   /** Set when retrieval worked but the model could not be called. */
   unavailable?: string;
+  /** Corpora that could not be consulted — said out loud, never implied. */
+  notes?: string[];
 }
