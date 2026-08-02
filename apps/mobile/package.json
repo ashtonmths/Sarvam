@@ -9,6 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "export:web": "expo export --platform web",
+    "build:apk": "eas build --platform android --profile preview",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
