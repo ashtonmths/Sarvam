@@ -3,7 +3,6 @@ import { and, eq } from "drizzle-orm";
 import { config } from "../../config.js";
 import { db } from "../../db.js";
 import { getCredential } from "../../vault/vault.js";
-import type { LoopCtx } from "./execute.js";
 
 /**
  * Slack mining. Two honest paths, because `search.messages` requires a **user**
@@ -262,8 +261,17 @@ async function getPermalink(
   return body.ok ? (body.permalink ?? null) : null;
 }
 
+/**
+ * Widened from `LoopCtx` to the same two fields `searchSlack` takes, for the
+ * same reason: reading a thread needs an org and a cancellation signal, and
+ * nothing else. Requiring the loop's `edgeId` and its two tracking maps meant
+ * any other caller had to fabricate them, and `LoopCtx` still satisfies this
+ * structurally so Historian is unaffected. It also removes the type import back
+ * into `execute.ts`, which imports this module — a cycle that only held because
+ * the signature was wider than the function.
+ */
 export async function readThread(
-  ctx: LoopCtx,
+  ctx: SlackSearchCtx,
   permalink: string,
 ): Promise<{
   messages: Array<{

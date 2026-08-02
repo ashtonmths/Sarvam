@@ -1,19 +1,10 @@
 import { type Context, Hono } from "hono";
 import { z } from "zod";
 import { KEY_PREFIX, verifyApiKey } from "../auth/api-keys.js";
-import { ForbiddenError, UnauthorizedError, UserError } from "../errors.js";
-import {
-  askDocs,
-  askDocsInput,
-  getNode,
-  ingestDocument,
-  ingestDocumentInput,
-  type McpContext,
-  nodeRefInput,
-  proposeChange,
-  proposeChangeInput,
-  queryBlastRadius,
-} from "../mcp/tools.js";
+import { AppError, UnauthorizedError } from "../errors.js";
+import { registry } from "../mcp/catalog.js";
+import { publish } from "../mcp/registry.js";
+import type { McpContext } from "../mcp/tools.js";
 import { resolveAccessToken } from "./oauth.js";
 import { issuer } from "./oauth-metadata.js";
 
@@ -24,131 +15,45 @@ import { issuer } from "./oauth-metadata.js";
  * session affinity to break behind a proxy today or under horizontal scale
  * later. Auth is the same API key the REST gate uses, and the key's org scopes
  * every query — no cross-tenant reads, ever.
+ *
+ * This file no longer describes the tools. It used to carry a hand-written
+ * JSON Schema literal per tool alongside the zod schemas the handlers actually
+ * parsed with, and the two had drifted — the published schema for `connector`
+ * had lost its enum, and `change` was advertised as an object with no
+ * properties. `mcp/catalog.ts` is now the single description and the wire
+ * schema is generated from it, so a route that publishes something the handler
+ * would reject is no longer expressible.
  */
 
 export const mcpRoutes = new Hono();
 
-const PROTOCOL_VERSION = "2025-06-18";
+/**
+ * Newest first. A client asking for one of these gets exactly it; a client
+ * asking for anything else is answered with the newest, which is what the spec
+ * prescribes and is far kinder than refusing — the wire format across these
+ * revisions is compatible for everything this server implements.
+ */
+const SUPPORTED_PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"] as const;
+const LATEST_PROTOCOL = SUPPORTED_PROTOCOLS[0];
 
-const TOOLS = [
-  {
-    name: "propose_change",
-    description:
-      "Ask permission before mutating a connected production system. Returns a deterministic verdict with evidence. A BLOCK means the change must not be attempted.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        change: {
-          type: "object",
-          description:
-            "The proposed change: { target: 'field'|'workflow'|'credential', operation, connector, externalId }",
-        },
-        dry_run: { type: "boolean", default: false },
-      },
-      required: ["change"],
-    },
-  },
-  {
-    name: "query_blast_radius",
-    description:
-      "Ask what depends on a node, without proposing anything. Read-only; records no decision.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        connector: { type: "string" },
-        externalId: { type: "string" },
-      },
-      required: ["connector", "externalId"],
-    },
-  },
-  {
-    name: "get_node",
-    description:
-      "Fetch a node with its criticality, direct edges and confirmed rationale.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        connector: { type: "string" },
-        externalId: { type: "string" },
-      },
-      required: ["connector", "externalId"],
-    },
-  },
-  {
-    // The other three tools need an exact node identifier, which is the wrong
-    // shape for "why did we do it this way" — the questions whose answer is in
-    // a meeting note nobody can name. This one takes the question itself.
-    name: "ask_docs",
-    description:
-      "Ask a question in plain English about this organisation's decisions, systems and history, and get an answer drawn only from its own documents — meeting notes, transcripts and handovers — with a citation link for every claim. Use this when you need context you do not have, when you need to know why something is the way it is, or before assuming an answer. Says so plainly when the documents do not cover it; treat that as the answer rather than filling the gap yourself.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        question: {
-          type: "string",
-          description:
-            'A specific question in prose, e.g. "why did we stop syncing the vat_rate field?". Retrieval is hybrid lexical and semantic, so exact identifiers and descriptions of them both work.',
-        },
-      },
-      required: ["question"],
-    },
-  },
-  {
-    /**
-     * The write half of the document surface, and the only tool here that
-     * takes prose rather than identifiers.
-     *
-     * Images are handled by *not* accepting them. The connected agent can
-     * already read an image; this server cannot, and adding an OCR dependency
-     * to do worse what the caller does natively would be the wrong seam. So
-     * the contract is that the agent transcribes and this stores text — with
-     * `source` recording which of the two happened, because a transcription is
-     * not a copy and a reader who follows a citation into it deserves to know
-     * that before quoting it back to anyone.
-     */
-    name: "ingest_document",
-    description:
-      'Store a meeting transcript, handover note or decision record in this organisation\'s document corpus so it becomes searchable and citable by ask_docs. Paste the text directly. If the user gives you an IMAGE of a transcript, whiteboard, slide or screenshot, read it yourself and pass the extracted text here with source="image" — this tool stores text only and never receives the image. Transcribe what is actually visible, keep speaker labels, and do not fill in anything you cannot read; write [unclear] instead. Ingesting is idempotent on exact content, so the same text stored twice writes nothing the second time.',
-    inputSchema: {
-      type: "object",
-      properties: {
-        title: {
-          type: "string",
-          description:
-            'What this document is, e.g. "Billing sync handover, 11 Mar" — shown in the document list and in every citation.',
-        },
-        text: {
-          type: "string",
-          description:
-            'The full text. Keep "Speaker: line" turns on their own lines and VTT/SRT cues intact; chunking splits on those boundaries, and losing them costs per-speaker attribution in later citations.',
-        },
-        occurred_at: {
-          type: "string",
-          description:
-            "ISO 8601 timestamp of when the meeting happened, if known. Not when it was ingested.",
-        },
-        source: {
-          type: "string",
-          enum: ["pasted_text", "image"],
-          default: "pasted_text",
-          description:
-            'Where the text came from. Use "image" whenever you produced it by reading an image rather than copying text you were given — it is recorded on the document so later readers can weigh a transcription differently from a verbatim copy.',
-        },
-        original_name: {
-          type: "string",
-          description:
-            "The source filename, if there was one. Text extensions only (.txt, .md, .vtt, .srt); omit it for a paste rather than inventing one.",
-        },
-        source_url: {
-          type: "string",
-          description:
-            "Where the document came from, for provenance. Citations never point here.",
-        },
-      },
-      required: ["title", "text"],
-    },
-  },
-];
+/**
+ * Shown to the agent once, at connection time, before it has called anything.
+ *
+ * Per-tool descriptions can only say what one tool does; they cannot say what
+ * this server is for or which tool to reach for first. A model that has to
+ * infer that from seven descriptions infers it differently every session — and
+ * the ordering that matters most here (ask before you act) is precisely the one
+ * a per-tool description cannot express.
+ */
+const INSTRUCTIONS = `Sadhak knows what this organisation's systems depend on, and why — from its dependency graph, its written record, its Slack, and its GitHub.
+
+Two habits make this server worth having:
+
+1. Before changing anything in a connected production system, call propose_change. It answers deterministically from the real dependency graph. A BLOCK verdict means the change must not be attempted by any route — relay that to your human rather than looking for another way around it.
+
+2. Before answering a question about why this organisation does something, check whether it already answered it. ask_docs covers the written record, ask_slack covers the conversations, github_activity covers what actually shipped and what is failing. All three say plainly when they do not cover the question, and that is a real answer — it is much better than a plausible one you constructed yourself.
+
+Every tool that retrieves something returns a link for each claim. Keep those links when you relay an answer: they are the only way the person reading you can check it.`;
 
 const rpcSchema = z.object({
   jsonrpc: z.literal("2.0"),
@@ -193,6 +98,21 @@ async function contextFromOauthToken(token: string): Promise<McpContext | null> 
   return { orgId: actor.orgId, scopes: actor.scopes };
 }
 
+/**
+ * Who the calling client is, for the audit log.
+ *
+ * `initialize` carries a proper `clientInfo.name`, and on a stateless server
+ * there is nowhere to keep it — the next request is a new context. So the
+ * header is what actually identifies the client on the call that matters, and
+ * the User-Agent is the fallback for the clients that set neither. Writing the
+ * `initialize` value onto a context that is discarded a line later, as this
+ * previously did, produced an audit trail that recorded "an MCP client" for
+ * every agent that had politely introduced itself.
+ */
+function clientNameFrom(c: Context): string | undefined {
+  return c.req.header("x-mcp-client") ?? c.req.header("user-agent") ?? undefined;
+}
+
 async function serveMcp(c: Context, key: string | undefined) {
   if (!key) throw new UnauthorizedError("MCP requires an API key", authChallenge());
 
@@ -205,35 +125,85 @@ async function serveMcp(c: Context, key: string | undefined) {
     : await contextFromOauthToken(key);
   if (!ctx) throw new UnauthorizedError("Invalid API key", authChallenge());
 
+  /**
+   * The spec requires a 400 for a protocol version this server does not speak,
+   * rather than an attempt to serve it anyway. Absent is not an error: the
+   * header was introduced after the first revision, so a client that omits it
+   * is an older client, not a broken one.
+   */
+  const declared = c.req.header("mcp-protocol-version");
+  if (
+    declared &&
+    !SUPPORTED_PROTOCOLS.includes(declared as (typeof SUPPORTED_PROTOCOLS)[number])
+  ) {
+    return c.json(
+      rpcError(
+        null,
+        -32600,
+        `Unsupported MCP-Protocol-Version "${declared}". This server speaks ${SUPPORTED_PROTOCOLS.join(", ")}.`,
+      ),
+      400,
+    );
+  }
+
   const rpc = rpcSchema.parse(await c.req.json());
+
+  /**
+   * A JSON-RPC notification has no id and must never be answered with a body —
+   * a client that receives one for a notification it did not expect a reply to
+   * can desynchronise. Matching on the prefix rather than on
+   * `notifications/initialized` alone means a client sending `cancelled` or
+   * `progress` gets the same correct silence instead of an error.
+   */
+  if (rpc.method.startsWith("notifications/")) return c.body(null, 202);
 
   switch (rpc.method) {
     case "initialize": {
-      const clientName = (rpc.params?.clientInfo as { name?: string } | undefined)?.name;
-      ctx.clientName = clientName;
+      const asked = rpc.params?.protocolVersion;
+      const agreed =
+        typeof asked === "string" &&
+        SUPPORTED_PROTOCOLS.includes(asked as (typeof SUPPORTED_PROTOCOLS)[number])
+          ? asked
+          : LATEST_PROTOCOL;
+
       return c.json(
         result(rpc.id, {
-          protocolVersion: PROTOCOL_VERSION,
-          capabilities: { tools: {} },
-          serverInfo: { name: "sadhak", version: "1.0.0" },
+          protocolVersion: agreed,
+          capabilities: {
+            // `listChanged: false` stated rather than omitted: this server is
+            // stateless and pushes nothing, so a client must not wait for a
+            // notification that will never arrive.
+            tools: { listChanged: false },
+          },
+          serverInfo: { name: "sadhak", title: "Sadhak", version: "1.0.0" },
+          instructions: INSTRUCTIONS,
         }),
       );
     }
 
-    case "notifications/initialized":
-      return c.body(null, 202);
+    /** Required by the spec as a liveness check, and cheap to answer honestly. */
+    case "ping":
+      return c.json(result(rpc.id, {}));
 
     case "tools/list":
-      return c.json(result(rpc.id, { tools: TOOLS }));
+      /**
+       * Only the tools this credential can actually call.
+       *
+       * Advertising all of them was worse than it looks. A key holding just
+       * `graph:read` was shown `ingest_document`, and a model told a capability
+       * exists will use it — then read a 403, and now has to decide whether the
+       * failure was transient. Some retry; some abandon the whole task. Not
+       * listing it means the capability never enters the plan.
+       */
+      return c.json(result(rpc.id, { tools: registry.visibleTo(ctx).map(publish) }));
 
     case "tools/call": {
       const name = String(rpc.params?.name ?? "");
-      const args = (rpc.params?.arguments ?? {}) as Record<string, unknown>;
-      const clientName = c.req.header("x-mcp-client") ?? undefined;
-      const callCtx: McpContext = { ...ctx, clientName };
+      const args = rpc.params?.arguments ?? {};
+      const callCtx: McpContext = { ...ctx, clientName: clientNameFrom(c) };
 
       try {
-        const outcome = await callTool(name, args, callCtx);
+        const outcome = await registry.call(name, args, callCtx);
         return c.json(
           result(rpc.id, {
             content: [{ type: "text", text: outcome.text }],
@@ -242,9 +212,20 @@ async function serveMcp(c: Context, key: string | undefined) {
           }),
         );
       } catch (error) {
-        // Tool errors are results, not transport errors — the agent needs to
-        // read them and adapt, not see a broken connection.
-        const message = error instanceof Error ? error.message : String(error);
+        /**
+         * Tool errors are results, not transport errors — the agent needs to
+         * read them and adapt, not see a broken connection.
+         *
+         * Only an `AppError` is relayed verbatim. Those messages are written
+         * for the caller and say what to do next; anything else is an
+         * unexpected fault whose message may carry internals, and the agent can
+         * do nothing useful with a stack-shaped string either way.
+         */
+        const message =
+          error instanceof AppError && error.expose
+            ? error.message
+            : `${name} failed for an unexpected reason on the server. Nothing changed. Do not retry immediately; report this to your human.`;
+
         return c.json(
           result(rpc.id, {
             content: [{ type: "text", text: message }],
@@ -255,7 +236,13 @@ async function serveMcp(c: Context, key: string | undefined) {
     }
 
     default:
-      return c.json(rpcError(rpc.id, -32601, `Unknown method: ${rpc.method}`));
+      return c.json(
+        rpcError(
+          rpc.id,
+          -32601,
+          `Unknown method: ${rpc.method}. This server implements initialize, ping, tools/list and tools/call.`,
+        ),
+      );
   }
 }
 
@@ -305,44 +292,3 @@ mcpRoutes.get("/mcp", methodNotAllowed);
 mcpRoutes.delete("/mcp", methodNotAllowed);
 mcpRoutes.get("/mcp/k/:key", methodNotAllowed);
 mcpRoutes.delete("/mcp/k/:key", methodNotAllowed);
-
-async function callTool(name: string, args: Record<string, unknown>, ctx: McpContext) {
-  switch (name) {
-    case "propose_change": {
-      requireScope(ctx, "gate:invoke");
-      return proposeChange(ctx, proposeChangeInput.parse(args));
-    }
-    case "query_blast_radius": {
-      requireScope(ctx, "graph:read");
-      return queryBlastRadius(ctx, nodeRefInput.parse(args));
-    }
-    case "get_node": {
-      requireScope(ctx, "graph:read");
-      return getNode(ctx, nodeRefInput.parse(args));
-    }
-    case "ask_docs": {
-      // The same capability `POST /ask` requires, and for the same reason: it
-      // answers only from chunks a `graph:read` caller could already open by
-      // hand, and every claim carries the link to do so.
-      requireScope(ctx, "graph:read");
-      return askDocs(ctx, askDocsInput.parse(args));
-    }
-    case "ingest_document": {
-      // The same capability `POST /documents` requires: deciding what Sadhak
-      // is allowed to read on the org's behalf. Deliberately not `graph:read`
-      // — this is the one document tool that writes, and a key handed out for
-      // questions must not be able to put words into the corpus those
-      // questions are answered from.
-      requireScope(ctx, "connector:manage");
-      return ingestDocument(ctx, ingestDocumentInput.parse(args));
-    }
-    default:
-      throw new UserError(`Unknown tool: ${name}`);
-  }
-}
-
-function requireScope(ctx: McpContext, scope: string): void {
-  if (!ctx.scopes.includes(scope)) {
-    throw new ForbiddenError(`This API key lacks the "${scope}" capability`);
-  }
-}

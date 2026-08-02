@@ -288,7 +288,7 @@ describe("renderAskText", () => {
     const text = renderAskText(askAnswer(), "why do we still write vat_rate?");
 
     expect(text).toContain("Finance asked for it before the quarter close [1].");
-    expect(text).toContain("[1] Billing sync handover (2026-03-11, Priya)");
+    expect(text).toContain("[1] (document) Billing sync handover (2026-03-11, Priya)");
     expect(text).toContain("https://sadhak.test/app/documents/4#chunk-2");
     expect(text).toContain("Keep the citations when you relay this.");
   });
@@ -315,7 +315,7 @@ describe("renderAskText", () => {
       "why do we still write vat_rate?",
     );
 
-    expect(text).toContain("[2] Q1 planning (undated)");
+    expect(text).toContain("[2] (document) Q1 planning (undated)");
     expect(text).toContain("https://sadhak.test/app/documents/9#chunk-0");
   });
 

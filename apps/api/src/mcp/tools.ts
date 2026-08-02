@@ -21,21 +21,57 @@ import { blastRadius, resolveNode } from "../sentinel/verdict.js";
  * REST and MCP cannot drift.
  */
 
+/**
+ * Every `.describe()` below is published verbatim in the tool's JSON Schema by
+ * `mcp/registry.ts`, so the prose an agent reads and the rule the parser
+ * enforces are the same string. Describing a field here is the only way to
+ * document it; there is no second, hand-written copy to fall out of step.
+ */
 export const proposeChangeInput = z.object({
-  change: changeDescriptorSchema,
-  dry_run: z.boolean().default(false),
+  /**
+   * A discriminated union on `target`, published as its three real branches
+   * rather than as an opaque object. The vocabulary is the point: `connector`
+   * is not free text, and which operations are legal depends on `target` —
+   * a workflow can be disabled, a field cannot.
+   */
+  change: changeDescriptorSchema.describe(
+    'The change you want to make, discriminated by "target". ' +
+      'target="field" takes operation delete|rename|retype on connector airtable|postgres; ' +
+      'target="workflow" takes operation modify|disable|delete on connector n8n; ' +
+      'target="credential" takes operation revoke on any connector. ' +
+      "externalId is the identifier in that system, not a display name.",
+  ),
+  dry_run: z
+    .boolean()
+    .default(false)
+    .describe(
+      "Simulate without recording enforcement. The verdict is computed identically; only the audit trail differs. Use true when you are exploring, false when you are actually about to act.",
+    ),
 });
 
 export const nodeRefInput = z.object({
-  connector: z.enum(["n8n", "airtable", "postgres", "github", "slack"]),
-  externalId: z.string().min(1),
+  connector: z
+    .enum(["n8n", "airtable", "postgres", "github", "slack"])
+    .describe("Which connected system the node lives in."),
+  externalId: z
+    .string()
+    .min(1)
+    .describe(
+      'The node\'s identifier inside that system — e.g. a Postgres "schema.table.column", an Airtable field id, an n8n workflow id. Not its human-readable name.',
+    ),
 });
 
 /** The same bounds as `POST /ask`, for the same reasons: below three
  * characters there is nothing to retrieve on, and above five hundred the
  * caller is pasting a document rather than asking about one. */
 export const askDocsInput = z.object({
-  question: z.string().min(3).max(500),
+  question: z
+    .string()
+    .min(3)
+    .max(500)
+    .describe(
+      'A specific question in prose, e.g. "why did we stop syncing the vat_rate field?". Retrieval is hybrid lexical and semantic, so an exact identifier and a description of one both work. Ask one question at a time; a compound question retrieves for neither half well.',
+    ),
 });
 
 /**
@@ -50,13 +86,110 @@ export const askDocsInput = z.object({
  * once it is a chunk in a search result.
  */
 export const ingestDocumentInput = z.object({
-  title: z.string().min(1).max(300),
-  text: z.string().min(1),
+  title: z
+    .string()
+    .min(1)
+    .max(300)
+    .describe(
+      'What this document is, e.g. "Billing sync handover, 11 Mar". Shown in the document list and in every citation that points at it, so name it the way someone searching a year from now would.',
+    ),
+  text: z
+    .string()
+    .min(1)
+    .describe(
+      'The full text. Keep "Speaker: line" turns on their own lines and VTT/SRT cues intact — chunking splits on those boundaries, and losing them costs per-speaker attribution in every later citation.',
+    ),
   /** When the meeting happened. Not when it was ingested. */
-  occurred_at: z.string().datetime({ offset: true }).optional(),
-  source: z.enum(["pasted_text", "image"]).default("pasted_text"),
-  original_name: z.string().max(300).optional(),
-  source_url: z.string().url().optional(),
+  occurred_at: z
+    .string()
+    .datetime({ offset: true })
+    .optional()
+    .describe(
+      "ISO 8601 timestamp with offset for when the meeting happened — not when you are storing it. Omit it rather than guessing; an invented date makes a stale note look current.",
+    ),
+  source: z
+    .enum(["pasted_text", "image"])
+    .default("pasted_text")
+    .describe(
+      'Where the text came from. Use "image" whenever you produced it by reading a photograph, screenshot, whiteboard or slide rather than copying text you were given. It is recorded on the document so a later reader can weigh a transcription differently from a verbatim copy.',
+    ),
+  original_name: z
+    .string()
+    .max(300)
+    .optional()
+    .describe(
+      "The source filename if there was one. Text extensions only (.txt, .md, .vtt, .srt). Omit it for a paste rather than inventing one.",
+    ),
+  source_url: z
+    .string()
+    .url()
+    .optional()
+    .describe(
+      "Where the document came from, for provenance. Citations never point here; they point at the stored copy.",
+    ),
+});
+
+/* ------------------------------------------------------------------ output */
+
+/**
+ * What each tool promises to put in `structuredContent`.
+ *
+ * Deliberately precise at the top level and permissive underneath. The top
+ * level is this module's own contract and is worth pinning; the nested rows are
+ * verdict evidence and graph nodes owned by other modules, and restating their
+ * shape here would create a second definition that goes stale the first time
+ * one of them gains a column — turning an additive change into a schema
+ * violation for callers who never read the field.
+ */
+export const proposeChangeOutput = z.object({
+  decision_id: z.unknown(),
+  verdict_id: z.unknown(),
+  verdict: z.enum(["BLOCK", "WARN", "APPROVE"]),
+  evidence: z.array(z.unknown()),
+  impacted: z.array(z.unknown()),
+  computed_in_ms: z.number(),
+  /** Always false. This server decides; it never performs the change. */
+  executed: z.literal(false),
+});
+
+export const blastRadiusOutput = z.object({ impacted: z.array(z.unknown()) });
+
+export const getNodeOutput = z.object({
+  found: z.boolean(),
+  node: z.unknown().optional(),
+  edges: z.array(z.unknown()).optional(),
+  rationale: z.array(z.unknown()).optional(),
+});
+
+export const askDocsOutput = z.object({
+  answer: z.string(),
+  grounded: z.boolean(),
+  unavailable: z.string().nullable(),
+  sources: z.array(
+    z.object({
+      n: z.number(),
+      /** Which corpus. A thread and a minuted decision carry different
+       * weight, and an undifferentiated list hides that. */
+      kind: z.enum(["document", "slack"]),
+      title: z.string(),
+      speaker: z.string().nullable(),
+      permalink: z.string(),
+      occurred_at: z.string().nullable(),
+      excerpt: z.string(),
+    }),
+  ),
+  /** Corpora that could not be consulted, said out loud rather than
+   * silently omitted. */
+  notes: z.array(z.string()),
+});
+
+export const ingestDocumentOutput = z.object({
+  document_id: z.number(),
+  title: z.string(),
+  chunk_count: z.number(),
+  duplicate: z.boolean(),
+  source: z.enum(["pasted_text", "image"]),
+  permalink: z.string(),
 });
 
 /**
@@ -144,7 +277,24 @@ export function renderVerdictText(result: VerdictResult, dryRun: boolean): strin
  * prompt exists to prevent.
  */
 export function renderAskText(answer: AskAnswer, question: string): string {
-  if (answer.sources.length === 0) return answer.answer;
+  /**
+   * The notes survive even the no-sources case, and that is the case they
+   * matter most in.
+   *
+   * "Nothing covers that" and "nothing covers that, and by the way Slack was
+   * never searched because no channel is connected" are different answers, and
+   * an agent handed the first will report a confident absence to its human.
+   * The second tells it what to go and fix.
+   */
+  const notes = answer.notes ?? [];
+  const noteBlock =
+    notes.length > 0
+      ? ["", "Caveats on what was searched:", ...notes.map((n) => `  - ${n}`)]
+      : [];
+
+  if (answer.sources.length === 0) {
+    return [answer.answer, ...noteBlock].join("\n");
+  }
 
   const lines: string[] = [];
   if (answer.unavailable) {
@@ -163,9 +313,16 @@ export function renderAskText(answer: AskAnswer, question: string): string {
       ? source.occurredAt.toISOString().slice(0, 10)
       : "undated";
     const who = source.speaker ? `, ${source.speaker}` : "";
-    lines.push(`  [${source.n}] ${source.title} (${when}${who}) ${source.permalink}`);
+    // A written document and a line in a channel are not equally settled, and
+    // the numbered list is the only place a relaying agent can see which it is.
+    const kind = source.kind === "slack" ? "Slack message" : "document";
+    lines.push(
+      `  [${source.n}] (${kind}) ${source.title} (${when}${who}) ${source.permalink}`,
+    );
     lines.push(`      ${source.excerpt.replace(/\s+/g, " ")}`);
   }
+
+  lines.push(...noteBlock);
 
   lines.push(
     "",
@@ -192,12 +349,16 @@ export async function askDocs(ctx: McpContext, input: z.infer<typeof askDocsInpu
       unavailable: answer.unavailable ?? null,
       sources: answer.sources.map((source) => ({
         n: source.n,
+        kind: source.kind,
         title: source.title,
         speaker: source.speaker,
         permalink: source.permalink,
         occurred_at: source.occurredAt?.toISOString() ?? null,
         excerpt: source.excerpt,
       })),
+      // Always an array, never absent. An optional field that means "a corpus
+      // was skipped" is one a caller forgets to check exactly when it matters.
+      notes: answer.notes ?? [],
     },
     text: renderAskText(answer, input.question),
   };
@@ -346,7 +507,10 @@ export async function proposeChange(
       evidence: outcome.result.evidence,
       impacted: outcome.result.impacted.slice(0, 20),
       computed_in_ms: outcome.result.computedInMs,
-      executed: false,
+      // `as const` so the type is the literal `false` the output schema
+      // declares, rather than widening to boolean — this server decides and
+      // never executes, and that is a promise worth holding in the type.
+      executed: false as const,
     },
     text: renderVerdictText(outcome.result, input.dry_run),
   };
